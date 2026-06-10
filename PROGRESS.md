@@ -535,6 +535,91 @@ Reescritura de `sidebar.tsx`:
 
 ---
 
+## FASE 7 — Autenticación OAuth y control de acceso por rol ✅
+
+### OAuth Google + Microsoft
+
+**Archivo:** `src/app/(auth)/login/page.tsx`
+
+- Botones Google y Microsoft con iconos SVG inline
+- `supabase.auth.signInWithOAuth({ provider, redirectTo: '/api/auth/callback' })`
+- Estado `oauthLoading` por proveedor; ambos botones se deshabilitan durante el flujo
+- Provider de Microsoft: `'azure'` (nombre que usa Supabase para Microsoft Entra/Azure AD)
+
+**Configuración necesaria en Supabase Dashboard:**
+- Authentication → Providers → Google: activar, añadir Client ID y Secret de Google Cloud Console
+- Authentication → Providers → Azure: activar, añadir Client ID y Secret de Microsoft Entra
+- En ambos: añadir `https://<proyecto>.supabase.co/auth/v1/callback` como Redirect URI
+
+### Página de cuenta pendiente
+
+**Archivo:** `src/app/pending/page.tsx`
+
+- Página standalone (sin dashboard layout), accesible sin autenticación
+- Se muestra cuando un usuario OAuth inicia sesión por primera vez pero no tiene perfil en la tabla `users`
+- Muestra instrucciones para contactar con el admin del centro
+- Botón de logout vía `supabase.auth.signOut()`
+
+### Auth callback actualizado
+
+**Archivo:** `src/app/api/auth/callback/route.ts`
+
+- Tras `exchangeCodeForSession`, consulta `users` table por `id = user.id`
+- Si no existe perfil → `redirect('/pending')`
+- Si existe → `redirect(next)` (por defecto `/dashboard`)
+
+**Flujo completo OAuth:**
+```
+Login → Google/Microsoft → Supabase OAuth → /api/auth/callback
+  → perfil existe? → /dashboard
+  → perfil no existe? → /pending (con instrucciones para admin)
+```
+
+### Middleware
+
+**Archivo:** `src/middleware.ts`
+
+`/pending` añadida a `PUBLIC_ROUTES` para que usuarios autenticados sin perfil no queden en bucle de redirección.
+
+### Control de acceso en sociograma
+
+**Archivo:** `src/app/api/processes/[id]/sociogram/route.ts`
+
+**Filtrado por rol:**
+- `admin`, `superadmin`, `orientador` → ven todas las respuestas (amistad, trabajo, emocional, negativa)
+- `tutor` → solo ven amistad y trabajo (emocional y negativa filtradas en servidor)
+
+**Audit logging automático:**
+- Cuando un `orientador` consulta el sociograma, se registra automáticamente en `audit_logs` con acción `view_sociogram`
+
+**Respuesta enriquecida:**
+```json
+{
+  ...sociogramData,
+  "viewer_role": "orientador",
+  "can_see_sensitive": true
+}
+```
+
+**Archivo:** `src/app/(dashboard)/processes/[id]/sociogram/page.tsx`
+
+Dos banners condicionales según el rol devuelto por la API:
+- **Orientador** → banner ámbar: "Tu acceso a este sociograma queda registrado. Los datos mostrados son confidenciales."
+- **Tutor** → banner azul: "Vista limitada: las relaciones emocionales y negativas solo son visibles para orientación."
+
+### Ficheros clave de Fase 7
+
+| Fichero | Descripción |
+|---|---|
+| `src/app/(auth)/login/page.tsx` | Botones OAuth Google + Microsoft |
+| `src/app/pending/page.tsx` | Página para usuarios OAuth sin perfil asignado |
+| `src/app/api/auth/callback/route.ts` | Redirige a /pending si no hay perfil |
+| `src/middleware.ts` | /pending añadida a rutas públicas |
+| `src/app/api/processes/[id]/sociogram/route.ts` | Filtrado por rol + audit log orientador |
+| `src/app/(dashboard)/processes/[id]/sociogram/page.tsx` | Banners de aviso por rol |
+
+---
+
 ## Decisiones técnicas relevantes
 
 ### Supabase y tipos

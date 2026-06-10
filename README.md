@@ -264,6 +264,7 @@ Visualización interactiva con Cytoscape.js.
 | Fase 4 — Edición manual e informes | ✅ Completo |
 | Fase 5 — Producto completo SaaS | ✅ Completo |
 | Fase 6 — Seguridad, flujo de trabajo y roles | ✅ Completo |
+| Fase 7 — OAuth y control de acceso por rol | ✅ Completo |
 
 Ver `PROGRESS.md` para el detalle técnico completo de cada fase.
 
