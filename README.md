@@ -81,19 +81,25 @@ src/
 ├── app/
 │   ├── (auth)/              # Login
 │   ├── (dashboard)/         # Área privada admin
-│   │   ├── dashboard/
-│   │   ├── processes/
-│   │   │   ├── [id]/
-│   │   │   │   ├── students/        # Importación y listado de alumnos
-│   │   │   │   ├── questionnaire/   # Configuración y seguimiento
-│   │   │   │   ├── sociogram/       # Visualización interactiva
-│   │   │   │   ├── rules/           # Reglas pedagógicas
-│   │   │   │   ├── algorithm/       # Configuración del algoritmo
-│   │   │   │   └── proposals/
-│   │   │   │       ├── page.tsx              # Comparador de propuestas
-│   │   │   │       └── [proposalId]/
-│   │   │   │           ├── edit/    # Editor drag & drop
-│   │   │   │           └── report/  # Informe imprimible
+│   │   ├── dashboard/       # Stats, actividad reciente, accesos rápidos
+│   │   ├── audit/           # Registro de auditoría (admin)
+│   │   ├── users/           # Gestión de usuarios del centro (admin)
+│   │   ├── settings/        # Configuración del centro (admin)
+│   │   ├── admin/           # Panel superadmin — CRUD de centros
+│   │   └── processes/
+│   │       ├── [id]/
+│   │       │   ├── students/        # Importación y listado de alumnos
+│   │       │   ├── questionnaire/   # Configuración y seguimiento
+│   │       │   ├── sociogram/       # Visualización interactiva
+│   │       │   ├── rules/           # Reglas pedagógicas
+│   │       │   ├── algorithm/       # Configuración del algoritmo
+│   │       │   ├── ProcessActions.tsx  # Transiciones de estado
+│   │       │   ├── ProcessTeam.tsx     # Asignación de tutores
+│   │       │   └── proposals/
+│   │       │       ├── page.tsx              # Comparador de propuestas
+│   │       │       └── [proposalId]/
+│   │       │           ├── edit/    # Editor drag & drop
+│   │       │           └── report/  # Informe imprimible
 │   ├── q/[token]/           # Cuestionario público (alumnos)
 │   └── api/                 # API Routes
 ├── components/

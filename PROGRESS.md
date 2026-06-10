@@ -366,33 +366,6 @@ Nuevo enlace "Algoritmo" (icono Zap) entre Reglas y Propuestas en la navegación
 
 ---
 
-## Estado del build
-
-```
-✓ Compiled successfully
-✓ Generating static pages (12/12)
-0 errores TypeScript
-0 errores ESLint
-```
-
-**Rutas generadas:**
-
-| Ruta | Tipo |
-|---|---|
-| `/processes/[id]/algorithm` | Dinámica |
-| `/processes/[id]/proposals` | Dinámica |
-| `/processes/[id]/sociogram` | Dinámica |
-| `/processes/[id]/rules` | Dinámica |
-| `/processes/[id]/questionnaire` | Dinámica |
-| `/processes/[id]/students` | Dinámica |
-| `/q/[token]` | Dinámica (pública) |
-| `/api/processes/[id]/proposals/generate` | POST |
-| `/api/processes/[id]/sociogram/export` | GET |
-
----
-
----
-
 ## FASE 4 — Edición manual e informes ✅
 
 ### Editor drag & drop
@@ -463,10 +436,9 @@ Página servidor que renderiza sin necesidad de JS en el cliente.
 
 ---
 
-## Pendiente (Fase 5)
+## FASE 5 — Producto completo SaaS ✅
 
-### Fase 5 — Producto completo SaaS
-- [ ] Superadmin: gestión de centros y licencias
+- [x] Superadmin: gestión de centros y licencias (panel `/admin`)
 - [x] Dashboard mejorado con stats reales y actividad reciente
 - [x] Sidebar role-based (muestra/oculta secciones según rol)
 - [x] Panel de auditoría `/audit` con filtros y paginación
@@ -500,7 +472,7 @@ Página servidor que renderiza sin necesidad de JS en el cliente.
 
 ---
 
-## Fase 6 — Seguridad, flujo de trabajo y roles avanzados
+## FASE 6 — Seguridad, flujo de trabajo y roles avanzados ✅
 
 ### Migraciones SQL
 
