@@ -75,14 +75,14 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create user profile
-    const { error: profileError } = await supabase.from("users").insert({
+    // Create user profile (upsert in case of previous partial registration)
+    const { error: profileError } = await supabase.from("users").upsert({
       id: authData.user.id,
       email,
       name: admin_name,
       role: "admin",
       center_id: center.id,
-    })
+    }, { onConflict: "id" })
 
     if (profileError) {
       await supabase.from("centers").delete().eq("id", center.id)
