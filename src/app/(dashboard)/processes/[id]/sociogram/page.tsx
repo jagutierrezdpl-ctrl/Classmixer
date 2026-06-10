@@ -47,11 +47,17 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const [filter, setFilter] = useState<Partial<SociogramFilter>>({})
   const [selectedNode, setSelectedNode] = useState<SociogramNode | null>(null)
   const [exportingExcel, setExportingExcel] = useState(false)
+  const [viewerRole, setViewerRole] = useState<string | null>(null)
+  const [canSeeSensitive, setCanSeeSensitive] = useState(false)
 
   useEffect(() => {
     fetch(`/api/processes/${id}/sociogram`)
       .then(r => r.json())
-      .then(setData)
+      .then(d => {
+        setData(d)
+        setViewerRole(d.viewer_role ?? null)
+        setCanSeeSensitive(d.can_see_sensitive ?? false)
+      })
       .finally(() => setLoading(false))
   }, [id])
 
@@ -94,6 +100,20 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+      {/* Orientador audit notice */}
+      {viewerRole === "orientador" && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 flex items-center gap-2 shrink-0">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          Tu acceso a este sociograma queda registrado. Los datos mostrados son confidenciales.
+        </div>
+      )}
+      {/* Tutor restricted notice */}
+      {viewerRole === "tutor" && !canSeeSensitive && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-xs text-blue-800 flex items-center gap-2 shrink-0">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          Vista limitada: las relaciones emocionales y negativas solo son visibles para orientación.
+        </div>
+      )}
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-background shrink-0 flex-wrap">
         <Button variant="ghost" size="icon" className="shrink-0" asChild>
