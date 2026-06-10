@@ -56,6 +56,7 @@ export async function GET() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const groups = Object.values(groupMap).sort((a: any, b: any) => a.name.localeCompare(b.name))
 
   return NextResponse.json(groups)

@@ -25,6 +25,7 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = (students ?? []).map((s: any) => ({
     id_alumno:        s.external_id ?? "",
     nombre:           s.first_name,

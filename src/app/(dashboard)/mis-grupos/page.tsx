@@ -18,7 +18,6 @@ interface GroupSummary {
 
 export default function MisGruposPage() {
   const [groups, setGroups] = useState<GroupSummary[]>([])
-  const [myUserId, setMyUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -31,8 +30,6 @@ export default function MisGruposPage() {
         const allGroups = await groupsRes.json()
         const meData = profileRes ? await profileRes.json() : null
         const userId = meData?.id ?? null
-        setMyUserId(userId)
-        // Filter to only groups where I'm the tutor
         const mine = (Array.isArray(allGroups) ? allGroups : []).filter(
           (g: GroupSummary) => userId && g.tutor?.id === userId
         )
