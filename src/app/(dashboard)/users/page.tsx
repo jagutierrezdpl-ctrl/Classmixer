@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import UserActions from "./UserActions"
+import InviteDialog from "./InviteDialog"
 
 const ROLE_BADGES: Record<string, "default" | "secondary" | "outline" | "warning"> = {
   superadmin: "default",
@@ -31,16 +32,19 @@ export default async function UsersPage() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">Usuarios</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {(users ?? []).length} usuario{(users ?? []).length !== 1 ? "s" : ""} en el centro
-          </p>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Usuarios</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {(users ?? []).length} usuario{(users ?? []).length !== 1 ? "s" : ""} en el centro
+            </p>
+          </div>
         </div>
+        <InviteDialog />
       </div>
 
       <Card>
@@ -89,8 +93,8 @@ export default async function UsersPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground mt-4">
-        Los usuarios se registran al iniciar sesión por primera vez con su cuenta institucional.
-        Desde aquí puedes cambiar su rol o eliminarlos del sistema.
+        Invita a tutores y orientadores con el botón de arriba. También pueden acceder con su cuenta
+        institucional (Google / Microsoft) si el centro lo tiene configurado.
       </p>
     </div>
   )

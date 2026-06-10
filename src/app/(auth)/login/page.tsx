@@ -131,6 +131,11 @@ export default function LoginPage() {
                   "Entrar"
                 )}
               </Button>
+              <div className="text-center">
+                <a href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground">
+                  ¿Olvidaste tu contraseña?
+                </a>
+              </div>
             </form>
 
             <div className="relative my-4">

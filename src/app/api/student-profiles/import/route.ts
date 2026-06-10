@@ -83,15 +83,29 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
-  // Split into batches of 100
+  // Rows with external_id → upsert on (center_id, external_id)
+  // Rows without external_id → upsert on (center_id, first_name, last_name) to avoid duplicates
+  const withId    = upsertRows.filter(r => r.external_id)
+  const withoutId = upsertRows.filter(r => !r.external_id)
+
   let upserted = 0
-  for (let i = 0; i < upsertRows.length; i += 100) {
-    const batch = upsertRows.slice(i, i + 100)
+
+  for (let i = 0; i < withId.length; i += 100) {
+    const batch = withId.slice(i, i + 100)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from("student_profiles")
       .upsert(batch, { onConflict: "center_id,external_id", ignoreDuplicates: false })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    upserted += batch.length
+  }
 
+  for (let i = 0; i < withoutId.length; i += 100) {
+    const batch = withoutId.slice(i, i + 100)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
+      .from("student_profiles")
+      .upsert(batch, { onConflict: "center_id,first_name,last_name", ignoreDuplicates: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     upserted += batch.length
   }

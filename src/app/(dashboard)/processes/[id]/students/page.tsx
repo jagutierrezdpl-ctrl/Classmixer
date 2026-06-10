@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import type { ImportPreview, Student } from "@/types"
+import LoadFromProfilesDialog from "@/components/students/LoadFromProfilesDialog"
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning"
 
@@ -34,6 +35,7 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
   const { id } = use(params)
 
   const [view, setView] = useState<"list" | "import" | "preview">("list")
+  const [loadFromProfilesOpen, setLoadFromProfilesOpen] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
   const [, setLoadingInit] = useState(true)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -328,18 +330,39 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
             <p className="text-muted-foreground text-sm">{students.length} alumnos en este proceso</p>
           </div>
         </div>
-        <Button onClick={() => setView("import")}>
-          <Upload className="w-4 h-4" />
-          Importar Excel
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setLoadFromProfilesOpen(true)}>
+            <Users className="w-4 h-4" />
+            Desde Alumnado
+          </Button>
+          <Button onClick={() => setView("import")}>
+            <Upload className="w-4 h-4" />
+            Importar Excel
+          </Button>
+        </div>
       </div>
+
+      <LoadFromProfilesDialog
+        processId={id}
+        open={loadFromProfilesOpen}
+        onClose={() => setLoadFromProfilesOpen(false)}
+        onImported={() => {
+          fetch(`/api/processes/${id}/students`).then(r => r.json()).then(data => {
+            setStudents(Array.isArray(data) ? data : [])
+          })
+        }}
+      />
 
       {students.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
           <p className="font-medium mb-1">No hay alumnos todavía</p>
-          <p className="text-sm mb-6">Importa un Excel para añadir alumnos al proceso</p>
+          <p className="text-sm mb-6">Importa un Excel o carga desde el registro de Alumnado</p>
           <div className="flex gap-3 justify-center">
+            <Button variant="outline" onClick={() => setLoadFromProfilesOpen(true)}>
+              <Users className="w-4 h-4" />
+              Desde Alumnado
+            </Button>
             <Button onClick={() => setView("import")}>
               <Upload className="w-4 h-4" />
               Importar Excel

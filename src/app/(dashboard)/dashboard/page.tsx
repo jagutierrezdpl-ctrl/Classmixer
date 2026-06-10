@@ -7,6 +7,7 @@ import Link from "next/link"
 import {
   FolderOpen, Users, BookOpen, CheckCircle2, Plus,
   ArrowRight, Clock, Zap, Network, FileText, Sparkles,
+  AlertTriangle, GraduationCap,
 } from "lucide-react"
 import { getCenterLicense } from "@/lib/license"
 
@@ -67,16 +68,21 @@ export default async function DashboardPage() {
 
   const allProcessIds = (processes ?? []).map(p => p.id)
 
+  const pIds = allProcessIds.length > 0 ? allProcessIds : ["__none__"]
+
   const [
     { count: totalStudents },
     { count: openQuestionnaires },
     { count: pendingTokens },
     { count: approvedProposals },
+    { count: isolatedStudents },
+    { count: totalProfiles },
+    { data: openProcessTokenStats },
   ] = await Promise.all([
     supabase
       .from("students")
       .select("id", { count: "exact", head: true })
-      .in("process_id", allProcessIds.length > 0 ? allProcessIds : ["__none__"]),
+      .in("process_id", pIds),
     supabase
       .from("processes")
       .select("id", { count: "exact", head: true })
@@ -85,17 +91,42 @@ export default async function DashboardPage() {
     supabase
       .from("questionnaire_tokens")
       .select("id", { count: "exact", head: true })
-      .in("process_id", allProcessIds.length > 0 ? allProcessIds : ["__none__"])
+      .in("process_id", pIds)
       .eq("used", false),
     supabase
       .from("proposals")
       .select("id", { count: "exact", head: true })
-      .in("process_id", allProcessIds.length > 0 ? allProcessIds : ["__none__"])
+      .in("process_id", pIds)
       .eq("status", "aprobada"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("sociogram_metrics")
+      .select("id", { count: "exact", head: true })
+      .in("process_id", pIds)
+      .eq("received_count", 0),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("student_profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("center_id", profile!.center_id),
+    // Questionnaire progress per open process
+    supabase
+      .from("questionnaire_tokens")
+      .select("process_id, used")
+      .in("process_id", pIds),
   ])
 
   const activeProcesses = (processes ?? []).filter(p => !["cerrado", "archivado"].includes(p.status))
   const license = await getCenterLicense(supabase, profile!.center_id)
+
+  // Build questionnaire completion map
+  const tokenMap: Record<string, { total: number; completed: number }> = {}
+  for (const t of (openProcessTokenStats ?? [])) {
+    if (!tokenMap[t.process_id]) tokenMap[t.process_id] = { total: 0, completed: 0 }
+    tokenMap[t.process_id].total++
+    if (t.used) tokenMap[t.process_id].completed++
+  }
+  const openProcesses = (processes ?? []).filter(p => p.status === "cuestionario_abierto")
 
   const isAdmin = ["admin", "superadmin"].includes(profile?.role ?? "")
 
@@ -179,7 +210,72 @@ export default async function DashboardPage() {
             <p className="text-xs text-muted-foreground mt-1">distribucion{approvedProposals !== 1 ? "es" : ""} final{approvedProposals !== 1 ? "es" : ""}</p>
           </CardContent>
         </Card>
+
+        {isAdmin && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Perfiles alumnado</CardTitle>
+              <GraduationCap className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <p className="text-3xl font-bold">{totalProfiles ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">en el registro central</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {(isolatedStudents ?? 0) > 0 && (
+          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-400">Alumnos aislados</CardTitle>
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <p className="text-3xl font-bold text-amber-700 dark:text-amber-400">{isolatedStudents}</p>
+              <p className="text-xs text-amber-600 mt-1">sin elecciones recibidas</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Questionnaire progress */}
+      {openProcesses.length > 0 && (
+        <div className="mb-6 space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Progreso cuestionarios abiertos</h2>
+          {openProcesses.map(p => {
+            const stats = tokenMap[p.id] ?? { total: 0, completed: 0 }
+            const pct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
+            return (
+              <Card key={p.id}>
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center justify-between gap-4 mb-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {stats.completed} / {stats.total} respuestas
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className={`text-sm font-bold ${pct >= 80 ? "text-green-600" : pct >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                        {pct}%
+                      </span>
+                      <Button variant="outline" size="sm" className="text-xs" asChild>
+                        <a href={`/processes/${p.id}/questionnaire`}>Ver</a>
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent processes */}
