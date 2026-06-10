@@ -475,9 +475,9 @@ Página servidor que renderiza sin necesidad de JS en el cliente.
 - [x] Panel superadmin `/admin` — CRUD de centros
 - [x] API `GET/POST /api/admin/centers` y `PATCH/DELETE /api/admin/centers/[id]`
 - [x] Configuración del centro `/settings` — editar nombre, dirección, ciudad
-- [ ] Aislamiento total de datos por `center_id` (RLS estricto)
+- [x] Aislamiento total de datos por `center_id` (RLS estricto) — migración 003
 - [ ] Límites por licencia: nº procesos, nº alumnos, módulos activos
-- [ ] Tutor ve solo sus grupos asignados
+- [x] Tutor ve solo sus grupos asignados (via `process_tutors`)
 - [ ] Orientador con acceso a datos sensibles + registro obligatorio
 - [ ] Históricos inter-anuales: comparar sociogramas de distintos cursos
 - [ ] IA explicativa: resúmenes automáticos de alertas y propuestas
@@ -497,6 +497,69 @@ Página servidor que renderiza sin necesidad de JS en el cliente.
 | `src/app/api/admin/centers/route.ts` | GET — todos los centros · POST — crear centro |
 | `src/app/api/admin/centers/[id]/route.ts` | PATCH — editar · DELETE — eliminar centro |
 | `src/components/layout/sidebar.tsx` | Añadido `userRole` prop + items condicionales (Usuarios, Auditoría, Configuración, Super Admin) |
+
+---
+
+## Fase 6 — Seguridad, flujo de trabajo y roles avanzados
+
+### Migraciones SQL
+
+| Fichero | Descripción |
+|---|---|
+| `supabase/migrations/002_process_tutors.sql` | Tabla `process_tutors` (process_id, user_id, assigned_by) con índices y unique constraint |
+| `supabase/migrations/003_rls_policies.sql` | RLS completo en todas las tablas: funciones helper `current_center_id()`, `is_superadmin()`, `is_admin_or_superadmin()` |
+
+### Transiciones de estado del proceso
+
+`ProcessActions.tsx` (client component en `/processes/[id]/`) — muestra los botones de avance según el estado actual:
+
+```
+borrador → Abrir cuestionario
+cuestionario_abierto → Cerrar cuestionario
+cuestionario_cerrado → Iniciar análisis
+propuesta_seleccionada → Cerrar proceso
+cerrado → Archivar
+cualquier estado → Archivar (ghost) + Eliminar (destructive, solo admins)
+```
+
+Llama a `PATCH /api/processes/[id]` con `{ status }`. Eliminar usa `DELETE /api/processes/[id]` y redirige a `/processes`.
+
+### Asignación de tutores
+
+`ProcessTeam.tsx` (client component en `/processes/[id]/`) — muestra el equipo asignado al proceso con opciones de añadir/quitar (solo admins). Carga usuarios del centro via `GET /api/users`.
+
+| Ruta | Método | Descripción |
+|---|---|---|
+| `/api/processes/[id]/tutors` | GET | Lista asignaciones con datos del usuario |
+| `/api/processes/[id]/tutors` | POST | Asigna usuario al proceso (valida mismo centro) |
+| `/api/processes/[id]/tutors/[userId]` | DELETE | Desasigna usuario |
+
+### Filtrado por rol en lista de procesos
+
+`/processes/page.tsx` — si el usuario es tutor u orientador, consulta `process_tutors` para obtener solo sus `process_id` y filtra la lista. Admins ven todos. El botón "Nuevo proceso" solo se muestra a admins.
+
+### Sidebar móvil
+
+Reescritura de `sidebar.tsx`:
+- `SidebarContent` como función interna reutilizable (recibe `onNavigate?` para cerrar el drawer)
+- `NavLink` como componente auxiliar para evitar duplicación
+- Desktop: `hidden lg:flex` (barra fija)
+- Mobile: botón hamburguesa `fixed top-4 left-4` + drawer `fixed` con `translate-x-0/-translate-x-full` + overlay `bg-black/40`
+
+### Ficheros clave de Fase 6
+
+| Fichero | Descripción |
+|---|---|
+| `supabase/migrations/002_process_tutors.sql` | Nueva tabla `process_tutors` |
+| `supabase/migrations/003_rls_policies.sql` | RLS completo multi-tenant |
+| `src/app/(dashboard)/processes/[id]/ProcessActions.tsx` | Botones de transición de estado + archivar + eliminar |
+| `src/app/(dashboard)/processes/[id]/ProcessTeam.tsx` | UI de asignación de tutores al proceso |
+| `src/app/(dashboard)/processes/[id]/page.tsx` | Reescrito: incluye ProcessActions, ProcessTeam, fechas, % cuestionario |
+| `src/app/(dashboard)/processes/page.tsx` | Filtrado por rol: tutores ven solo sus procesos asignados |
+| `src/app/api/processes/[id]/route.ts` | Añadido DELETE |
+| `src/app/api/processes/[id]/tutors/route.ts` | GET + POST asignaciones |
+| `src/app/api/processes/[id]/tutors/[userId]/route.ts` | DELETE asignación |
+| `src/components/layout/sidebar.tsx` | Reescrito con soporte móvil (drawer) y NavLink reutilizable |
 
 ---
 

@@ -256,7 +256,8 @@ Visualización interactiva con Cytoscape.js.
 | Fase 2 — Sociograma avanzado | ✅ Completo |
 | Fase 3 — Algoritmo avanzado | ✅ Completo |
 | Fase 4 — Edición manual e informes | ✅ Completo |
-| Fase 5 — Producto completo SaaS | 🔄 En progreso |
+| Fase 5 — Producto completo SaaS | ✅ Completo |
+| Fase 6 — Seguridad, flujo de trabajo y roles | ✅ Completo |
 
 Ver `PROGRESS.md` para el detalle técnico completo de cada fase.
 
