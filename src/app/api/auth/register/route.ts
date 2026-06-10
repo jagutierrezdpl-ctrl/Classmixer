@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     .single()
 
   if (centerError || !center) {
-    return NextResponse.json({ error: "Error al crear el centro" }, { status: 500 })
+    return NextResponse.json({ error: centerError?.message ?? "Error al crear el centro (sin datos)" }, { status: 500 })
   }
 
   // Create Supabase auth user using the anon client (so Supabase sends the confirmation email)
