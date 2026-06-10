@@ -23,7 +23,10 @@ interface QuestionConfig {
   min: number
   icon: React.ReactNode
   color: string
+  bgColor: string
 }
+
+const ORDER_LABELS = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"]
 
 export default function QuestionnairePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)
@@ -37,6 +40,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
   const [processName, setProcessName] = useState("")
   const [questions, setQuestions] = useState<QuestionConfig[]>([])
   const [availableStudents, setAvailableStudents] = useState<Student[]>([])
+  // selections stores ordered arrays — index 0 = 1st choice (highest priority)
   const [selections, setSelections] = useState<Record<string, string[]>>({})
   const [searches, setSearches] = useState<Record<string, string>>({})
 
@@ -44,58 +48,23 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     fetch(`/api/q/${token}`)
       .then(r => r.json())
       .then(data => {
-        if (data.error) {
-          setError(data.error)
-          return
-        }
+        if (data.error) { setError(data.error); return }
         setStudentName(data.student_name)
         setProcessName(data.process_name)
         setAvailableStudents(data.students)
 
         const qs: QuestionConfig[] = []
         if (data.settings.friendship_enabled) {
-          qs.push({
-            type: "friendship",
-            label: "Amistad",
-            description: "Elige con quién te gustaría compartir clase el próximo curso.",
-            max: data.settings.friendship_max,
-            min: data.settings.friendship_min,
-            icon: <Heart className="w-5 h-5" />,
-            color: "text-pink-500",
-          })
+          qs.push({ type: "friendship", label: "Amistad", description: "Elige con quién te gustaría compartir clase. El primero que elijas es tu preferencia más importante.", max: data.settings.friendship_max, min: data.settings.friendship_min, icon: <Heart className="w-5 h-5" />, color: "text-pink-500", bgColor: "bg-pink-50 border-pink-200" })
         }
         if (data.settings.work_enabled) {
-          qs.push({
-            type: "work",
-            label: "Trabajo en clase",
-            description: "Elige con quién trabajas bien en clase.",
-            max: data.settings.work_max,
-            min: data.settings.work_min,
-            icon: <Briefcase className="w-5 h-5" />,
-            color: "text-blue-500",
-          })
+          qs.push({ type: "work", label: "Trabajo en clase", description: "Elige con quién trabajas bien. El orden también importa.", max: data.settings.work_max, min: data.settings.work_min, icon: <Briefcase className="w-5 h-5" />, color: "text-blue-500", bgColor: "bg-blue-50 border-blue-200" })
         }
         if (data.settings.emotional_enabled) {
-          qs.push({
-            type: "emotional",
-            label: "Apoyo",
-            description: "Elige a compañeros con quienes te sientes cómodo o tranquilo.",
-            max: data.settings.emotional_max,
-            min: data.settings.emotional_min,
-            icon: <Users className="w-5 h-5" />,
-            color: "text-purple-500",
-          })
+          qs.push({ type: "emotional", label: "Apoyo", description: "Elige a compañeros con quienes te sientes cómodo o tranquilo.", max: data.settings.emotional_max, min: data.settings.emotional_min, icon: <Users className="w-5 h-5" />, color: "text-purple-500", bgColor: "bg-purple-50 border-purple-200" })
         }
         if (data.settings.negative_enabled) {
-          qs.push({
-            type: "negative",
-            label: "Dificultad",
-            description: "¿Hay algún compañero con quien te cuesta trabajar en clase? (máximo 2, opcional)",
-            max: data.settings.negative_max,
-            min: 0,
-            icon: <X className="w-5 h-5" />,
-            color: "text-red-400",
-          })
+          qs.push({ type: "negative", label: "Dificultad", description: "¿Hay algún compañero con quien te cuesta trabajar? (opcional)", max: data.settings.negative_max, min: 0, icon: <X className="w-5 h-5" />, color: "text-red-400", bgColor: "bg-red-50 border-red-200" })
         }
         setQuestions(qs)
         const initial: Record<string, string[]> = {}
@@ -107,12 +76,10 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
       .finally(() => setLoading(false))
   }, [token])
 
-  function toggleStudent(questionType: string, studentId: string, max: number) {
+  function addStudent(questionType: string, studentId: string, max: number) {
     setSelections(prev => {
       const current = prev[questionType] ?? []
-      if (current.includes(studentId)) {
-        return { ...prev, [questionType]: current.filter(id => id !== studentId) }
-      }
+      if (current.includes(studentId)) return prev
       if (current.length >= max) {
         toast.error(`Puedes elegir hasta ${max} compañeros en esta pregunta`)
         return prev
@@ -121,8 +88,14 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     })
   }
 
+  function removeStudent(questionType: string, studentId: string) {
+    setSelections(prev => ({
+      ...prev,
+      [questionType]: (prev[questionType] ?? []).filter(id => id !== studentId),
+    }))
+  }
+
   async function handleSubmit() {
-    // Validate minimums
     for (const q of questions) {
       if (q.min > 0 && (selections[q.type]?.length ?? 0) < q.min) {
         toast.error(`Debes elegir al menos ${q.min} compañero(s) para "${q.label}"`)
@@ -132,6 +105,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
 
     setSubmitting(true)
     try {
+      // Send ordered selections — server uses array index as selection_order
       const res = await fetch(`/api/q/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,7 +161,6 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="border-b bg-card">
         <div className="max-w-2xl mx-auto px-4 py-5 flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
@@ -204,7 +177,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
         <div>
           <h1 className="text-xl font-bold">Cuestionario sociométrico</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Tus respuestas son confidenciales. Nadie más verá tus elecciones.
+            Tus respuestas son confidenciales. El orden en que eliges a tus compañeros también se tiene en cuenta: el primero que selecciones será el más importante.
           </p>
         </div>
 
@@ -213,7 +186,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
           const search = searches[q.type] ?? ""
           const filtered = availableStudents.filter(s => {
             const name = `${s.first_name} ${s.last_name}`.toLowerCase()
-            return !search || name.includes(search.toLowerCase())
+            return !selected.includes(s.id) && (!search || name.includes(search.toLowerCase()))
           })
 
           return (
@@ -229,84 +202,82 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
                 <CardDescription>{q.description}</CardDescription>
                 <p className="text-xs text-muted-foreground">
                   {selected.length} de {q.max} elegidos
-                  {q.min > 0 && <span className="text-destructive"> (mínimo {q.min})</span>}
+                  {q.min > 0 && <span className="text-destructive ml-1">(mínimo {q.min})</span>}
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* Selected chips */}
+
+                {/* Ordered selection list */}
                 {selected.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {selected.map(sid => {
+                  <div className={`rounded-lg border p-3 space-y-2 ${q.bgColor}`}>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Tus elecciones (en orden de preferencia):</p>
+                    {selected.map((sid, idx) => {
                       const s = availableStudents.find(st => st.id === sid)
                       return (
-                        <button
-                          key={sid}
-                          onClick={() => toggleStudent(q.type, sid, q.max)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
-                        >
-                          {s?.first_name} {s?.last_name}
-                          <X className="w-3 h-3" />
-                        </button>
+                        <div key={sid} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm">
+                          <span className="text-xs font-bold text-primary w-6 shrink-0">{ORDER_LABELS[idx]}</span>
+                          <span className="text-sm flex-1 font-medium">{s?.first_name} {s?.last_name}</span>
+                          <Badge variant="outline" className="text-xs shrink-0">{s?.current_class}</Badge>
+                          <button
+                            onClick={() => removeStudent(q.type, sid)}
+                            className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                            aria-label={`Eliminar ${s?.first_name}`}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )
                     })}
                   </div>
                 )}
 
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar compañero..."
-                    className="pl-9"
-                    value={search}
-                    onChange={e => setSearches(prev => ({ ...prev, [q.type]: e.target.value }))}
-                  />
-                </div>
+                {selected.length < q.max && (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder={`Buscar y añadir ${selected.length === 0 ? "(1ª elección)" : `(${ORDER_LABELS[selected.length]} elección)`}...`}
+                        className="pl-9"
+                        value={search}
+                        onChange={e => setSearches(prev => ({ ...prev, [q.type]: e.target.value }))}
+                      />
+                    </div>
 
-                {/* Student list */}
-                <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
-                  {filtered.map(s => {
-                    const isSelected = selected.includes(s.id)
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => toggleStudent(q.type, s.id, q.max)}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 text-sm text-left transition-colors ${
-                          isSelected
-                            ? "bg-primary/5 text-primary font-medium"
-                            : "hover:bg-muted/50"
-                        }`}
-                      >
-                        <span>{s.first_name} {s.last_name}</span>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">{s.current_class}</Badge>
-                          {isSelected && <CheckCircle className="w-4 h-4 text-primary" />}
-                        </div>
-                      </button>
-                    )
-                  })}
-                  {filtered.length === 0 && (
-                    <p className="text-center py-4 text-sm text-muted-foreground">
-                      No se encontraron resultados
-                    </p>
-                  )}
-                </div>
+                    <div className="max-h-52 overflow-y-auto rounded-md border divide-y">
+                      {filtered.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => { addStudent(q.type, s.id, q.max); setSearches(prev => ({ ...prev, [q.type]: "" })) }}
+                          className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-left hover:bg-muted/50 transition-colors"
+                        >
+                          <span>{s.first_name} {s.last_name}</span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">{s.current_class}</Badge>
+                            <span className="text-xs text-primary font-medium">{ORDER_LABELS[selected.length]}</span>
+                          </div>
+                        </button>
+                      ))}
+                      {filtered.length === 0 && (
+                        <p className="text-center py-4 text-sm text-muted-foreground">
+                          {search ? "No se encontraron resultados" : "Ya has seleccionado todos los disponibles"}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {selected.length >= q.max && (
+                  <p className="text-xs text-center text-muted-foreground py-2">
+                    Has llegado al máximo de {q.max} elecciones. Elimina alguna para cambiar.
+                  </p>
+                )}
               </CardContent>
             </Card>
           )
         })}
 
-        <Button
-          size="lg"
-          className="w-full"
-          onClick={handleSubmit}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
-          ) : (
-            "Enviar respuestas"
-          )}
+        <Button size="lg" className="w-full" onClick={handleSubmit} disabled={submitting}>
+          {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : "Enviar respuestas"}
         </Button>
 
         <p className="text-xs text-center text-muted-foreground pb-8">

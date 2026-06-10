@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
@@ -7,7 +7,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const { data, error } = await supabase
     .from("proposals")

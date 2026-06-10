@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   ArrowLeft, Save, Lock, Unlock, AlertTriangle,
-  Loader2, UserCheck, UserX, GraduationCap, Users,
+  Loader2, UserCheck, UserX, GraduationCap, Users, RefreshCw,
 } from "lucide-react"
 import Link from "next/link"
 import type { Student, Response, Rule } from "@/types"
@@ -113,6 +113,7 @@ export default function EditProposalPage({
   const [lastAction, setLastAction] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -184,6 +185,38 @@ export default function EditProposalPage({
     setDirty(true)
   }
 
+  async function handleRecalculate() {
+    if (dirty) {
+      toast.error("Guarda los cambios antes de recalcular")
+      return
+    }
+    setRecalculating(true)
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}/recalculate`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`Recalculado — ${data.recalculated} alumnos redistribuidos, ${data.locked_kept} bloqueados mantenidos`)
+      // Reload assignments
+      const propRes = await fetch(`/api/proposals/${proposalId}`)
+      if (propRes.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prop: any = await propRes.json()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setAssignments((prop.proposal_assignments ?? []).map((a: any) => ({
+          student_id: a.student_id,
+          target_class: a.target_class,
+          locked: a.locked ?? false,
+          student: a.students,
+        })))
+      }
+      setLastAction("Propuesta recalculada respetando alumnos bloqueados")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al recalcular")
+    } finally {
+      setRecalculating(false)
+    }
+  }
+
   async function handleSave() {
     setSaving(true)
     try {
@@ -243,6 +276,16 @@ export default function EditProposalPage({
           {dirty && (
             <Badge variant="warning" className="text-xs">Sin guardar</Badge>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRecalculate}
+            disabled={recalculating || dirty}
+            title="Recalcular respetando alumnos bloqueados"
+          >
+            {recalculating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Recalcular
+          </Button>
           <Button
             onClick={handleSave}
             disabled={saving || !dirty}

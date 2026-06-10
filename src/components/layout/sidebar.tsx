@@ -17,18 +17,22 @@ import {
   Shield,
   Menu,
   X,
+  BarChart3,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import type { UserRole } from "@/types"
+import { DemoButton } from "@/components/layout/demo-button"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/processes", label: "Procesos", icon: FolderOpen },
+  { href: "/history", label: "Histórico", icon: BarChart3 },
 ]
 
 const adminNavItems = [
+  { href: "/alumnado", label: "Alumnado", icon: GraduationCap, roles: ["admin", "superadmin"] as UserRole[] },
   { href: "/users", label: "Usuarios", icon: Users, roles: ["admin", "superadmin"] as UserRole[] },
   { href: "/audit", label: "Auditoría", icon: ClipboardList, roles: ["admin", "superadmin"] as UserRole[] },
   { href: "/settings", label: "Configuración", icon: Settings, roles: ["admin", "superadmin"] as UserRole[] },
@@ -164,9 +168,10 @@ export function Sidebar({ processId, userName, centerName, userRole }: SidebarPr
           )}
         </nav>
 
-        <div className="px-3 py-4 border-t border-sidebar-border">
+        <div className="px-3 py-4 border-t border-sidebar-border space-y-2">
+          <DemoButton />
           {userName && (
-            <p className="px-3 text-xs text-sidebar-foreground/50 mb-2 truncate">{userName}</p>
+            <p className="px-3 text-xs text-sidebar-foreground/50 truncate">{userName}</p>
           )}
           <button
             onClick={handleLogout}

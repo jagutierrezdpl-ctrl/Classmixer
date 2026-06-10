@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const { data: centers, error } = await supabase
     .from("centers")
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const { data, error } = await supabase
     .from("centers")
     .insert(parsed.data)

@@ -8,6 +8,13 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { ArrowLeft, Check } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { z } from "zod"
+
+const centerSchema = z.object({
+  name: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
+  address: z.string().optional(),
+  city: z.string().optional(),
+})
 
 interface Center {
   id: string
@@ -22,6 +29,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState({ name: "", address: "", city: "" })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     async function load() {
@@ -50,11 +58,21 @@ export default function SettingsPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!center) return
+    const parsed = centerSchema.safeParse(form)
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = {}
+      for (const [field, msgs] of Object.entries(parsed.error.flatten().fieldErrors)) {
+        fieldErrors[field] = (msgs as string[])[0] ?? ""
+      }
+      setErrors(fieldErrors)
+      return
+    }
+    setErrors({})
     setSaving(true)
     const supabase = createClient()
     await supabase
       .from("centers")
-      .update({ name: form.name, address: form.address || null, city: form.city || null })
+      .update({ name: parsed.data.name, address: parsed.data.address || null, city: parsed.data.city || null })
       .eq("id", center.id)
     setSaving(false)
     setSaved(true)
@@ -82,9 +100,9 @@ export default function SettingsPage() {
                 id="name"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                required
                 placeholder="IES / CEIP..."
               />
+              {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="address">Dirección</Label>

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -38,7 +38,7 @@ export default async function AuditPage({
   searchParams: Promise<SearchParams>
 }) {
   const profile = await requireRole(["admin", "superadmin"])
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const { action, page } = await searchParams
 
   const pageNum = Math.max(1, parseInt(page ?? "1"))

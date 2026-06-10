@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Plus, Trash2, Shield, Search, X, Loader2 } from "lucide-react"
 import Link from "next/link"
@@ -27,6 +27,7 @@ const RULE_LABELS: Record<string, string> = {
   lock_student_to_class: "Fijar en clase concreta",
   exclude_student: "Excluir de la mezcla",
   protect_vulnerable: "Proteger alumno vulnerable",
+  avoid_tutor: "Evitar tutor (alumno-tutor)",
 }
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning"
@@ -43,24 +44,34 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
 
   const [rules, setRules] = useState<Rule[]>([])
   const [students, setStudents] = useState<Student[]>([])
+  const [centerUsers, setCenterUsers] = useState<{ id: string; name: string; email: string; role: string }[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([])
   const [studentSearch, setStudentSearch] = useState("")
 
-  const { register, handleSubmit, watch, setValue, reset } =
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } =
     useForm<CreateRuleInput>({
       resolver: zodResolver(createRuleSchema),
-      defaultValues: { priority: "media", rule_type: "must_separate" },
+      defaultValues: { priority: "media", rule_type: "must_separate", student_ids: [] },
     })
 
   const ruleType = watch("rule_type")
 
   useEffect(() => {
+    setValue("student_ids", selectedStudents.map(s => s.id))
+  }, [selectedStudents, setValue])
+
+  useEffect(() => {
     loadRules()
-    fetch(`/api/processes/${id}/students`).then(r => r.json()).then(data => {
-      setStudents(Array.isArray(data) ? data : [])
+    Promise.all([
+      fetch(`/api/processes/${id}/students`).then(r => r.json()),
+      fetch(`/api/users`).then(r => r.json()),
+    ]).then(([studentsData, usersData]) => {
+      setStudents(Array.isArray(studentsData) ? studentsData : [])
+      setCenterUsers(Array.isArray(usersData) ? usersData : [])
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   async function loadRules() {
@@ -69,16 +80,16 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
   }
 
   async function onSubmit(data: CreateRuleInput) {
-    if (selectedStudents.length === 0) {
-      toast.error("Selecciona al menos un alumno")
-      return
-    }
     setLoading(true)
     try {
+      const body: Record<string, unknown> = { ...data, process_id: id, student_ids: selectedStudents.map(s => s.id) }
+      if (data.rule_type === "avoid_tutor" && data.tutor_id) {
+        body.metadata = { tutor_id: data.tutor_id }
+      }
       const res = await fetch("/api/rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, process_id: id, student_ids: selectedStudents.map(s => s.id) }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success("Regla creada")
@@ -184,10 +195,11 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {/* Create rule dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) { reset(); setSelectedStudents([]) } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Nueva regla</DialogTitle>
+            <DialogDescription className="sr-only">Configura los parámetros de la nueva regla de mezcla</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
@@ -229,6 +241,23 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
               )}
             </div>
 
+            {ruleType === "avoid_tutor" && (
+              <div className="space-y-1.5">
+                <Label>Tutor que debe evitarse *</Label>
+                <Select onValueChange={v => setValue("tutor_id", v)}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar tutor..." /></SelectTrigger>
+                  <SelectContent>
+                    {centerUsers.map(u => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name} — {u.role === "tutor" ? "Tutor" : u.role === "orientador" ? "Orientador" : u.role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Los alumnos seleccionados no deberían asignarse a este tutor</p>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label>Motivo / Observación interna</Label>
               <Textarea placeholder="Motivo de la regla (solo visible para el equipo)" rows={2} {...register("description")} />
@@ -237,6 +266,9 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
             {/* Student picker */}
             <div className="space-y-2">
               <Label>Alumnos implicados *</Label>
+              {errors.student_ids && (
+                <p className="text-xs text-destructive">{errors.student_ids.message}</p>
+              )}
               {selectedStudents.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {selectedStudents.map(s => (

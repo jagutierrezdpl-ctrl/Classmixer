@@ -47,6 +47,7 @@ Crea un archivo `.env.local` en la raíz con:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://<tu-proyecto>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<tu-anon-key>
+ANTHROPIC_API_KEY=<tu-api-key>     # Opcional — activa la IA explicativa
 ```
 
 ### Instalar y ejecutar
@@ -100,6 +101,7 @@ src/
 │   │       │       └── [proposalId]/
 │   │       │           ├── edit/    # Editor drag & drop
 │   │       │           └── report/  # Informe imprimible
+│   ├── history/             # Histórico inter-anual del centro
 │   ├── q/[token]/           # Cuestionario público (alumnos)
 │   └── api/                 # API Routes
 ├── components/
@@ -265,6 +267,7 @@ Visualización interactiva con Cytoscape.js.
 | Fase 5 — Producto completo SaaS | ✅ Completo |
 | Fase 6 — Seguridad, flujo de trabajo y roles | ✅ Completo |
 | Fase 7 — OAuth y control de acceso por rol | ✅ Completo |
+| Fase 8 — Licencias, históricos e IA explicativa | ✅ Completo |
 
 Ver `PROGRESS.md` para el detalle técnico completo de cada fase.
 

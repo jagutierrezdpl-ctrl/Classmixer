@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -24,7 +24,7 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   // Ensure target user belongs to same center
   const { data: target } = await supabase
@@ -73,7 +73,7 @@ export async function DELETE(
     return NextResponse.json({ error: "No puedes eliminarte a ti mismo" }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const { data: target } = await supabase
     .from("users")

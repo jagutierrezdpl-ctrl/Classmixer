@@ -437,13 +437,28 @@ export function checkInfeasibility(
   }
 }
 
+export interface AlgorithmConstraints {
+  enforce_origin_mix: boolean
+  max_origin_pct: number        // 0–100: max % of students from same origin class in one target class
+  enforce_gender_balance: boolean
+  gender_tolerance: number      // 0–50: max % deviation from global gender ratio per class
+}
+
+export const DEFAULT_CONSTRAINTS: AlgorithmConstraints = {
+  enforce_origin_mix: false,
+  max_origin_pct: 60,
+  enforce_gender_balance: false,
+  gender_tolerance: 15,
+}
+
 export function generateProposals(
   students: Student[],
   responses: Response[],
   rules: Rule[],
   targetClasses: string[],
   numProposals = 3,
-  weights: AlgorithmWeights = DEFAULT_WEIGHTS
+  weights: AlgorithmWeights = DEFAULT_WEIGHTS,
+  constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS
 ): ProposalResult[] {
   const separationRules = rules.filter(r => r.rule_type === "must_separate" && r.active)
   const lockRules = rules.filter(r => r.rule_type === "lock_student_to_class" && r.active)
@@ -504,6 +519,53 @@ export function generateProposals(
 
   const activeStudents = students.filter(s => !excludedIds.has(s.id))
   const freeStudents = activeStudents.filter(s => !lockedStudents.has(s.id) && !mustTogetherLockedClass.has(s.id))
+
+  // Pre-compute global gender ratio for constraint enforcement
+  const totalF = activeStudents.filter(s => s.gender === "F").length
+  const totalM = activeStudents.filter(s => s.gender === "M").length
+  const totalGender = totalF + totalM
+  const globalFRatio = totalGender > 0 ? totalF / totalGender : 0.5
+
+  // Pre-compute origin class sizes for mix constraint
+  const originSizes = new Map<string, number>()
+  activeStudents.forEach(s => originSizes.set(s.current_class, (originSizes.get(s.current_class) ?? 0) + 1))
+
+  function isOriginBlocked(assignments: AssignmentResult[], cls: string, unitIds: string[], studentMap: Map<string, Student>): boolean {
+    if (!constraints.enforce_origin_mix) return false
+    const maxPct = constraints.max_origin_pct / 100
+    const classTotalAfter = assignments.filter(a => a.target_class === cls).length + unitIds.length
+    if (classTotalAfter === 0) return false
+
+    const originCounts = new Map<string, number>()
+    assignments.filter(a => a.target_class === cls).forEach(a => {
+      const s = studentMap.get(a.student_id)
+      if (s) originCounts.set(s.current_class, (originCounts.get(s.current_class) ?? 0) + 1)
+    })
+    for (const uid of unitIds) {
+      const s = studentMap.get(uid)
+      if (!s) continue
+      const newCount = (originCounts.get(s.current_class) ?? 0) + 1
+      if (newCount / classTotalAfter > maxPct) return true
+    }
+    return false
+  }
+
+  function isGenderBlocked(assignments: AssignmentResult[], cls: string, unitIds: string[], studentMap: Map<string, Student>): boolean {
+    if (!constraints.enforce_gender_balance) return false
+    const tolerance = constraints.gender_tolerance / 100
+    const classBefore = assignments.filter(a => a.target_class === cls)
+    let f = classBefore.filter(a => studentMap.get(a.student_id)?.gender === "F").length
+    let total = classBefore.length
+    for (const uid of unitIds) {
+      const s = studentMap.get(uid)
+      if (!s) continue
+      if (s.gender === "F") f++
+      total++
+    }
+    if (total === 0) return false
+    const ratio = f / total
+    return Math.abs(ratio - globalFRatio) > tolerance
+  }
 
   const proposals: ProposalResult[] = []
   const seen = new Set<string>()
@@ -586,6 +648,8 @@ export function generateProposals(
       }
     })
 
+    const studentMapLocal = new Map(activeStudents.map(s => [s.id, s]))
+
     for (const unit of units) {
       let bestClass = targetClasses[classIdx]
       let retries = 0
@@ -628,6 +692,16 @@ export function generateProposals(
             ).length
             if (currentInClass + unitInGroup > maxCount) blocked = true
           }
+        }
+
+        // origin mix constraint
+        if (!blocked && isOriginBlocked(assignments, bestClass, unit.ids, studentMapLocal)) {
+          blocked = true
+        }
+
+        // gender balance constraint
+        if (!blocked && isGenderBlocked(assignments, bestClass, unit.ids, studentMapLocal)) {
+          blocked = true
         }
 
         if (!blocked) break

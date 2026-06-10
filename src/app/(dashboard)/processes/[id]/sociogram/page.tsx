@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
-  Download, ImageDown, Filter, X
+  Download, ImageDown, Filter, X, Sparkles, FileText
 } from "lucide-react"
 import Link from "next/link"
 import type { SociogramData, SociogramNode } from "@/types"
@@ -49,6 +49,8 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const [exportingExcel, setExportingExcel] = useState(false)
   const [viewerRole, setViewerRole] = useState<string | null>(null)
   const [canSeeSensitive, setCanSeeSensitive] = useState(false)
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
 
   useEffect(() => {
     fetch(`/api/processes/${id}/sociogram`)
@@ -76,6 +78,21 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   }
 
   const hasActiveFilter = filter.classFilter || filter.showOnlyIsolated || filter.showOnlyReciprocal || (filter.relationType && filter.relationType !== "all")
+
+  async function handleAISummary() {
+    setAiLoading(true)
+    setAiSummary(null)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/explain`, { method: "POST" })
+      const json = await res.json()
+      if (res.ok) setAiSummary(json.summary)
+      else setAiSummary(`Error: ${json.error}`)
+    } catch {
+      setAiSummary("Error al conectar con la IA")
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   async function handleExportExcel() {
     setExportingExcel(true)
@@ -131,7 +148,7 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="cose">Fuerza (COSE)</SelectItem>
+              <SelectItem value="cose">Fuerza (fCOSE)</SelectItem>
               <SelectItem value="circle">Circular</SelectItem>
               <SelectItem value="concentric">Concéntrico</SelectItem>
               <SelectItem value="breadthfirst">Árbol</SelectItem>
@@ -195,16 +212,41 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
           )}
         </div>
 
-        {/* Export buttons */}
+        {/* Export + AI buttons */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild>
+            <Link href={`/processes/${id}/sociogram/report`}>
+              <FileText className="w-3.5 h-3.5" /> Informe
+            </Link>
+          </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => graphRef.current?.exportPNG()}>
             <ImageDown className="w-3.5 h-3.5" /> PNG
           </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleExportExcel} disabled={exportingExcel}>
             {exportingExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Excel
           </Button>
+          {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleAISummary} disabled={aiLoading}>
+              {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Análisis IA
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* AI Summary panel */}
+      {aiSummary && (
+        <div className="border-b bg-violet-50 px-4 py-3 text-sm text-violet-900 shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-violet-600" />
+              <div className="whitespace-pre-line leading-relaxed">{aiSummary}</div>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setAiSummary(null)}>
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">

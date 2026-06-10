@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
@@ -12,7 +12,7 @@ export async function DELETE(
   }
 
   const { id, userId } = await params
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)

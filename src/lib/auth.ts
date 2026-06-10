@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createServiceClient } from "@/lib/supabase/server"
 import type { UserRole } from "@/types"
 import type { Database, Json } from "@/types/database"
 import { redirect } from "next/navigation"
@@ -17,7 +17,10 @@ export async function getUserProfile(): Promise<UserProfile | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: profile } = await supabase
+  // Use service client to bypass RLS for the profile lookup
+  // (auth.getUser() already verified the session is valid)
+  const serviceClient = createServiceClient()
+  const { data: profile } = await serviceClient
     .from("users")
     .select("*")
     .eq("id", user.id)

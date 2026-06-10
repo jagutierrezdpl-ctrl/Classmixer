@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +19,7 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
 
 export default async function ProcessesPage() {
   const profile = await getUserProfile()
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const isAdmin = ["admin", "superadmin"].includes(profile!.role)
 

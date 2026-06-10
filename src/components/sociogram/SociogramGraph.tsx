@@ -110,6 +110,8 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
 
       const loadCytoscape = async () => {
         const Cytoscape = (await import("cytoscape")).default
+        const fcose = (await import("cytoscape-fcose")).default
+        try { Cytoscape["use"](fcose) } catch { /* already registered on HMR reload */ }
         const maxReceived = Math.max(...data.nodes.map(n => n.received_count), 1)
 
         // Apply filters
@@ -130,17 +132,23 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
         if (f.relationType !== "all") visibleEdges = visibleEdges.filter(e => e.relation_type === f.relationType)
 
         const elements = [
-          ...visibleNodes.map(node => ({
-            data: { id: node.id, label: node.first_name, node },
-            style: {
-              "background-color": getNodeColor(node),
-              width: 18 + (node.received_count / maxReceived) * 32,
-              height: 18 + (node.received_count / maxReceived) * 32,
-              "border-width": node.is_isolated ? 2.5 : node.is_vulnerable ? 2 : node.is_leader ? 3 : node.is_bridge ? 2 : 0,
-              "border-color": node.is_isolated ? "#ef4444" : node.is_vulnerable ? "#f97316" : node.is_leader ? "#f59e0b" : node.is_bridge ? "#6366f1" : "transparent",
-              "border-style": node.is_vulnerable ? "dashed" : "solid",
-            },
-          })),
+          ...visibleNodes.map(node => {
+            const size = 16 + (node.received_count / maxReceived) * 22
+            const borderWidth = node.is_isolated ? 3 : node.is_vulnerable ? 2.5 : node.is_leader ? 3.5 : node.is_bridge ? 2.5 : 0
+            const borderColor = node.is_isolated ? "#ef4444" : node.is_vulnerable ? "#f97316" : node.is_leader ? "#f59e0b" : node.is_bridge ? "#6366f1" : "transparent"
+            return {
+              data: {
+                id: node.id,
+                label: node.first_name,
+                node,
+                bgColor: getNodeColor(node),
+                size,
+                borderWidth,
+                borderColor,
+                isVulnerable: node.is_vulnerable ? true : undefined,
+              },
+            }
+          }),
           ...visibleEdges.map(edge => ({
             data: {
               id: edge.id,
@@ -154,16 +162,36 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const layoutConfigs: Record<string, any> = {
-          cose: { name: "cose", animate: false, nodeRepulsion: 10000, idealEdgeLength: 130, edgeElasticity: 0.4, padding: 30, randomize: false },
-          circle: { name: "circle", padding: 60, animate: false },
+          // fcose: Fast Compound Spring Embedder — handles variable node sizes correctly
+          cose: {
+            name: "fcose",
+            animate: false,
+            randomize: true,
+            quality: "proof",
+            nodeSeparation: 75,
+            idealEdgeLength: 120,
+            edgeElasticity: 0.45,
+            gravity: 0.25,
+            gravityRange: 3.8,
+            gravityCompound: 1.0,
+            gravityRangeCompound: 1.5,
+            numIter: 2500,
+            tilingPaddingVertical: 10,
+            tilingPaddingHorizontal: 10,
+            initialEnergyOnIncremental: 0.3,
+            padding: 50,
+          },
+          circle: { name: "circle", padding: 60, animate: false, spacingFactor: 1.5 },
           concentric: {
-            name: "concentric", animate: false, padding: 30,
+            name: "concentric", animate: false, padding: 40,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             concentric: (node: any) => (node.data("node") as SociogramNode).received_count + (node.data("node") as SociogramNode).reciprocal_count,
             levelWidth: () => 2,
+            minNodeSpacing: 40,
+            spacingFactor: 1.8,
           },
-          breadthfirst: { name: "breadthfirst", animate: false, directed: false, padding: 30 },
-          grid: { name: "grid", animate: false, padding: 30 },
+          breadthfirst: { name: "breadthfirst", animate: false, directed: false, padding: 40, spacingFactor: 1.6 },
+          grid: { name: "grid", animate: false, padding: 40, spacingFactor: 1.3 },
         }
 
         cy = Cytoscape({
@@ -173,23 +201,31 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
             {
               selector: "node",
               style: {
-                label: "data(label)", "font-size": 9,
-                "text-valign": "bottom", "text-margin-y": 3,
-                color: "#475569",
+                label: "data(label)",
+                "font-size": 10,
+                "text-valign": "bottom",
+                "text-margin-y": 4,
+                color: "#1e293b",
                 "text-background-color": "#ffffff",
-                "text-background-opacity": 0.85,
+                "text-background-opacity": 0.9,
                 "text-background-padding": "2px",
                 "text-background-shape": "roundrectangle",
+                "background-color": "data(bgColor)",
+                width: "data(size)",
+                height: "data(size)",
+                "border-width": "data(borderWidth)",
+                "border-color": "data(borderColor)",
               },
             },
-            { selector: "node:selected", style: { "border-width": 3, "border-color": "#2563eb", "border-style": "solid" } },
+            { selector: "node:selected", style: { "border-width": 4, "border-color": "#2563eb", "border-style": "solid" } },
+            { selector: "node[?isVulnerable]", style: { "border-style": "dashed" } },
             {
               selector: "edge[relation_type='friendship'][reciprocal='false']",
-              style: { "line-color": "#93c5fd", width: 1.5, "curve-style": "bezier", "target-arrow-shape": "triangle", "target-arrow-color": "#93c5fd", opacity: 0.6 },
+              style: { "line-color": "#93c5fd", width: 1.5, "curve-style": "bezier", "target-arrow-shape": "triangle", "target-arrow-color": "#93c5fd", opacity: 0.55 },
             },
             {
               selector: "edge[relation_type='friendship'][reciprocal='true']",
-              style: { "line-color": "#2563eb", width: 3, "curve-style": "bezier", opacity: 0.85 },
+              style: { "line-color": "#2563eb", width: 3, "curve-style": "bezier", opacity: 0.8 },
             },
             {
               selector: "edge[relation_type='work']",

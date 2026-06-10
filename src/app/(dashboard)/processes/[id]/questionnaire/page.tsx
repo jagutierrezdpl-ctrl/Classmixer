@@ -1,6 +1,8 @@
 "use client"
 
+import React from "react"
 import { useState, use, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
@@ -14,9 +16,14 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft, Loader2, Link2, Copy,
-  CheckCircle2, Clock, Users
+  CheckCircle2, Clock, Users, QrCode, X,
 } from "lucide-react"
 import Link from "next/link"
+
+const QRCodeSVG = dynamic<{ value: string; size?: number }>(
+  () => import("qrcode.react").then(m => m.QRCodeSVG as React.ComponentType<{ value: string; size?: number }>),
+  { ssr: false }
+)
 
 interface TokenInfo {
   token: string
@@ -34,6 +41,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [generating, setGenerating] = useState(false)
   const [tokens, setTokens] = useState<TokenInfo[]>([])
   const [, setLoadingTokens] = useState(false)
+  const [qrToken, setQrToken] = useState<string | null>(null)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { isDirty } } =
     useForm<QuestionnaireSettingsInput>({
@@ -60,12 +68,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const watchNegative = watch("negative_enabled")
 
   useEffect(() => {
-    // Load existing settings
     fetch(`/api/processes/${id}/questionnaire/settings`)
       .then(r => r.json())
       .then(data => { if (data) reset(data) })
-    // Load tokens
     loadTokens()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   async function loadTokens() {
@@ -227,6 +234,32 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
           </CardContent>
         </Card>
 
+        {/* Deadline + auto-close */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Fecha límite</CardTitle>
+            <CardDescription>Cierra automáticamente el cuestionario cuando pase la fecha</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="deadline">Fecha de cierre</Label>
+              <Input id="deadline" type="datetime-local" {...register("deadline")} />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={!!watch("auto_close_questionnaire")}
+                onCheckedChange={v => setValue("auto_close_questionnaire", v)}
+              />
+              <div>
+                <Label className="font-medium">Cerrar automáticamente al llegar la fecha</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Si está activo, el cuestionario cambiará a &ldquo;cerrado&rdquo; automáticamente. Si no, solo es informativa.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Button type="submit" variant={isDirty ? "default" : "outline"}>
           {savedSettings && !isDirty ? (
             <><CheckCircle2 className="w-4 h-4" /> Configuración guardada</>
@@ -264,23 +297,43 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
 
               <div className="max-h-64 overflow-y-auto space-y-1">
                 {tokens.map(t => (
-                  <div key={t.token} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-muted/50 text-sm">
-                    <div className="flex items-center gap-2">
-                      {t.used ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                      ) : (
-                        <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                      )}
-                      <span>{t.students?.first_name} {t.students?.last_name}</span>
+                  <div key={t.token}>
+                    <div className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-muted/50 text-sm">
+                      <div className="flex items-center gap-2">
+                        {t.used ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                        )}
+                        <span>{t.students?.first_name} {t.students?.last_name}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => setQrToken(qrToken === t.token ? null : t.token)}
+                          title="Ver QR"
+                        >
+                          {qrToken === t.token ? <X className="w-3 h-3" /> : <QrCode className="w-3 h-3" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => copyToClipboard(t.url)}
+                          title="Copiar enlace"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => copyToClipboard(t.url)}
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
+                    {qrToken === t.token && (
+                      <div className="mx-3 mb-2 p-3 bg-white border rounded-lg flex flex-col items-center gap-2">
+                        <QRCodeSVG value={t.url} size={160} />
+                        <p className="text-xs text-muted-foreground break-all text-center">{t.url}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

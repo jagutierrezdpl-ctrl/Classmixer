@@ -1,16 +1,20 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import type { AlgorithmProfile, AlgorithmWeights } from "@/types"
 import { WEIGHT_PROFILES, DEFAULT_WEIGHTS, WEIGHT_LABELS } from "@/lib/algorithm/weights"
+import { DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
+import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
 
 const PROFILES: { id: Exclude<AlgorithmProfile, "personalizado">; label: string; description: string; icon: React.ElementType; color: string }[] = [
   {
@@ -49,9 +53,18 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
 
   const [profile, setProfile] = useState<AlgorithmProfile>("equilibrado")
   const [weights, setWeights] = useState<AlgorithmWeights>(DEFAULT_WEIGHTS)
+  const [constraints, setConstraints] = useState<AlgorithmConstraints>(DEFAULT_CONSTRAINTS)
   const [numProposals, setNumProposals] = useState(3)
   const [running, setRunning] = useState(false)
   const [infeasibility, setInfeasibility] = useState<{ blocking_rules: string[]; explanation: string[] } | null>(null)
+  const [responseCount, setResponseCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/processes/${id}/responses`)
+      .then(r => r.json())
+      .then(d => setResponseCount(Array.isArray(d) ? d.length : (d.count ?? 0)))
+      .catch(() => {})
+  }, [id])
 
   function selectProfile(p: Exclude<AlgorithmProfile, "personalizado">) {
     setProfile(p)
@@ -70,7 +83,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
       const res = await fetch(`/api/processes/${id}/proposals/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weights, num_proposals: numProposals }),
+        body: JSON.stringify({ weights, constraints, num_proposals: numProposals }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -106,6 +119,24 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
       </div>
+
+      {/* No responses warning */}
+      {responseCount === 0 && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-800 mb-1">Sin respuestas del cuestionario</p>
+              <p className="text-sm text-amber-700">
+                No hay respuestas sociométricas registradas. El algoritmo puede ejecutarse, pero ignorará las relaciones de amistad y los datos sociales. Solo usará los datos académicos y de género para la distribución.
+              </p>
+              <Link href={`/processes/${id}/questionnaire`} className="text-sm text-amber-800 underline font-medium mt-1 inline-block">
+                Ir al cuestionario →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Infeasibility alert */}
       {infeasibility && (
@@ -194,6 +225,104 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Distribution constraints */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Restricciones de distribución</CardTitle>
+          <p className="text-xs text-muted-foreground">Condiciones obligatorias que el algoritmo debe cumplir al repartir alumnos</p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+
+          {/* Origin mix */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shuffle className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm font-medium">Mezcla obligatoria de clases de origen</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Limita cuántos alumnos de la misma clase original pueden coincidir en una nueva clase
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={constraints.enforce_origin_mix}
+                onCheckedChange={v => setConstraints(prev => ({ ...prev, enforce_origin_mix: v }))}
+              />
+            </div>
+            {constraints.enforce_origin_mix && (
+              <div className="pl-6 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Máximo de la misma clase original por grupo</span>
+                  <span className="text-sm font-bold text-primary">{constraints.max_origin_pct}%</span>
+                </div>
+                <Slider
+                  min={30} max={70} step={5}
+                  value={[constraints.max_origin_pct]}
+                  onValueChange={([v]) => setConstraints(prev => ({ ...prev, max_origin_pct: v }))}
+                  className="cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>30% — Mezcla estricta</span>
+                  <span className="font-medium text-primary">
+                    {constraints.max_origin_pct <= 40 ? "Mezcla muy estricta" :
+                     constraints.max_origin_pct <= 55 ? "Mitad y mitad" :
+                     "Mezcla moderada"}
+                  </span>
+                  <span>70% — Mezcla suave</span>
+                </div>
+                <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+                  Con el {constraints.max_origin_pct}%, en dos clases destino de 25 alumnos, máximo {Math.round(25 * constraints.max_origin_pct / 100)} alumnos de la misma clase original.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t" />
+
+          {/* Gender balance */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm font-medium">Equilibrio de género entre clases</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Garantiza que cada nueva clase tenga una proporción de género similar al grupo completo
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={constraints.enforce_gender_balance}
+                onCheckedChange={v => setConstraints(prev => ({ ...prev, enforce_gender_balance: v }))}
+              />
+            </div>
+            {constraints.enforce_gender_balance && (
+              <div className="pl-6 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Tolerancia máxima de desviación</span>
+                  <span className="text-sm font-bold text-primary">±{constraints.gender_tolerance}%</span>
+                </div>
+                <Slider
+                  min={5} max={25} step={5}
+                  value={[constraints.gender_tolerance]}
+                  onValueChange={([v]) => setConstraints(prev => ({ ...prev, gender_tolerance: v }))}
+                  className="cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>5% — Muy estricto</span>
+                  <span>25% — Flexible</span>
+                </div>
+                <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+                  Si el grupo tiene 50% de chicas, cada clase debe tener entre {50 - constraints.gender_tolerance}% y {Math.min(100, 50 + constraints.gender_tolerance)}% de chicas.
+                </p>
+              </div>
+            )}
+          </div>
+
         </CardContent>
       </Card>
 

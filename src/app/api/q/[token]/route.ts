@@ -57,17 +57,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const supabase = await createServiceClient()
+  const supabase = createServiceClient()
 
-  const { data: tokenData, error } = await supabase
+  const { data: tokenDataRaw, error } = await supabase
     .from("questionnaire_tokens")
-    .select("process_id, student_id, used")
+    .select("process_id, student_id, used, processes(questionnaire_settings(*))")
     .eq("token", token)
     .single()
 
-  if (error || !tokenData) {
+  if (error || !tokenDataRaw) {
     return NextResponse.json({ error: "Enlace no válido" }, { status: 404 })
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tokenData = tokenDataRaw as any
+
   if (tokenData.used) {
     return NextResponse.json({ error: "Ya completado" }, { status: 410 })
   }
@@ -78,17 +82,49 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
   }
 
-  // Build response rows
-  const responseRows: { process_id: string; respondent_student_id: string; target_student_id: string; relation_type: string; weight: number }[] = []
-  for (const [relationType, studentIds] of Object.entries(selections)) {
-    if (!Array.isArray(studentIds)) continue
-    for (const targetId of studentIds) {
+  const settings = tokenData.processes?.questionnaire_settings ?? {}
+
+  // Validate server-side limits per relation type
+  const limits: Record<string, { enabled: boolean; max: number }> = {
+    friendship: { enabled: settings.friendship_enabled ?? true,  max: settings.friendship_max ?? 5 },
+    work:       { enabled: settings.work_enabled ?? false,       max: settings.work_max ?? 3 },
+    emotional:  { enabled: settings.emotional_enabled ?? false,  max: settings.emotional_max ?? 3 },
+    negative:   { enabled: settings.negative_enabled ?? false,   max: settings.negative_max ?? 2 },
+  }
+
+  // Fetch valid student IDs for this process (to prevent injecting arbitrary IDs)
+  const { data: validStudents } = await supabase
+    .from("students")
+    .select("id")
+    .eq("process_id", tokenData.process_id)
+    .eq("active", true)
+    .neq("id", tokenData.student_id)
+  const validIds = new Set((validStudents ?? []).map((s: { id: string }) => s.id))
+
+  // Build and validate response rows (cast as any[] because selection_order is a new column not yet in generated types)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const responseRows: any[] = []
+  for (const [relationType, rawIds] of Object.entries(selections)) {
+    if (!Array.isArray(rawIds)) continue
+    const limit = limits[relationType]
+    if (!limit?.enabled) continue // skip disabled question types
+    const studentIds = (rawIds as string[])
+      .filter(id => typeof id === "string" && validIds.has(id)) // only valid students
+      .slice(0, limit.max) // enforce server-side max
+
+    for (let i = 0; i < studentIds.length; i++) {
+      const targetId = studentIds[i]
+      if (targetId === tokenData.student_id) continue // can't choose yourself
+      // weight = max - order (1st choice = max weight, last = 1)
+      const selectionOrder = i + 1
+      const weight = Math.max(1, limit.max - i)
       responseRows.push({
         process_id: tokenData.process_id,
         respondent_student_id: tokenData.student_id,
         target_student_id: targetId,
         relation_type: relationType,
-        weight: 1,
+        selection_order: selectionOrder,
+        weight,
       })
     }
   }

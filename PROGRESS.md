@@ -620,6 +620,50 @@ Dos banners condicionales según el rol devuelto por la API:
 
 ---
 
+## FASE 8 — Licencias, históricos e IA explicativa ✅
+
+### Sistema de licencias
+
+- **`supabase/migrations/004_licenses.sql`**: tabla `licenses` con campos `plan`, `max_processes`, `max_students`, `max_users`, `valid_until`. RLS con helpers de fases anteriores. Default `free` para centros existentes.
+- **`src/lib/license.ts`**: `getCenterLicense()`, `PLAN_LIMITS`, `PLAN_LABELS`, `isExpired()`.
+- **`GET /api/license`**: devuelve licencia del centro + contadores de uso (`used_processes`, `used_users`).
+- **`GET/PUT /api/admin/licenses/[centerId]`**: superadmin consulta y actualiza licencia de cualquier centro.
+- **Enforcement**: `POST /api/processes` verifica `max_processes` antes de crear; devuelve 403 con mensaje explicativo si se supera el límite.
+- **Dashboard**: banner de advertencia cuando se alcanza el límite de procesos activos del plan.
+- **Admin panel**: cada centro muestra su plan como badge clickable; inline editor con Select de plan + botones guardar/cancelar.
+
+Planes:
+
+| Plan | Procesos | Alumnos/proceso | Usuarios |
+|---|---|---|---|
+| free | 1 | 60 | 3 |
+| basic | 5 | 120 | 10 |
+| pro | 20 | 200 | 50 |
+| enterprise | ilimitado | ilimitado | ilimitado |
+
+### Históricos inter-anuales
+
+- **`GET /api/history`**: agrega datos de todos los procesos del centro. Para cada proceso calcula: `total_students`, `total_responses`, `tokens_total/completed`, `response_rate`, `sociogram_isolated/vulnerable` y porcentajes.
+- **`/history`** (client component): agrupa procesos por `school_year`, muestra tabla de tendencias cross-year y cards individuales por proceso con indicadores de color (verde/amarillo/rojo según umbrales). `TrendBadge` con flechas de tendencia.
+
+### IA explicativa (Claude API)
+
+- **`src/lib/ai.ts`**: wrapper `generateAISummary(prompt)` usando `fetch` directo a `api.anthropic.com/v1/messages` con modelo `claude-haiku-4-5-20251001`. No requiere SDK instalado.
+- **`POST /api/processes/[id]/sociogram/explain`**: genera informe orientador del sociograma (aislados, vulnerables, centralidad media). Solo accesible para admin/superadmin/orientador.
+- **`POST /api/proposals/[id]/explain`**: genera resumen ejecutivo de una propuesta con puntuaciones + métricas por clase. Solo admin/superadmin.
+- **Fallback**: si `ANTHROPIC_API_KEY` no está configurada devuelve 503 con mensaje amigable.
+- **UI sociograma**: botón "Análisis IA" en toolbar (visible para admin/orientador). Respuesta en panel violet expandible con botón cerrar.
+- **UI propuestas**: botón sparkles por cada propuesta. Resumen aparece como card violet encima de las score bars. Botón cerrar individual.
+- **Sidebar**: nuevo link "Histórico" con icono `BarChart3`.
+
+### Variables de entorno añadidas
+
+```
+ANTHROPIC_API_KEY=<tu-api-key>   # Opcional — la IA no estará disponible sin esto
+```
+
+---
+
 ## Decisiones técnicas relevantes
 
 ### Supabase y tipos

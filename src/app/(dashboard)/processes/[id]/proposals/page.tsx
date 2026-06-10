@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   ArrowLeft, Zap, Download, Users, Loader2,
   ChevronDown, ChevronUp, CheckCircle, Settings2,
-  UserX, UserCheck, Heart, Pencil, FileText,
+  UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap,
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
@@ -58,6 +58,8 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({})
+  const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({})
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadProposals() }, [id])
@@ -94,6 +96,19 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
       await loadProposals()
     } else {
       toast.error("Error al aprobar")
+    }
+  }
+
+  async function handleAISummary(proposalId: string) {
+    setAiLoading(prev => ({ ...prev, [proposalId]: true }))
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}/explain`, { method: "POST" })
+      const json = await res.json()
+      setAiSummaries(prev => ({ ...prev, [proposalId]: res.ok ? json.summary : `Error: ${json.error}` }))
+    } catch {
+      setAiSummaries(prev => ({ ...prev, [proposalId]: "Error al conectar con la IA" }))
+    } finally {
+      setAiLoading(prev => ({ ...prev, [proposalId]: false }))
     }
   }
 
@@ -279,6 +294,18 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                       </div>
                       <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" asChild>
+                          <Link href={`/processes/${id}/proposals/${proposal.id}/simulation`}>
+                            <Network className="w-4 h-4" />
+                            Simulación
+                          </Link>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/processes/${id}/proposals/${proposal.id}/tutors`}>
+                            <GraduationCap className="w-4 h-4" />
+                            Tutores
+                          </Link>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
                           <Link href={`/processes/${id}/proposals/${proposal.id}/report`} target="_blank">
                             <FileText className="w-4 h-4" />
                             Informe
@@ -301,6 +328,15 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                           </Button>
                         )}
                         <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAISummary(proposal.id)}
+                          disabled={aiLoading[proposal.id]}
+                          title="Análisis IA"
+                        >
+                          {aiLoading[proposal.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        </Button>
+                        <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => setExpandedId(isExpanded ? null : proposal.id)}
@@ -312,6 +348,21 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                   </CardHeader>
 
                   <CardContent className="pt-0">
+                    {/* AI Summary */}
+                    {aiSummaries[proposal.id] && (
+                      <div className="mb-4 rounded-lg bg-violet-50 border border-violet-200 p-3 text-sm text-violet-900">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2">
+                            <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-violet-600" />
+                            <div className="whitespace-pre-line leading-relaxed">{aiSummaries[proposal.id]}</div>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0"
+                            onClick={() => setAiSummaries(prev => { const n = { ...prev }; delete n[proposal.id]; return n })}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     {/* Score bars */}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-4">
                       <ScoreBar label="Social" value={proposal.score_social} color="bg-pink-400" />

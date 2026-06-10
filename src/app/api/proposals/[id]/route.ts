@@ -1,13 +1,28 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
+
+async function getProposalWithOwnerCheck(supabase: ReturnType<typeof createServiceClient>, proposalId: string, centerId: string) {
+  const { data, error } = await supabase
+    .from("proposals")
+    .select("*, processes!inner(center_id)")
+    .eq("id", proposalId)
+    .single()
+  if (error || !data) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((data as any).processes?.center_id !== centerId) return null
+  return data
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
-  const supabase = await createClient()
+  const supabase = createServiceClient()
+
+  const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
+  if (!owned) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   const { data, error } = await supabase
     .from("proposals")
@@ -25,7 +40,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params
   const body = await request.json()
-  const supabase = await createClient()
+  const supabase = createServiceClient()
+
+  const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
+  if (!owned) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   const { data, error } = await supabase
     .from("proposals")

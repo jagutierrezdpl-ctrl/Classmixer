@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -21,7 +21,7 @@ function formatDate(dateStr: string) {
 
 export default async function UsersPage() {
   const profile = await requireRole(["admin", "superadmin"])
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const { data: users } = await supabase
     .from("users")

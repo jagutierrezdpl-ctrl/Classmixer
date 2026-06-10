@@ -175,8 +175,11 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Plataforma de uso exclusivo para personal autorizado del centro.
+        <p className="text-center text-sm text-muted-foreground mt-6">
+          ¿Tu centro aún no está registrado?{" "}
+          <a href="/register" className="text-primary hover:underline font-medium">
+            Registrar centro
+          </a>
         </p>
       </div>
     </div>

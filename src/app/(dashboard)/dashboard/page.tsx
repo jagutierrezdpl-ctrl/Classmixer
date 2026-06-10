@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import {
   FolderOpen, Users, BookOpen, CheckCircle2, Plus,
-  ArrowRight, Clock, Zap, Network, FileText,
+  ArrowRight, Clock, Zap, Network, FileText, Sparkles,
 } from "lucide-react"
+import { getCenterLicense } from "@/lib/license"
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "success" | "warning" | "outline" }> = {
   borrador: { label: "Borrador", variant: "secondary" },
@@ -44,7 +45,7 @@ function timeAgo(dateStr: string): string {
 
 export default async function DashboardPage() {
   const profile = await getUserProfile()
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const [
     { data: processes },
@@ -94,6 +95,7 @@ export default async function DashboardPage() {
   ])
 
   const activeProcesses = (processes ?? []).filter(p => !["cerrado", "archivado"].includes(p.status))
+  const license = await getCenterLicense(supabase, profile!.center_id)
 
   const isAdmin = ["admin", "superadmin"].includes(profile?.role ?? "")
 
@@ -116,6 +118,17 @@ export default async function DashboardPage() {
           </Button>
         )}
       </div>
+
+      {/* License banner — only warn when at/near limit */}
+      {license.max_processes !== null && activeProcesses.length >= license.max_processes && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-2">
+          <Sparkles className="w-4 h-4 shrink-0" />
+          <span>
+            Has alcanzado el límite de procesos activos del plan <strong>{license.plan}</strong> ({license.max_processes}).
+            Archiva procesos anteriores o actualiza tu licencia para crear más.
+          </span>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

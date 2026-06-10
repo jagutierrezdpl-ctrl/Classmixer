@@ -3,13 +3,14 @@ import { z } from "zod"
 export const createProcessSchema = z.object({
   name: z.string().min(3, "El nombre debe tener al menos 3 caracteres"),
   school_year: z.string().min(4, "Introduce el curso escolar (ej: 2025-2026)"),
-  source_level: z.string().min(1, "Indica el nivel de origen"),
-  target_level: z.string().min(1, "Indica el nivel destino"),
-  source_groups: z.string().min(1, "Indica los grupos de origen (ej: 6A, 6B)"),
-  target_groups: z.string().min(1, "Indica los grupos destino (ej: 1A, 1B)"),
-  target_class_count: z.number().min(1).max(20),
-  min_class_size: z.number().min(1).max(50),
-  max_class_size: z.number().min(1).max(50),
+  process_type: z.enum(["mezcla", "sociograma"]),
+  source_level: z.string().min(1, "Indica el nivel o grupo"),
+  target_level: z.string().optional(),
+  source_groups: z.string().min(1, "Indica los grupos (ej: 6A, 6B)"),
+  target_groups: z.string().optional(),
+  target_class_count: z.number().min(1).max(20).optional(),
+  min_class_size: z.number().min(1).max(50).optional(),
+  max_class_size: z.number().min(1).max(50).optional(),
   questionnaire_deadline: z.string().optional(),
 })
 
@@ -29,6 +30,7 @@ export const questionnaireSettingsSchema = z.object({
   negative_max: z.number().min(1).max(5),
   access_mode: z.enum(["token", "google", "open"]).optional(),
   deadline: z.string().optional(),
+  auto_close_questionnaire: z.boolean().optional(),
 })
 
 export type QuestionnaireSettingsInput = z.infer<typeof questionnaireSettingsSchema>
@@ -43,11 +45,13 @@ export const createRuleSchema = z.object({
     "lock_student_to_class",
     "exclude_student",
     "protect_vulnerable",
+    "avoid_tutor",
   ]),
   priority: z.enum(["obligatoria", "alta", "media", "baja"]),
   description: z.string().optional(),
   target_class: z.string().optional(),
   max_count: z.number().optional(),
+  tutor_id: z.string().optional(),
   student_ids: z.array(z.string()).min(1, "Selecciona al menos un alumno"),
 })
 
@@ -59,3 +63,21 @@ export const loginSchema = z.object({
 })
 
 export type LoginInput = z.infer<typeof loginSchema>
+
+export const registerCenterSchema = z.object({
+  center_name: z.string().min(3, "El nombre del centro debe tener al menos 3 caracteres"),
+  city: z.string().min(2, "La ciudad es obligatoria"),
+  country: z.string().min(2, "El país es obligatorio"),
+  center_type: z.enum(["publico", "concertado", "privado"]).optional(),
+  phone: z.string().optional(),
+  web: z.string().optional(),
+  admin_name: z.string().min(2, "El nombre es obligatorio"),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
+  confirm_password: z.string(),
+}).refine(d => d.password === d.confirm_password, {
+  message: "Las contraseñas no coinciden",
+  path: ["confirm_password"],
+})
+
+export type RegisterCenterInput = z.infer<typeof registerCenterSchema>

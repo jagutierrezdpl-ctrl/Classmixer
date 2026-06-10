@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -24,7 +24,7 @@ export async function PATCH(
   const parsed = UpdateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const { error } = await supabase.from("centers").update(parsed.data).eq("id", id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -41,7 +41,7 @@ export async function DELETE(
   }
 
   const { id } = await params
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const { error } = await supabase.from("centers").delete().eq("id", id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

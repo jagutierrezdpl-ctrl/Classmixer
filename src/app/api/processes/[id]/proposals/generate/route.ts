@@ -1,7 +1,8 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
-import { generateProposals, checkInfeasibility } from "@/lib/algorithm/heuristic"
+import { generateProposals, checkInfeasibility, DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
+import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
 import { DEFAULT_WEIGHTS } from "@/lib/algorithm/weights"
 import type { AlgorithmWeights } from "@/types"
 
@@ -10,14 +11,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   let weights: AlgorithmWeights = DEFAULT_WEIGHTS
+  let constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS
   let numProposals = 3
 
   try {
     const body = await request.json()
     if (body.weights) weights = { ...DEFAULT_WEIGHTS, ...body.weights }
+    if (body.constraints) constraints = { ...DEFAULT_CONSTRAINTS, ...body.constraints }
     if (body.num_proposals) numProposals = Math.min(10, Math.max(1, Number(body.num_proposals)))
   } catch {
     // No body — use defaults
@@ -69,7 +72,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     rulesWithStudents as any,
     targetClasses,
     numProposals,
-    weights
+    weights,
+    constraints
   )
 
   if (proposals.length === 0) {

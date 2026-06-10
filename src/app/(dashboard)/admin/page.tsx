@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ArrowLeft, Plus, Building2 } from "lucide-react"
+import { ArrowLeft, Plus, Building2, Pencil, Check, X } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface CenterRow {
   id: string
@@ -18,6 +19,13 @@ interface CenterRow {
   process_count: number
 }
 
+const PLAN_COLORS: Record<string, string> = {
+  free: "bg-gray-100 text-gray-700",
+  basic: "bg-blue-100 text-blue-700",
+  pro: "bg-violet-100 text-violet-700",
+  enterprise: "bg-amber-100 text-amber-700",
+}
+
 export default function AdminPage() {
   const [centers, setCenters] = useState<CenterRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -25,17 +33,42 @@ export default function AdminPage() {
   const [form, setForm] = useState({ name: "", city: "", address: "" })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const [licenses, setLicenses] = useState<Record<string, string>>({})
+  const [editingLicense, setEditingLicense] = useState<string | null>(null)
+  const [licensePlan, setLicensePlan] = useState("free")
 
   async function loadCenters() {
     const res = await fetch("/api/admin/centers")
     if (res.ok) {
       const data = await res.json()
       setCenters(data)
+      // Fetch licenses for all centers
+      const licMap: Record<string, string> = {}
+      await Promise.all(data.map(async (c: CenterRow) => {
+        const lr = await fetch(`/api/admin/licenses/${c.id}`)
+        if (lr.ok) {
+          const ld = await lr.json()
+          licMap[c.id] = ld.plan ?? "free"
+        } else {
+          licMap[c.id] = "free"
+        }
+      }))
+      setLicenses(licMap)
     }
     setLoading(false)
   }
 
   useEffect(() => { loadCenters() }, [])
+
+  async function handleSaveLicense(centerId: string) {
+    await fetch(`/api/admin/licenses/${centerId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: licensePlan }),
+    })
+    setLicenses(prev => ({ ...prev, [centerId]: licensePlan }))
+    setEditingLicense(null)
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -151,13 +184,44 @@ export default function AdminPage() {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                     <Badge variant="secondary" className="text-xs">
                       {c.user_count} usuario{c.user_count !== 1 ? "s" : ""}
                     </Badge>
                     <Badge variant="outline" className="text-xs">
                       {c.process_count} proceso{c.process_count !== 1 ? "s" : ""}
                     </Badge>
+                    {/* License */}
+                    {editingLicense === c.id ? (
+                      <div className="flex items-center gap-1">
+                        <Select value={licensePlan} onValueChange={setLicensePlan}>
+                          <SelectTrigger className="h-7 w-28 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="free">Free</SelectItem>
+                            <SelectItem value="basic">Basic</SelectItem>
+                            <SelectItem value="pro">Pro</SelectItem>
+                            <SelectItem value="enterprise">Enterprise</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSaveLicense(c.id)}>
+                          <Check className="w-3.5 h-3.5 text-green-600" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingLicense(null)}>
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${PLAN_COLORS[licenses[c.id] ?? "free"] ?? "bg-gray-100 text-gray-700"}`}
+                        onClick={() => { setEditingLicense(c.id); setLicensePlan(licenses[c.id] ?? "free") }}
+                        title="Cambiar licencia"
+                      >
+                        {(licenses[c.id] ?? "free").charAt(0).toUpperCase() + (licenses[c.id] ?? "free").slice(1)}
+                        <Pencil className="w-2.5 h-2.5 opacity-60" />
+                      </button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"

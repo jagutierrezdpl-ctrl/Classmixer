@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { notFound } from "next/navigation"
 import PrintButton from "./PrintButton"
@@ -13,7 +13,7 @@ export default async function ReportPage({
   const profile = await getUserProfile()
   if (!profile) notFound()
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const [{ data: processRaw }, { data: proposalRaw }] = await Promise.all([
     supabase.from("processes").select("*").eq("id", processId).single(),

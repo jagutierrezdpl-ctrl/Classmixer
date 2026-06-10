@@ -1,11 +1,11 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays } from "lucide-react"
+import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare } from "lucide-react"
 import ProcessActions from "./ProcessActions"
 import ProcessTeam from "./ProcessTeam"
 
@@ -20,13 +20,21 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
   archivado: { label: "Archivado", variant: "outline" },
 }
 
-const SECTIONS = [
+const SECTIONS_MEZCLA = [
   { href: "students", label: "Alumnos", icon: Users, description: "Importar y gestionar el alumnado" },
   { href: "questionnaire", label: "Cuestionario", icon: BookOpen, description: "Configurar y lanzar el cuestionario sociométrico" },
+  { href: "responses", label: "Respuestas", icon: MessageSquare, description: "Ver quién ha respondido y sus elecciones" },
   { href: "sociogram", label: "Sociograma", icon: Network, description: "Visualizar las relaciones sociales" },
   { href: "rules", label: "Reglas", icon: Shield, description: "Definir restricciones entre alumnos" },
   { href: "algorithm", label: "Algoritmo", icon: Zap, description: "Configurar criterios y ejecutar la mezcla" },
   { href: "proposals", label: "Propuestas", icon: LayoutGrid, description: "Comparar, editar y aprobar la distribución" },
+]
+
+const SECTIONS_SOCIOGRAMA = [
+  { href: "students", label: "Alumnos", icon: Users, description: "Importar y gestionar el alumnado" },
+  { href: "questionnaire", label: "Cuestionario", icon: BookOpen, description: "Configurar y lanzar el cuestionario sociométrico" },
+  { href: "responses", label: "Respuestas", icon: MessageSquare, description: "Ver quién ha respondido y sus elecciones" },
+  { href: "sociogram", label: "Sociograma", icon: Network, description: "Visualizar las relaciones sociales e informes" },
 ]
 
 function formatDate(dateStr: string) {
@@ -36,7 +44,7 @@ function formatDate(dateStr: string) {
 export default async function ProcessDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const profile = await getUserProfile()
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const { data: process } = await supabase
     .from("processes")
@@ -62,6 +70,9 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
   const st = STATUS_MAP[process.status] ?? { label: process.status, variant: "outline" as const }
   const isAdmin = ["admin", "superadmin"].includes(profile!.role)
   const completionPct = totalTokens ? Math.round(((completedTokens ?? 0) / totalTokens) * 100) : 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isSociograma = (process as any).process_type === "sociograma"
+  const SECTIONS = isSociograma ? SECTIONS_SOCIOGRAMA : SECTIONS_MEZCLA
 
   return (
     <div className="p-8">
@@ -75,9 +86,16 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h1 className="text-2xl font-bold">{process.name}</h1>
               <Badge variant={st.variant}>{st.label}</Badge>
+              {isSociograma && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <Network className="w-3 h-3" /> Sociograma
+                </Badge>
+              )}
             </div>
             <p className="text-muted-foreground text-sm">
-              {process.source_level} → {process.target_level} · Curso {process.school_year}
+              {isSociograma
+                ? `${process.source_level} · Curso ${process.school_year}`
+                : `${process.source_level} → ${process.target_level} · Curso ${process.school_year}`}
             </p>
           </div>
         </div>
