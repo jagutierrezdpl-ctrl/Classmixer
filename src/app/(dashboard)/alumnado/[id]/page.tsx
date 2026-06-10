@@ -4,10 +4,15 @@ import { useState, useEffect, use } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
-  ArrowLeft, User, BookOpen, Network,
-  GraduationCap, TrendingUp, AlertTriangle,
-  CheckCircle2, Loader2, Calendar
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/components/ui/select"
+import {
+  ArrowLeft, User, BookOpen, Network, GraduationCap, TrendingUp,
+  AlertTriangle, CheckCircle2, Loader2, Calendar, Pencil, Save, X
 } from "lucide-react"
 import Link from "next/link"
 
@@ -16,7 +21,14 @@ interface StudentProfile {
   external_id: string
   first_name: string
   last_name: string
+  current_class: string | null
+  gender: string | null
   birth_year: number | null
+  academic_level: string | null
+  behavior_level: string | null
+  needs_type: string | null
+  observations: string | null
+  school_year: string | null
   created_at: string
 }
 
@@ -26,7 +38,6 @@ interface SociogramMetric {
   reciprocal_count: number
   centrality: number | null
   isolation_score: number | null
-  community_id: number | null
 }
 
 interface TrajectoryEntry {
@@ -77,6 +88,10 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
   const [data, setData] = useState<{ profile: StudentProfile; trajectory: TrajectoryEntry[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editForm, setEditForm] = useState<Partial<StudentProfile>>({})
+  const [saveOk, setSaveOk] = useState(false)
 
   useEffect(() => {
     fetch(`/api/student-profiles/${id}`)
@@ -89,11 +104,52 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
       .finally(() => setLoading(false))
   }, [id])
 
+  function startEdit() {
+    if (!data) return
+    setEditForm({
+      first_name: data.profile.first_name,
+      last_name: data.profile.last_name,
+      external_id: data.profile.external_id,
+      current_class: data.profile.current_class ?? "",
+      gender: data.profile.gender ?? "",
+      birth_year: data.profile.birth_year ?? undefined,
+      academic_level: data.profile.academic_level ?? "",
+      behavior_level: data.profile.behavior_level ?? "",
+      needs_type: data.profile.needs_type ?? "",
+      observations: data.profile.observations ?? "",
+      school_year: data.profile.school_year ?? "",
+    })
+    setEditing(true)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/student-profiles/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      })
+      const result = await res.json()
+      if (result.error) {
+        setError(result.error)
+      } else {
+        setEditing(false)
+        setSaveOk(true)
+        setTimeout(() => setSaveOk(false), 3000)
+        // Reload
+        const updated = await fetch(`/api/student-profiles/${id}`).then(r => r.json())
+        if (!updated.error) setData(updated)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-muted-foreground">
-        <Loader2 className="w-6 h-6 animate-spin mr-2" />
-        Cargando trayectoria...
+        <Loader2 className="w-6 h-6 animate-spin mr-2" />Cargando...
       </div>
     )
   }
@@ -111,17 +167,11 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
 
   const { profile, trajectory } = data
 
-  // Summary stats across all entries
-  const avgGrades = trajectory
-    .map(e => e.student.average_grade)
-    .filter((g): g is number => g !== null)
+  const avgGrades = trajectory.map(e => e.student.average_grade).filter((g): g is number => g !== null)
   const latestGrade = avgGrades[avgGrades.length - 1]
   const firstGrade = avgGrades[0]
   const gradeTrend = avgGrades.length >= 2 ? latestGrade - firstGrade : null
-
-  const isolatedCount = trajectory.filter(
-    e => e.sociogram && e.sociogram.received_count === 0
-  ).length
+  const isolatedCount = trajectory.filter(e => e.sociogram && e.sociogram.received_count === 0).length
 
   return (
     <div className="p-8 max-w-4xl">
@@ -130,7 +180,7 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
         <Button variant="ghost" size="icon" asChild>
           <Link href="/alumnado"><ArrowLeft className="w-4 h-4" /></Link>
         </Button>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-1">
           <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
             <User className="w-6 h-6 text-primary" />
           </div>
@@ -145,10 +195,122 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
                   <Calendar className="w-3 h-3 mr-1" />{profile.birth_year}
                 </Badge>
               )}
+              {profile.current_class && (
+                <Badge variant="outline" className="text-xs">{profile.current_class}</Badge>
+              )}
             </div>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          {saveOk && <CheckCircle2 className="w-5 h-5 text-green-600" />}
+          {editing ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
+                <X className="w-4 h-4 mr-1" />Cancelar
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+                Guardar
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" size="sm" onClick={startEdit}>
+              <Pencil className="w-4 h-4 mr-2" />Editar
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Edit form */}
+      {editing && (
+        <Card className="mb-8">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Editar perfil</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <Label className="text-xs">Nombre</Label>
+                <Input value={editForm.first_name ?? ""} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">Apellidos</Label>
+                <Input value={editForm.last_name ?? ""} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">ID externo</Label>
+                <Input value={editForm.external_id ?? ""} onChange={e => setEditForm(f => ({ ...f, external_id: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">Clase actual</Label>
+                <Input value={editForm.current_class ?? ""} onChange={e => setEditForm(f => ({ ...f, current_class: e.target.value }))} placeholder="ej. 6A" />
+              </div>
+              <div>
+                <Label className="text-xs">Género</Label>
+                <Select value={editForm.gender ?? ""} onValueChange={v => setEditForm(f => ({ ...f, gender: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="F">F</SelectItem>
+                    <SelectItem value="M">M</SelectItem>
+                    <SelectItem value="Otro">Otro</SelectItem>
+                    <SelectItem value="No especificado">No especificado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Año nacimiento</Label>
+                <Input type="number" value={editForm.birth_year ?? ""} onChange={e => setEditForm(f => ({ ...f, birth_year: Number(e.target.value) || undefined }))} placeholder="ej. 2013" />
+              </div>
+              <div>
+                <Label className="text-xs">Nivel académico</Label>
+                <Select value={editForm.academic_level ?? ""} onValueChange={v => setEditForm(f => ({ ...f, academic_level: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {["Alto", "Medio-alto", "Medio", "Medio-bajo", "Bajo"].map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Conducta</Label>
+                <Select value={editForm.behavior_level ?? ""} onValueChange={v => setEditForm(f => ({ ...f, behavior_level: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {["Positiva", "Normal", "Seguimiento", "Conflictiva"].map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Necesidades</Label>
+                <Select value={editForm.needs_type ?? ""} onValueChange={v => setEditForm(f => ({ ...f, needs_type: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {["No", "Sí", "ACNEAE", "NEE", "Refuerzo", "Altas capacidades", "Observación interna"].map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Curso escolar</Label>
+                <Input value={editForm.school_year ?? ""} onChange={e => setEditForm(f => ({ ...f, school_year: e.target.value }))} placeholder="ej. 2025/2026" />
+              </div>
+              <div className="col-span-2 md:col-span-3">
+                <Label className="text-xs">Observaciones</Label>
+                <Textarea
+                  value={editForm.observations ?? ""}
+                  onChange={e => setEditForm(f => ({ ...f, observations: e.target.value }))}
+                  rows={2}
+                  placeholder="Observaciones internas..."
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary cards */}
       {trajectory.length > 0 && (
@@ -192,7 +354,54 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
         </div>
       )}
 
-      {/* Trajectory timeline */}
+      {/* Profile summary */}
+      {!editing && (
+        <Card className="mb-8">
+          <CardContent className="py-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              {profile.current_class && (
+                <div><p className="text-xs text-muted-foreground">Clase</p><p className="font-medium">{profile.current_class}</p></div>
+              )}
+              {profile.gender && (
+                <div><p className="text-xs text-muted-foreground">Género</p><p className="font-medium">{profile.gender}</p></div>
+              )}
+              {profile.academic_level && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Nivel</p>
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${ACADEMIC_COLORS[profile.academic_level] ?? "bg-muted"}`}>
+                    {profile.academic_level}
+                  </span>
+                </div>
+              )}
+              {profile.behavior_level && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Conducta</p>
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${BEHAVIOR_COLORS[profile.behavior_level] ?? "bg-muted"}`}>
+                    {profile.behavior_level}
+                  </span>
+                </div>
+              )}
+              {profile.needs_type && profile.needs_type !== "No" && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Necesidades</p>
+                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0">{profile.needs_type}</Badge>
+                </div>
+              )}
+              {profile.school_year && (
+                <div><p className="text-xs text-muted-foreground">Curso</p><p className="font-medium">{profile.school_year}</p></div>
+              )}
+            </div>
+            {profile.observations && (
+              <div className="mt-3 pt-3 border-t">
+                <p className="text-xs text-muted-foreground mb-1">Observaciones</p>
+                <p className="text-sm italic text-muted-foreground">{profile.observations}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Trajectory */}
       <h2 className="text-lg font-semibold mb-4">Trayectoria escolar</h2>
 
       {trajectory.length === 0 ? (
@@ -201,13 +410,10 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
         </div>
       ) : (
         <div className="relative">
-          {/* Timeline line */}
           <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-border" />
-
           <div className="space-y-6">
             {trajectory.map((entry, idx) => (
               <div key={entry.student.id} className="relative flex gap-6">
-                {/* Timeline dot */}
                 <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center shrink-0 z-10 ${
                   idx === trajectory.length - 1
                     ? "bg-primary border-primary text-white"
@@ -221,29 +427,15 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <CardTitle className="text-base">
-                          <Link
-                            href={`/processes/${entry.process.id}`}
-                            className="hover:underline"
-                          >
+                          <Link href={`/processes/${entry.process.id}`} className="hover:underline">
                             {entry.process.name}
                           </Link>
                         </CardTitle>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className="text-xs text-muted-foreground">
-                            {entry.process.school_year}
-                          </span>
-                          <Badge variant="outline" className="text-xs">
-                            {entry.process.source_level}
-                          </Badge>
-                          <Badge
-                            variant={entry.process.process_type === "sociograma" ? "secondary" : "outline"}
-                            className="text-xs"
-                          >
-                            {entry.process.process_type === "sociograma" ? (
-                              <><Network className="w-3 h-3 mr-1" />Sociograma</>
-                            ) : (
-                              <><GraduationCap className="w-3 h-3 mr-1" />Mezcla</>
-                            )}
+                          <span className="text-xs text-muted-foreground">{entry.process.school_year}</span>
+                          <Badge variant="outline" className="text-xs">{entry.process.source_level}</Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            <Network className="w-3 h-3 mr-1" />{entry.process.process_type}
                           </Badge>
                         </div>
                       </div>
@@ -258,43 +450,34 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
 
                   <CardContent className="pt-0">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      {/* Academic data */}
                       <div>
                         <p className="text-xs text-muted-foreground mb-1">Clase origen</p>
                         <p className="font-medium">{entry.student.current_class}</p>
                       </div>
-
                       {entry.student.average_grade !== null && (
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Nota media</p>
                           <p className="font-medium">{entry.student.average_grade.toFixed(1)}</p>
                         </div>
                       )}
-
                       {entry.student.academic_level && (
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Nivel</p>
                           <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                             ACADEMIC_COLORS[entry.student.academic_level] ?? "bg-muted"
-                          }`}>
-                            {entry.student.academic_level}
-                          </span>
+                          }`}>{entry.student.academic_level}</span>
                         </div>
                       )}
-
                       {entry.student.behavior_level && (
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Conducta</p>
                           <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                             BEHAVIOR_COLORS[entry.student.behavior_level] ?? "bg-muted"
-                          }`}>
-                            {entry.student.behavior_level}
-                          </span>
+                          }`}>{entry.student.behavior_level}</span>
                         </div>
                       )}
                     </div>
 
-                    {/* Sociogram data */}
                     {entry.sociogram && (
                       <div className="mt-4 pt-3 border-t">
                         <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
@@ -318,11 +501,6 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
                               <AlertTriangle className="w-3 h-3 mr-1" />Aislado
                             </Badge>
                           )}
-                          {entry.sociogram.received_count > 0 && entry.sociogram.reciprocal_count === 0 && (
-                            <Badge className="text-xs ml-2 bg-amber-100 text-amber-700 border-0">
-                              Sin recíproca
-                            </Badge>
-                          )}
                           {entry.sociogram.received_count >= 4 && (
                             <Badge className="text-xs ml-2 bg-blue-100 text-blue-700 border-0">
                               <CheckCircle2 className="w-3 h-3 mr-1" />Líder social
@@ -332,7 +510,6 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
                       </div>
                     )}
 
-                    {/* Observations */}
                     {entry.student.observations && (
                       <div className="mt-3 pt-3 border-t">
                         <p className="text-xs text-muted-foreground mb-1">Observaciones</p>

@@ -33,6 +33,7 @@ const navItems = [
 
 const adminNavItems = [
   { href: "/alumnado", label: "Alumnado", icon: GraduationCap, roles: ["admin", "superadmin"] as UserRole[] },
+  { href: "/mis-grupos", label: "Mis Grupos", icon: Users, roles: ["tutor", "orientador"] as UserRole[] },
   { href: "/users", label: "Usuarios", icon: Users, roles: ["admin", "superadmin"] as UserRole[] },
   { href: "/audit", label: "Auditoría", icon: ClipboardList, roles: ["admin", "superadmin"] as UserRole[] },
   { href: "/settings", label: "Configuración", icon: Settings, roles: ["admin", "superadmin"] as UserRole[] },
