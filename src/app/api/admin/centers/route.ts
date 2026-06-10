@@ -8,6 +8,8 @@ const CreateCenterSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
+  admin_name: z.string().min(1, "El nombre del administrador es obligatorio"),
+  admin_email: z.string().email("Email del administrador no válido"),
 })
 
 export async function GET() {
@@ -25,7 +27,6 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Count users and processes per center
   const centerIds = (centers ?? []).map(c => c.id)
   const [{ data: userCounts }, { data: processCounts }] = await Promise.all([
     supabase
@@ -67,17 +68,53 @@ export async function POST(request: Request) {
   const body = await request.json()
   const parsed = CreateCenterSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
   }
 
+  const { name, address, city, country, admin_name, admin_email } = parsed.data
   const supabase = createServiceClient()
-  const { data, error } = await supabase
+
+  // 1. Create center
+  const { data: center, error: centerError } = await supabase
     .from("centers")
-    .insert(parsed.data)
+    .insert({ name, address, city, country })
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (centerError) return NextResponse.json({ error: centerError.message }, { status: 500 })
 
-  return NextResponse.json(data, { status: 201 })
+  const origin = request.headers.get("origin") ?? "https://classmixer-lovat.vercel.app"
+
+  // 2. Invite admin user
+  const { data: invited, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
+    admin_email,
+    {
+      redirectTo: `${origin}/api/auth/callback?next=/set-password?invite=1`,
+      data: { name: admin_name, center_id: center.id, role: "admin" },
+    }
+  )
+
+  if (inviteError) {
+    // Rollback center if invite fails
+    await supabase.from("centers").delete().eq("id", center.id)
+    return NextResponse.json({ error: `Centro creado pero error al invitar admin: ${inviteError.message}` }, { status: 500 })
+  }
+
+  // 3. Pre-create user profile
+  const { error: profileError } = await supabase
+    .from("users")
+    .upsert({
+      id: invited.user.id,
+      email: admin_email,
+      name: admin_name,
+      role: "admin",
+      center_id: center.id,
+    }, { onConflict: "id" })
+
+  if (profileError) {
+    await supabase.from("centers").delete().eq("id", center.id)
+    return NextResponse.json({ error: profileError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ ...center, admin_email }, { status: 201 })
 }

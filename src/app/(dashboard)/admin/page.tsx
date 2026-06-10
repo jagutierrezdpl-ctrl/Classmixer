@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ArrowLeft, Plus, Building2, Pencil, Check, X } from "lucide-react"
+import { ArrowLeft, Plus, Building2, Pencil, Check, X, CheckCircle2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface CenterRow {
@@ -30,9 +30,10 @@ export default function AdminPage() {
   const [centers, setCenters] = useState<CenterRow[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: "", city: "", address: "" })
+  const [form, setForm] = useState({ name: "", city: "", address: "", admin_name: "", admin_email: "" })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const [successEmail, setSuccessEmail] = useState("")
   const [licenses, setLicenses] = useState<Record<string, string>>({})
   const [editingLicense, setEditingLicense] = useState<string | null>(null)
   const [licensePlan, setLicensePlan] = useState("free")
@@ -74,18 +75,26 @@ export default function AdminPage() {
     e.preventDefault()
     setSaving(true)
     setError("")
+    setSuccessEmail("")
     const res = await fetch("/api/admin/centers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: form.name, city: form.city || undefined, address: form.address || undefined }),
+      body: JSON.stringify({
+        name: form.name,
+        city: form.city || undefined,
+        address: form.address || undefined,
+        admin_name: form.admin_name,
+        admin_email: form.admin_email,
+      }),
     })
+    const data = await res.json()
     if (res.ok) {
-      setForm({ name: "", city: "", address: "" })
+      setSuccessEmail(form.admin_email)
+      setForm({ name: "", city: "", address: "", admin_name: "", admin_email: "" })
       setShowForm(false)
       loadCenters()
     } else {
-      const data = await res.json()
-      setError(data.error ?? "Error al crear el centro")
+      setError(typeof data.error === "string" ? data.error : "Error al crear el centro")
     }
     setSaving(false)
   }
@@ -114,38 +123,76 @@ export default function AdminPage() {
         </Button>
       </div>
 
+      {/* Success banner */}
+      {successEmail && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+          <div className="text-sm text-green-800">
+            Centro creado. Invitación enviada a <strong>{successEmail}</strong>.
+            El administrador recibirá un enlace para activar su cuenta.
+          </div>
+          <button className="ml-auto text-green-600 hover:text-green-800" onClick={() => setSuccessEmail("")}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Create form */}
       {showForm && (
         <Card className="mb-6 border-primary/20">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Crear centro</CardTitle>
+            <CardTitle className="text-base">Crear centro educativo</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCreate} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Input
-                  placeholder="Nombre del centro *"
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  required
-                />
-                <Input
-                  placeholder="Localidad"
-                  value={form.city}
-                  onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                />
-                <Input
-                  placeholder="Dirección"
-                  value={form.address}
-                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                />
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Datos del centro</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Input
+                    placeholder="Nombre del centro *"
+                    value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    required
+                  />
+                  <Input
+                    placeholder="Localidad"
+                    value={form.city}
+                    onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="Dirección"
+                    value={form.address}
+                    onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Administrador del centro</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    placeholder="Nombre completo *"
+                    value={form.admin_name}
+                    onChange={e => setForm(f => ({ ...f, admin_name: e.target.value }))}
+                    required
+                  />
+                  <Input
+                    type="email"
+                    placeholder="Email del administrador *"
+                    value={form.admin_email}
+                    onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
+                    required
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Se enviará un email de invitación para que active su cuenta.
+                </p>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button type="submit" size="sm" disabled={saving}>
-                  {saving ? "Creando..." : "Crear centro"}
+                <Button type="submit" size="sm" disabled={saving || !form.name || !form.admin_name || !form.admin_email}>
+                  {saving ? "Creando..." : "Crear centro e invitar admin"}
                 </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setShowForm(false)}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setShowForm(false); setError("") }}>
                   Cancelar
                 </Button>
               </div>
