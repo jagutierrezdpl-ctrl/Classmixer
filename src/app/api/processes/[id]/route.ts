@@ -20,6 +20,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return NextResponse.json(data)
 }
 
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const profile = await getUserProfile()
+  if (!profile || !["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+
+  const { id } = await params
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from("processes")
+    .delete()
+    .eq("id", id)
+    .eq("center_id", profile.center_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })

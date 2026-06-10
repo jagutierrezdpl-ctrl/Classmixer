@@ -21,41 +21,77 @@ export default async function ProcessesPage() {
   const profile = await getUserProfile()
   const supabase = await createClient()
 
-  const { data: processes } = await supabase
-    .from("processes")
-    .select("*")
-    .eq("center_id", profile!.center_id)
-    .order("created_at", { ascending: false })
+  const isAdmin = ["admin", "superadmin"].includes(profile!.role)
 
-  const active = (processes ?? []).filter(p => !["cerrado", "archivado"].includes(p.status))
-  const archived = (processes ?? []).filter(p => ["cerrado", "archivado"].includes(p.status))
+  let processes: unknown[] = []
+
+  if (isAdmin) {
+    const { data } = await supabase
+      .from("processes")
+      .select("*")
+      .eq("center_id", profile!.center_id)
+      .order("created_at", { ascending: false })
+    processes = data ?? []
+  } else {
+    // Tutors and orientadors only see processes they've been assigned to
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: assignments } = await (supabase as any)
+      .from("process_tutors")
+      .select("process_id")
+      .eq("user_id", profile!.id)
+
+    const ids = (assignments ?? []).map((a: { process_id: string }) => a.process_id)
+
+    if (ids.length > 0) {
+      const { data } = await supabase
+        .from("processes")
+        .select("*")
+        .in("id", ids)
+        .eq("center_id", profile!.center_id)
+        .order("created_at", { ascending: false })
+      processes = data ?? []
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const active = (processes as any[]).filter(p => !["cerrado", "archivado"].includes(p.status))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const archived = (processes as any[]).filter(p => ["cerrado", "archivado"].includes(p.status))
 
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold">Procesos</h1>
-          <p className="text-muted-foreground text-sm mt-1">{(processes ?? []).length} procesos en total</p>
+          <p className="text-muted-foreground text-sm mt-1">{processes.length} procesos en total</p>
         </div>
-        <Button asChild>
-          <Link href="/processes/new">
-            <Plus className="w-4 h-4" />
-            Nuevo proceso
-          </Link>
-        </Button>
-      </div>
-
-      {(processes ?? []).length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-30" />
-          <p className="font-medium mb-1">No hay procesos todavía</p>
-          <p className="text-sm mb-6">Crea tu primer proceso para empezar a mezclar clases</p>
+        {isAdmin && (
           <Button asChild>
             <Link href="/processes/new">
               <Plus className="w-4 h-4" />
-              Crear primer proceso
+              Nuevo proceso
             </Link>
           </Button>
+        )}
+      </div>
+
+      {processes.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium mb-1">
+            {isAdmin ? "No hay procesos todavía" : "No tienes procesos asignados"}
+          </p>
+          <p className="text-sm mb-6">
+            {isAdmin ? "Crea tu primer proceso para empezar a mezclar clases" : "El administrador del centro debe asignarte a un proceso"}
+          </p>
+          {isAdmin && (
+            <Button asChild>
+              <Link href="/processes/new">
+                <Plus className="w-4 h-4" />
+                Crear primer proceso
+              </Link>
+            </Button>
+          )}
         </div>
       ) : (
         <>
