@@ -51,7 +51,8 @@ export default function AlumnadoPage() {
 
   // New group dialog
   const [newGroupOpen, setNewGroupOpen] = useState(false)
-  const [newGroupName, setNewGroupName] = useState("")
+  const [newGroupCourse, setNewGroupCourse] = useState("")
+  const [newGroupLetter, setNewGroupLetter] = useState("A")
   const [newGroupYear, setNewGroupYear] = useState("")
   const [newGroupSaving, setNewGroupSaving] = useState(false)
   const [newGroupError, setNewGroupError] = useState<string | null>(null)
@@ -154,20 +155,22 @@ export default function AlumnadoPage() {
 
   async function handleCreateGroup(e: React.FormEvent) {
     e.preventDefault()
+    const name = newGroupCourse + newGroupLetter
     setNewGroupSaving(true)
     setNewGroupError(null)
     try {
       const res = await fetch("/api/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newGroupName, school_year: newGroupYear }),
+        body: JSON.stringify({ name, school_year: newGroupYear }),
       })
       const data = await res.json()
       if (!res.ok) {
         setNewGroupError(data.error ?? "Error al crear el grupo")
       } else {
         setNewGroupOpen(false)
-        setNewGroupName("")
+        setNewGroupCourse("")
+        setNewGroupLetter("A")
         setNewGroupYear("")
         setNewGroupError(null)
         loadGroups()
@@ -459,23 +462,78 @@ export default function AlumnadoPage() {
       </Tabs>
 
       {/* New group dialog */}
-      <Dialog open={newGroupOpen} onOpenChange={open => { if (!open) { setNewGroupOpen(false); setNewGroupError(null) } }}>
+      <Dialog open={newGroupOpen} onOpenChange={open => { if (!open) { setNewGroupOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupError(null) } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Nuevo grupo</DialogTitle>
-            <DialogDescription>Crea un grupo vacío para luego asignarle alumnos y tutor.</DialogDescription>
+            <DialogDescription>Selecciona el curso y la letra para formar el nombre del grupo.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateGroup} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Nombre del grupo *</label>
-              <Input
-                value={newGroupName}
-                onChange={e => setNewGroupName(e.target.value)}
-                placeholder="Ej: 6A, 6B, 1ºESO-A"
-                required
-                autoFocus
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Curso *</label>
+                <select
+                  value={newGroupCourse}
+                  onChange={e => setNewGroupCourse(e.target.value)}
+                  className={SEL}
+                  required
+                  autoFocus
+                >
+                  <option value="">Selecciona...</option>
+                  <optgroup label="Infantil">
+                    <option value="I3">Infantil 3 años</option>
+                    <option value="I4">Infantil 4 años</option>
+                    <option value="I5">Infantil 5 años</option>
+                  </optgroup>
+                  <optgroup label="Primaria">
+                    <option value="1P">1º Primaria</option>
+                    <option value="2P">2º Primaria</option>
+                    <option value="3P">3º Primaria</option>
+                    <option value="4P">4º Primaria</option>
+                    <option value="5P">5º Primaria</option>
+                    <option value="6P">6º Primaria</option>
+                  </optgroup>
+                  <optgroup label="ESO">
+                    <option value="1E">1º ESO</option>
+                    <option value="2E">2º ESO</option>
+                    <option value="3E">3º ESO</option>
+                    <option value="4E">4º ESO</option>
+                  </optgroup>
+                  <optgroup label="Bachillerato">
+                    <option value="1B">1º Bachillerato</option>
+                    <option value="2B">2º Bachillerato</option>
+                  </optgroup>
+                  <optgroup label="FP">
+                    <option value="1FP">1º FP Básica</option>
+                    <option value="2FP">2º FP Básica</option>
+                    <option value="1GM">1º CFGM</option>
+                    <option value="2GM">2º CFGM</option>
+                    <option value="1GS">1º CFGS</option>
+                    <option value="2GS">2º CFGS</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Letra *</label>
+                <select
+                  value={newGroupLetter}
+                  onChange={e => setNewGroupLetter(e.target.value)}
+                  className={SEL}
+                >
+                  {["A","B","C","D","E"].map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            {newGroupCourse && (
+              <div className="rounded-lg bg-muted px-4 py-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Nombre del grupo</p>
+                <p className="text-2xl font-bold tracking-wide">{newGroupCourse}{newGroupLetter}</p>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Curso escolar</label>
               <select
@@ -489,12 +547,13 @@ export default function AlumnadoPage() {
                 ))}
               </select>
             </div>
+
             {newGroupError && <p className="text-sm text-destructive">{newGroupError}</p>}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setNewGroupOpen(false); setNewGroupError(null) }}>
+              <Button type="button" variant="outline" onClick={() => { setNewGroupOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupError(null) }}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={newGroupSaving || !newGroupName.trim()}>
+              <Button type="submit" disabled={newGroupSaving || !newGroupCourse}>
                 {newGroupSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Crear grupo
               </Button>
