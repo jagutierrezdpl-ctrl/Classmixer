@@ -159,25 +159,44 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     )
   }
 
+  const totalRequired = questions.filter(q => q.min > 0).reduce((s, q) => s + q.min, 0)
+  const totalSelected = questions.filter(q => q.min > 0).reduce((s, q) => s + Math.min(selections[q.type]?.length ?? 0, q.min), 0)
+  const progressPct = totalRequired > 0 ? Math.round((totalSelected / totalRequired) * 100) : 100
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b bg-card">
-        <div className="max-w-2xl mx-auto px-4 py-5 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-            <GraduationCap className="w-5 h-5 text-white" />
+      {/* Sticky header */}
+      <div className="sticky top-0 z-10 border-b bg-card/95 backdrop-blur-sm">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
+            <GraduationCap className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <p className="font-semibold text-sm">{processName}</p>
-            <p className="text-xs text-muted-foreground">Hola, {studentName}</p>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate">{processName}</p>
+            <p className="text-xs text-muted-foreground">Hola, {studentName.split(" ")[0]}</p>
           </div>
+          {totalRequired > 0 && (
+            <div className="shrink-0 text-right">
+              <p className="text-xs font-medium text-primary">{progressPct}%</p>
+              <p className="text-xs text-muted-foreground">completado</p>
+            </div>
+          )}
         </div>
+        {totalRequired > 0 && (
+          <div className="h-1 bg-muted">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        )}
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
         <div>
-          <h1 className="text-xl font-bold">Cuestionario sociométrico</h1>
+          <h1 className="text-lg font-bold">Cuestionario sociométrico</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Tus respuestas son confidenciales. El orden en que eliges a tus compañeros también se tiene en cuenta: el primero que selecciones será el más importante.
+            Tus respuestas son confidenciales. El <strong>primer compañero que elijas</strong> será tu preferencia principal.
           </p>
         </div>
 
@@ -214,16 +233,16 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
                     {selected.map((sid, idx) => {
                       const s = availableStudents.find(st => st.id === sid)
                       return (
-                        <div key={sid} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm">
+                        <div key={sid} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2.5 shadow-sm">
                           <span className="text-xs font-bold text-primary w-6 shrink-0">{ORDER_LABELS[idx]}</span>
                           <span className="text-sm flex-1 font-medium">{s?.first_name} {s?.last_name}</span>
-                          <Badge variant="outline" className="text-xs shrink-0">{s?.current_class}</Badge>
+                          <Badge variant="outline" className="text-xs shrink-0 hidden sm:inline-flex">{s?.current_class}</Badge>
                           <button
                             onClick={() => removeStudent(q.type, sid)}
-                            className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                            className="text-muted-foreground hover:text-destructive transition-colors p-2 -mr-1 touch-manipulation"
                             aria-label={`Eliminar ${s?.first_name}`}
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       )
@@ -237,29 +256,31 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         placeholder={`Buscar y añadir ${selected.length === 0 ? "(1ª elección)" : `(${ORDER_LABELS[selected.length]} elección)`}...`}
-                        className="pl-9"
+                        className="pl-9 h-11 text-base"
                         value={search}
                         onChange={e => setSearches(prev => ({ ...prev, [q.type]: e.target.value }))}
+                        autoComplete="off"
+                        autoCorrect="off"
                       />
                     </div>
 
-                    <div className="max-h-52 overflow-y-auto rounded-md border divide-y">
+                    <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
                       {filtered.map(s => (
                         <button
                           key={s.id}
                           onClick={() => { addStudent(q.type, s.id, q.max); setSearches(prev => ({ ...prev, [q.type]: "" })) }}
-                          className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-left hover:bg-muted/50 transition-colors"
+                          className="w-full flex items-center justify-between px-3 py-3 text-sm text-left hover:bg-muted/50 active:bg-muted transition-colors touch-manipulation"
                         >
-                          <span>{s.first_name} {s.last_name}</span>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">{s.current_class}</Badge>
-                            <span className="text-xs text-primary font-medium">{ORDER_LABELS[selected.length]}</span>
+                          <span className="font-medium">{s.first_name} {s.last_name}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant="outline" className="text-xs hidden sm:inline-flex">{s.current_class}</Badge>
+                            <span className="text-xs text-primary font-semibold">{ORDER_LABELS[selected.length]}</span>
                           </div>
                         </button>
                       ))}
                       {filtered.length === 0 && (
-                        <p className="text-center py-4 text-sm text-muted-foreground">
-                          {search ? "No se encontraron resultados" : "Ya has seleccionado todos los disponibles"}
+                        <p className="text-center py-5 text-sm text-muted-foreground">
+                          {search ? "Sin resultados" : "Ya has seleccionado todos los disponibles"}
                         </p>
                       )}
                     </div>
@@ -267,21 +288,33 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
                 )}
 
                 {selected.length >= q.max && (
-                  <p className="text-xs text-center text-muted-foreground py-2">
-                    Has llegado al máximo de {q.max} elecciones. Elimina alguna para cambiar.
-                  </p>
+                  <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-emerald-600 font-medium">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Máximo alcanzado ({q.max}). Toca la X para cambiar alguna elección.
+                  </div>
                 )}
               </CardContent>
             </Card>
           )
         })}
 
-        <Button size="lg" className="w-full" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : "Enviar respuestas"}
-        </Button>
+        <div className="sticky bottom-4">
+          <Button
+            size="lg"
+            className="w-full h-12 text-base shadow-lg"
+            onClick={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+            ) : (
+              "Enviar respuestas"
+            )}
+          </Button>
+        </div>
 
         <p className="text-xs text-center text-muted-foreground pb-8">
-          Tus respuestas son confidenciales y solo son visibles para el equipo educativo.
+          Tus respuestas son confidenciales y solo visibles para el equipo educativo.
         </p>
       </div>
     </div>

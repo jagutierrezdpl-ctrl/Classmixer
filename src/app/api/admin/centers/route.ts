@@ -28,19 +28,21 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const centerIds = (centers ?? []).map(c => c.id)
-  const [{ data: userCounts }, { data: processCounts }] = await Promise.all([
-    supabase
-      .from("users")
-      .select("center_id")
-      .in("center_id", centerIds.length > 0 ? centerIds : ["__none__"]),
-    supabase
-      .from("processes")
-      .select("center_id")
-      .in("center_id", centerIds.length > 0 ? centerIds : ["__none__"]),
+  const safeIds = centerIds.length > 0 ? centerIds : ["__none__"]
+
+  const [{ data: userCounts }, { data: processCounts }, { data: lastActivity }] = await Promise.all([
+    supabase.from("users").select("center_id").in("center_id", safeIds),
+    supabase.from("processes").select("center_id").in("center_id", safeIds),
+    supabase.from("audit_logs")
+      .select("center_id, created_at")
+      .in("center_id", safeIds)
+      .order("created_at", { ascending: false }),
   ])
 
   const userMap: Record<string, number> = {}
   const processMap: Record<string, number> = {}
+  const activityMap: Record<string, string> = {}
+
   for (const u of (userCounts ?? [])) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     userMap[(u as any).center_id] = (userMap[(u as any).center_id] ?? 0) + 1
@@ -49,11 +51,18 @@ export async function GET() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     processMap[(p as any).center_id] = (processMap[(p as any).center_id] ?? 0) + 1
   }
+  for (const a of (lastActivity ?? [])) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cid = (a as any).center_id
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!activityMap[cid]) activityMap[cid] = (a as any).created_at
+  }
 
   const enriched = (centers ?? []).map(c => ({
     ...c,
     user_count: userMap[c.id] ?? 0,
     process_count: processMap[c.id] ?? 0,
+    last_activity: activityMap[c.id] ?? null,
   }))
 
   return NextResponse.json(enriched)

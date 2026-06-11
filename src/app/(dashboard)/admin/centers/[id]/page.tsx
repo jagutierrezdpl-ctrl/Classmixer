@@ -12,8 +12,10 @@ import {
   ArrowLeft, Building2, Users, FolderOpen, GraduationCap,
   Clock, Loader2, Trash2, Plus, AlertTriangle,
   CheckCircle2, Info, Megaphone, Shield, Pencil, Check, X,
+  Mail, KeyRound,
 } from "lucide-react"
 import Link from "next/link"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 
 interface Center {
   id: string
@@ -155,6 +157,9 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
   const [newRole, setNewRole] = useState("")
   const [savingRole, setSavingRole] = useState(false)
 
+  // User actions
+  const [userActionLoading, setUserActionLoading] = useState<string | null>(null)
+
   // Notes
   const [noteContent, setNoteContent] = useState("")
   const [noteType, setNoteType] = useState("nota")
@@ -216,6 +221,20 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
       body: JSON.stringify({ user_id: userId }),
     })
     await loadDetail()
+  }
+
+  async function handleUserAction(userId: string, action: "resend_invite" | "reset_password") {
+    setUserActionLoading(`${userId}-${action}`)
+    const res = await fetch(`/api/admin/centers/${id}/users`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, action }),
+    })
+    setUserActionLoading(null)
+    if (res.ok) {
+      const msg = action === "resend_invite" ? "Invitación reenviada" : "Email de recuperación enviado"
+      alert(msg)
+    }
   }
 
   async function handleAddNote(e: React.FormEvent) {
@@ -486,6 +505,28 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
                         )}
                         <span className="text-xs text-muted-foreground">{timeAgo(u.created_at)}</span>
                         <button
+                          onClick={() => handleUserAction(u.id, "resend_invite")}
+                          disabled={userActionLoading === `${u.id}-resend_invite`}
+                          className="text-muted-foreground hover:text-blue-600 transition-colors"
+                          title="Reenviar invitación"
+                        >
+                          {userActionLoading === `${u.id}-resend_invite`
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Mail className="w-3.5 h-3.5" />
+                          }
+                        </button>
+                        <button
+                          onClick={() => handleUserAction(u.id, "reset_password")}
+                          disabled={userActionLoading === `${u.id}-reset_password`}
+                          className="text-muted-foreground hover:text-amber-600 transition-colors"
+                          title="Resetear contraseña"
+                        >
+                          {userActionLoading === `${u.id}-reset_password`
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <KeyRound className="w-3.5 h-3.5" />
+                          }
+                        </button>
+                        <button
                           onClick={() => handleDeleteUser(u.id, u.name ?? u.email)}
                           className="text-destructive/50 hover:text-destructive transition-colors"
                           title="Eliminar usuario"
@@ -503,6 +544,36 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
 
         {/* ACTIVITY */}
         <TabsContent value="activity">
+          {recent_activity.length > 0 && (() => {
+            // Group logs by day for chart
+            const dayMap: Record<string, number> = {}
+            for (const log of recent_activity) {
+              const day = new Date(log.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })
+              dayMap[day] = (dayMap[day] ?? 0) + 1
+            }
+            const chartData = Object.entries(dayMap).map(([day, count]) => ({ day, count })).reverse()
+            return (
+              <Card className="mb-4">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Actividad reciente</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={140}>
+                    <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                        formatter={(v) => [v, "Acciones"]}
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )
+          })()}
           <Card>
             <CardContent className="p-0">
               {recent_activity.length === 0 ? (

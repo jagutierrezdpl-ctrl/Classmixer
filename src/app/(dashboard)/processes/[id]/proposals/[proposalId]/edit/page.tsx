@@ -108,6 +108,7 @@ export default function EditProposalPage({
   const [assignments, setAssignments] = useState<LocalAssignment[]>([])
   const [friendships, setFriendships] = useState<Response[]>([])
   const [rules, setRules] = useState<Rule[]>([])
+  const [originalAssignments, setOriginalAssignments] = useState<LocalAssignment[]>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const [lastAction, setLastAction] = useState<string | null>(null)
@@ -142,12 +143,14 @@ export default function EditProposalPage({
         setProposalName(prop.name ?? "Propuesta")
         setTargetClasses((proc.target_groups as string[]) ?? [])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setAssignments((prop.proposal_assignments ?? []).map((a: any) => ({
+        const loadedAssignments = (prop.proposal_assignments ?? []).map((a: any) => ({
           student_id: a.student_id,
           target_class: a.target_class,
           locked: a.locked ?? false,
           student: a.students,
-        })))
+        }))
+        setAssignments(loadedAssignments)
+        setOriginalAssignments(loadedAssignments)
         setFriendships(resp.filter((r: Response) => r.relation_type === "friendship"))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setRules(rulesData.map((r: any) => ({
@@ -162,6 +165,35 @@ export default function EditProposalPage({
   }, [proposalId, processId])
 
   const violations = useMemo(() => findViolations(assignments, rules), [assignments, rules])
+
+  // Diff: classes where something changed vs original
+  const classDiff = useMemo(() => {
+    if (!dirty || originalAssignments.length === 0) return null
+    const result: Array<{
+      cls: string
+      before: ClassStats
+      after: ClassStats
+      movedIn: Student[]
+      movedOut: Student[]
+    }> = []
+
+    for (const cls of targetClasses) {
+      const origIds = new Set(originalAssignments.filter(a => a.target_class === cls).map(a => a.student_id))
+      const currIds = new Set(assignments.filter(a => a.target_class === cls).map(a => a.student_id))
+      const movedIn = assignments.filter(a => currIds.has(a.student_id) && !origIds.has(a.student_id) && a.student).map(a => a.student!)
+      const movedOut = originalAssignments.filter(a => origIds.has(a.student_id) && !currIds.has(a.student_id) && a.student).map(a => a.student!)
+      if (movedIn.length > 0 || movedOut.length > 0) {
+        result.push({
+          cls,
+          before: computeClassStats(cls, originalAssignments, friendships),
+          after: computeClassStats(cls, assignments, friendships),
+          movedIn,
+          movedOut,
+        })
+      }
+    }
+    return result.length > 0 ? result : null
+  }, [dirty, assignments, originalAssignments, targetClasses, friendships])
 
   function moveStudent(studentId: string, toClass: string) {
     const prev = assignments.find(a => a.student_id === studentId)
@@ -202,12 +234,15 @@ export default function EditProposalPage({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const prop: any = await propRes.json()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setAssignments((prop.proposal_assignments ?? []).map((a: any) => ({
+        const reloaded = (prop.proposal_assignments ?? []).map((a: any) => ({
           student_id: a.student_id,
           target_class: a.target_class,
           locked: a.locked ?? false,
           student: a.students,
-        })))
+        }))
+        setAssignments(reloaded)
+        setOriginalAssignments(reloaded)
+        setDirty(false)
       }
       setLastAction("Propuesta recalculada respetando alumnos bloqueados")
     } catch (e) {
@@ -420,6 +455,48 @@ export default function EditProposalPage({
             <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs">
               <p className="text-muted-foreground mb-0.5">Último cambio</p>
               <p className="font-medium">{lastAction}</p>
+            </div>
+          )}
+
+          {/* Diff vs original */}
+          {classDiff && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-amber-600 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                Cambios vs. estado original
+              </p>
+              {classDiff.map(d => (
+                <div key={d.cls} className="rounded-lg border bg-amber-50/50 border-amber-200 px-3 py-2 text-xs space-y-1">
+                  <p className="font-bold text-amber-800">{d.cls}</p>
+                  {d.movedIn.length > 0 && (
+                    <p className="text-green-700">
+                      + {d.movedIn.map(s => `${s.first_name} ${s.last_name}`).join(", ")}
+                    </p>
+                  )}
+                  {d.movedOut.length > 0 && (
+                    <p className="text-red-600">
+                      − {d.movedOut.map(s => `${s.first_name} ${s.last_name}`).join(", ")}
+                    </p>
+                  )}
+                  <div className="grid grid-cols-2 gap-x-2 pt-1 border-t border-amber-200">
+                    <span className="text-muted-foreground">Nota media</span>
+                    <span className="font-medium text-right">
+                      {d.before.avgGrade.toFixed(1)} → {d.after.avgGrade.toFixed(1)}
+                      {d.after.avgGrade > d.before.avgGrade
+                        ? <span className="text-green-600"> ↑</span>
+                        : d.after.avgGrade < d.before.avgGrade
+                        ? <span className="text-red-500"> ↓</span>
+                        : null}
+                    </span>
+                    <span className="text-muted-foreground">Sin amigo</span>
+                    <span className={`font-medium text-right ${d.after.studentsIsolated > d.before.studentsIsolated ? "text-red-500" : d.after.studentsIsolated < d.before.studentsIsolated ? "text-green-600" : ""}`}>
+                      {d.before.studentsIsolated} → {d.after.studentsIsolated}
+                    </span>
+                    <span className="text-muted-foreground">Género</span>
+                    <span className="font-medium text-right">{d.before.female}F/{d.before.male}M → {d.after.female}F/{d.after.male}M</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

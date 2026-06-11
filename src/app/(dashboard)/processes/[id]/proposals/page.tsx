@@ -321,6 +321,12 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                           <Download className="w-4 h-4" />
                           Excel
                         </Button>
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`/api/proposals/${proposal.id}/export/pdf`} download>
+                            <Download className="w-4 h-4" />
+                            PDF
+                          </a>
+                        </Button>
                         {!isApproved && (
                           <Button size="sm" onClick={() => handleApprove(proposal.id)}>
                             <CheckCircle className="w-4 h-4" />

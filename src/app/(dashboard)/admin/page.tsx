@@ -9,7 +9,7 @@ import Link from "next/link"
 import {
   ArrowLeft, Plus, Building2, Pencil, Check, X, CheckCircle2,
   Users, FolderOpen, GraduationCap, Zap, BookOpen, BarChart3,
-  ChevronRight, Loader2,
+  ChevronRight, Loader2, Download,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -32,6 +32,19 @@ interface CenterRow {
   created_at: string
   user_count: number
   process_count: number
+  last_activity: string | null
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return "ahora"
+  if (mins < 60) return `hace ${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `hace ${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `hace ${days}d`
+  return new Date(dateStr).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })
 }
 
 const PLAN_COLORS: Record<string, string> = {
@@ -167,10 +180,18 @@ export default function AdminPage() {
             <p className="text-sm text-muted-foreground mt-0.5">Panel de gestión global de ClassMixer</p>
           </div>
         </div>
-        <Button onClick={() => setShowForm(s => !s)}>
-          <Plus className="w-4 h-4" />
-          Nuevo centro
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <a href="/api/admin/export" download>
+              <Download className="w-4 h-4" />
+              Exportar Excel
+            </a>
+          </Button>
+          <Button onClick={() => setShowForm(s => !s)}>
+            <Plus className="w-4 h-4" />
+            Nuevo centro
+          </Button>
+        </div>
       </div>
 
       {/* Global stats */}
@@ -298,11 +319,14 @@ export default function AdminPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{c.name}</p>
-                    {(c.city || c.address) && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {[c.address, c.city].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
+                    <p className="text-xs text-muted-foreground truncate">
+                      {[c.address, c.city].filter(Boolean).join(" · ") || "Sin dirección"}
+                      {c.last_activity && (
+                        <span className="ml-2 text-emerald-600">
+                          · Activo {timeAgo(c.last_activity)}
+                        </span>
+                      )}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                     <Badge variant="secondary" className="text-xs">
