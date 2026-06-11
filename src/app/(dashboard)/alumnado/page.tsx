@@ -724,8 +724,9 @@ export default function AlumnadoPage() {
                 <p className="text-sm text-destructive">{importError}</p>
               )}
               <div className="text-xs text-muted-foreground">
-                Columnas: <code>id_alumno, nombre, apellidos, clase_actual, genero, nota_media, email, observaciones</code>
+                Columnas: <code>id_alumno, nombre, apellidos, curso, letra, genero, nota_media, email, observaciones</code>
                 <br /><span className="text-amber-600">El campo <strong>email</strong> es necesario para Google Workspace.</span>
+                <br />Las columnas <strong>curso</strong> y <strong>letra</strong> tienen desplegable en la plantilla (ej. 6P + A → clase 6PA).
                 <br />Conducta y necesidades se asignan manualmente desde el perfil de cada alumno.
               </div>
             </div>

@@ -46,7 +46,12 @@ export async function POST(request: Request) {
     const external_id     = pick(r, "id_alumno", "id", "external_id")
     const first_name      = pick(r, "nombre", "first_name")
     const last_name       = pick(r, "apellidos", "last_name")
-    const current_class   = pick(r, "clase_actual", "clase", "current_class", "grupo")
+    // Support new two-column format (curso + letra) or legacy single column (clase_actual)
+    const curso           = pick(r, "curso", "course")
+    const letra           = pick(r, "letra", "letter")
+    const current_class   = (curso && letra)
+      ? `${curso}${letra}`
+      : pick(r, "clase_actual", "clase", "current_class", "grupo")
     const gender_raw      = pick(r, "genero", "género", "gender")
     const gender          = VALID_GENDERS.includes(gender_raw) ? gender_raw : null
     const birth_year_raw  = pick(r, "año_nacimiento", "anyo_nacimiento", "birth_year", "nacimiento")
