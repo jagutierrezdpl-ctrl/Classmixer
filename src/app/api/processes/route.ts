@@ -107,6 +107,20 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Create target groups in the groups table if they don't exist yet
+  const targetGroupList: string[] = (target_groups ?? "").split(",").map((s: string) => s.trim()).filter(Boolean)
+  if (targetGroupList.length > 0) {
+    const groupRows = targetGroupList.map(name => ({
+      name,
+      center_id: profile.center_id,
+      school_year: rest.school_year ?? null,
+    }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("groups")
+      .upsert(groupRows, { onConflict: "center_id,name", ignoreDuplicates: true })
+  }
+
   // Auto-assign tutor to the process they just created
   if (profile.role === "tutor") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
