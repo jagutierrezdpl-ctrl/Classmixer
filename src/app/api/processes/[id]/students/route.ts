@@ -65,6 +65,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const supabase = createServiceClient()
 
+    // License check: max_students per center
+    const { getCenterLicense } = await import("@/lib/license")
+    const license = await getCenterLicense(supabase, profile.center_id)
+    if (license.max_students !== null) {
+      const { data: processIds } = await supabase
+        .from("processes")
+        .select("id")
+        .eq("center_id", profile.center_id)
+      const ids = (processIds ?? []).map((p: { id: string }) => p.id)
+      let existingCount = 0
+      if (ids.length > 0) {
+        const { count } = await supabase
+          .from("students")
+          .select("id", { count: "exact", head: true })
+          .in("process_id", ids)
+          .eq("active", true)
+        existingCount = count ?? 0
+      }
+      if (existingCount + validRows.length > license.max_students) {
+        return NextResponse.json(
+          {
+            error: `Límite de alumnos alcanzado. Tu plan ${license.plan} permite hasta ${license.max_students} alumnos activos. Tienes ${existingCount} y estás añadiendo ${validRows.length}.`,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     // Auto-match or create student_profiles for each row
     const profileIds: Record<string, string> = {}
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -10,6 +10,7 @@ import {
   AlertTriangle, GraduationCap,
 } from "lucide-react"
 import { getCenterLicense } from "@/lib/license"
+import { OnboardingWizard } from "@/components/layout/OnboardingWizard"
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "success" | "warning" | "outline" }> = {
   borrador: { label: "Borrador", variant: "secondary" },
@@ -132,6 +133,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-8">
+      <OnboardingWizard userRole={profile?.role ?? ""} />
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>

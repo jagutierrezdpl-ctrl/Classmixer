@@ -6,6 +6,121 @@ import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
 import { DEFAULT_WEIGHTS } from "@/lib/algorithm/weights"
 import type { AlgorithmWeights } from "@/types"
 
+type ClassProposal = {
+  assignments: { student_id: string; target_class: string }[]
+  score_total: number
+  score_social: number
+  score_academic: number
+  score_gender: number
+  score_behavior: number
+  metrics: Record<string, Record<string, number>>
+}
+
+async function callPythonSolver(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  students: any[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  responses: any[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rules: any[],
+  targetClasses: string[],
+  numProposals: number,
+  weights: AlgorithmWeights,
+  _constraints: AlgorithmConstraints,
+  minPerClass: number,
+  maxPerClass: number,
+): Promise<ClassProposal[] | null> {
+  const serviceUrl = process.env.PYTHON_SERVICE_URL
+  if (!serviceUrl) return null
+
+  try {
+    const body = {
+      students: students.map(s => ({
+        id: s.id,
+        gender: s.gender ?? null,
+        average_grade: s.average_grade ?? 0,
+        academic_level: s.academic_level ?? null,
+        behavior_level: s.behavior_level ?? null,
+        needs_type: s.needs_type ?? null,
+        current_class: s.current_class ?? null,
+      })),
+      responses: responses.map(r => ({
+        respondent_student_id: r.respondent_student_id,
+        target_student_id: r.target_student_id,
+        relation_type: r.relation_type,
+        weight: r.weight ?? 1.0,
+      })),
+      rules: rules.map(r => ({
+        id: r.id,
+        rule_type: r.rule_type,
+        priority: r.priority ?? "alta",
+        active: r.active !== false,
+        student_ids: (r.students ?? []).map((s: { student_id: string }) => s.student_id),
+        target_class: r.target_class ?? null,
+        max_count: r.max_count ?? null,
+      })),
+      target_classes: targetClasses,
+      min_per_class: minPerClass,
+      max_per_class: maxPerClass,
+      weights: {
+        conflicts: weights.conflicts,
+        avoid_isolation: weights.avoid_isolation,
+        reciprocal_friendships: weights.reciprocal_friendships,
+        chosen_friendships: weights.chosen_friendships,
+        work_relations: weights.work_relations,
+        academic_balance: weights.academic_balance,
+        gender_balance: weights.gender_balance,
+        group_mix: weights.group_mix,
+        behavior: weights.behavior,
+        needs_distribution: weights.special_needs,
+      },
+      num_proposals: numProposals,
+      time_limit_seconds: 30,
+      seed: 42,
+    }
+
+    const res = await fetch(`${serviceUrl}/solve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    })
+
+    if (!res.ok) return null
+
+    const data = await res.json()
+    if (!data.feasible || !data.proposals?.length) return null
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return data.proposals.map((p: any) => ({
+      assignments: p.assignments,
+      score_total: p.score_total,
+      score_social: p.score_social,
+      score_academic: p.score_academic,
+      score_gender: p.score_gender,
+      score_behavior: p.score_behavior,
+      metrics: Object.fromEntries(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Object.entries(p.metrics ?? {}).map(([cls, m]: [string, any]) => [
+          cls,
+          {
+            count: m.count,
+            average_grade: m.average_grade,
+            female: m.female,
+            male: m.male,
+            students_with_friend: m.students_with_friend,
+            reciprocal_preserved: m.reciprocal_preserved,
+            with_needs: m.with_needs,
+            with_behavior_issues: m.with_behavior_issues,
+          },
+        ])
+      ),
+    }))
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
@@ -63,18 +178,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     )
   }
 
-  const proposals = generateProposals(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    students as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (responses ?? []) as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rulesWithStudents as any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const minPerClass = (process as any).min_class_size ?? 20
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const maxPerClass = (process as any).max_class_size ?? 35
+
+  // Try Python OR-Tools solver first; fall back to heuristic
+  let proposals: ClassProposal[] | null = await callPythonSolver(
+    students,
+    responses ?? [],
+    rulesWithStudents,
     targetClasses,
     numProposals,
     weights,
-    constraints
+    constraints,
+    minPerClass,
+    maxPerClass,
   )
+
+  const usedSolver = proposals !== null ? "ortools" : "heuristic"
+
+  if (!proposals) {
+    proposals = generateProposals(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      students as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (responses ?? []) as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rulesWithStudents as any,
+      targetClasses,
+      numProposals,
+      weights,
+      constraints
+    ) as ClassProposal[]
+  }
 
   if (proposals.length === 0) {
     return NextResponse.json({ error: "No se pudieron generar propuestas" }, { status: 422 })
@@ -143,7 +280,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   await logAudit(profile.id, profile.center_id, "generate_proposals", "proposal", {
     processId: id,
-    metadata: { count: savedIds.length, profile: "custom", numRequested: numProposals },
+    metadata: { count: savedIds.length, profile: "custom", numRequested: numProposals, solver: usedSolver },
   })
 
   return NextResponse.json({ generated: savedIds.length, ids: savedIds })

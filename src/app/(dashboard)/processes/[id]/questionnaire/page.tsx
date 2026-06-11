@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft, Loader2, Link2, Copy,
-  CheckCircle2, Clock, Users, QrCode, X, Download, Filter,
+  CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -43,6 +43,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [, setLoadingTokens] = useState(false)
   const [qrToken, setQrToken] = useState<string | null>(null)
   const [showOnlyPending, setShowOnlyPending] = useState(false)
+  const [sendingReminder, setSendingReminder] = useState(false)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { isDirty } } =
     useForm<QuestionnaireSettingsInput>({
@@ -144,6 +145,24 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
     a.download = "pendientes_cuestionario.csv"
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function sendReminder() {
+    setSendingReminder(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/questionnaire/remind`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      if (data.sent) {
+        toast.success(`Recordatorio enviado (${data.pending} alumnos pendientes)`)
+      } else {
+        toast.info(data.reason ?? "Email no configurado — revisa RESEND_API_KEY en entorno")
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al enviar recordatorio")
+    } finally {
+      setSendingReminder(false)
+    }
   }
 
   return (
@@ -356,6 +375,15 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                   >
                     <Download className="w-3 h-3" />
                     Exportar CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={sendReminder}
+                    disabled={sendingReminder}
+                    className="text-xs px-2 py-0.5 rounded-full border text-amber-700 border-amber-400 hover:bg-amber-100 transition-colors flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {sendingReminder ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                    Enviar recordatorio
                   </button>
                 </div>
               )}

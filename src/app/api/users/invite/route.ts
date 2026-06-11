@@ -22,6 +22,22 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
+  // License check: max_users
+  const { getCenterLicense } = await import("@/lib/license")
+  const license = await getCenterLicense(supabase, profile.center_id)
+  if (license.max_users !== null) {
+    const { count } = await supabase
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("center_id", profile.center_id)
+    if ((count ?? 0) >= license.max_users) {
+      return NextResponse.json(
+        { error: `Límite de usuarios alcanzado (${license.max_users}) en tu plan ${license.plan}. Actualiza tu licencia para añadir más usuarios.` },
+        { status: 403 }
+      )
+    }
+  }
+
   // Check if user already exists in this center
   const { data: existing } = await supabase
     .from("users")
