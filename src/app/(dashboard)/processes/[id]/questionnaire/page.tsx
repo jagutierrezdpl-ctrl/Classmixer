@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft, Loader2, Link2, Copy,
-  CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail,
+  CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail, RotateCcw,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -44,6 +44,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [qrToken, setQrToken] = useState<string | null>(null)
   const [showOnlyPending, setShowOnlyPending] = useState(false)
   const [sendingReminder, setSendingReminder] = useState(false)
+  const [resettingId, setResettingId] = useState<string | null>(null)
+  const [resettingAll, setResettingAll] = useState(false)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { isDirty } } =
     useForm<QuestionnaireSettingsInput>({
@@ -145,6 +147,47 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
     a.download = "pendientes_cuestionario.csv"
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function resetStudent(studentId: string, name: string) {
+    if (!confirm(`¿Borrar las respuestas de ${name}? Podrá volver a responder el cuestionario.`)) return
+    setResettingId(studentId)
+    try {
+      const res = await fetch(`/api/processes/${id}/questionnaire/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: studentId }),
+      })
+      if (res.ok) {
+        toast.success(`Respuestas de ${name} eliminadas`)
+        await loadTokens()
+      } else {
+        toast.error("Error al reiniciar")
+      }
+    } finally {
+      setResettingId(null)
+    }
+  }
+
+  async function resetAll() {
+    if (!confirm(`¿Borrar las respuestas de TODOS los alumnos? Esta acción no se puede deshacer.`)) return
+    setResettingAll(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/questionnaire/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`Cuestionario reiniciado (${data.reset} alumnos)`)
+        await loadTokens()
+      } else {
+        toast.error("Error al reiniciar")
+      }
+    } finally {
+      setResettingAll(false)
+    }
   }
 
   async function sendReminder() {
@@ -337,7 +380,21 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                   <Users className="w-4 h-4 text-muted-foreground" />
                   <span>{completed}/{tokens.length} completados</span>
                 </div>
-                <span className="text-sm font-medium">{pct}%</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{pct}%</span>
+                  {completed > 0 && (
+                    <button
+                      type="button"
+                      onClick={resetAll}
+                      disabled={resettingAll}
+                      className="text-xs px-2 py-0.5 rounded-full border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 disabled:opacity-50"
+                      title="Reiniciar todo el cuestionario"
+                    >
+                      {resettingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                      Reiniciar todo
+                    </button>
+                  )}
+                </div>
               </div>
               <Progress value={pct} className="mb-3" />
 
@@ -401,6 +458,20 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                         <span>{t.students?.first_name} {t.students?.last_name}</span>
                       </div>
                       <div className="flex items-center gap-1">
+                        {t.used && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                            onClick={() => resetStudent(t.student_id, `${t.students?.first_name} ${t.students?.last_name}`)}
+                            disabled={resettingId === t.student_id}
+                            title="Reiniciar respuestas"
+                          >
+                            {resettingId === t.student_id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <RotateCcw className="w-3 h-3" />}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
