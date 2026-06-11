@@ -54,17 +54,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     metadata: { count: tokens.length },
   })
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+  const { origin } = new URL(request.url)
   const tokenLinks = (inserted ?? []).map(t => ({
     student_id: t.student_id,
     token: t.token,
-    url: `${baseUrl}/q/${t.token}`,
+    url: `${origin}/q/${t.token}`,
   }))
 
   return NextResponse.json({
     generated: tokens.length,
     tokens: tokenLinks,
-    general_url: `${baseUrl}/q/`,
+    general_url: `${origin}/q/`,
   })
 }
 
@@ -81,11 +81,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .eq("process_id", id)
     .order("used")
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+  const { origin } = new URL(request.url)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const enriched = ((data ?? []) as any[]).map((t: any) => ({
     ...t,
-    url: `${baseUrl}/q/${t.token}`,
+    url: `${origin}/q/${t.token}`,
   }))
 
   return NextResponse.json(enriched)
