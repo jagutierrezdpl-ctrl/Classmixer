@@ -111,6 +111,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         profileIds[p.external_id] = p.id
       }
 
+      // Update email on existing profiles if provided
+      // Update email on existing profiles if provided
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const withEmail = (validRows as any[]).filter(r => r.external_id && r.email && profileIds[r.external_id])
+      for (const r of withEmail) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("student_profiles")
+          .update({ email: r.email as string })
+          .eq("id", profileIds[r.external_id as string])
+      }
+
       // Create profiles for students not found
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const toCreate = validRows.filter((r: any) => r.external_id && !profileIds[r.external_id])
@@ -125,6 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               external_id: r.external_id,
               first_name: r.first_name,
               last_name: r.last_name,
+              email: r.email ?? null,
             }))
           )
           .select("id, external_id")

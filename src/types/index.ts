@@ -347,6 +347,7 @@ export interface ImportRow {
   needs_type?: string
   observations?: string
   tutor?: string
+  email?: string
   status: "valid" | "error" | "warning"
   issues: string[]
 }

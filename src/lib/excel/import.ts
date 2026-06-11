@@ -73,6 +73,7 @@ export function parseExcelImport(buffer: ArrayBuffer): ImportPreview {
     const needsType = normalize("necesidades")
     const observations = normalize("observaciones")
     const tutor = normalize("tutor")
+    const email = normalize("email").toLowerCase() || undefined
 
     if (!externalId) {
       rowErrors.push("Falta id_alumno")
@@ -155,6 +156,7 @@ export function parseExcelImport(buffer: ArrayBuffer): ImportPreview {
       needs_type: VALID_NEEDS.includes(finalNeeds) ? finalNeeds : undefined,
       observations: observations || undefined,
       tutor: tutor || undefined,
+      email: email || undefined,
       status: rowErrors.length > 0 ? "error" : "valid",
       issues: rowErrors,
     })
@@ -202,6 +204,7 @@ export function generateTemplateExcel(): Buffer {
       necesidades: "No",
       observaciones: "",
       tutor: "María Pérez",
+      email: "marta.garcia@tucolegio.es",
     },
     {
       id_alumno: "A002",
@@ -215,6 +218,7 @@ export function generateTemplateExcel(): Buffer {
       necesidades: "No",
       observaciones: "Conviene separar de A005",
       tutor: "Carlos Gómez",
+      email: "lucas.martinez@tucolegio.es",
     },
   ]
 

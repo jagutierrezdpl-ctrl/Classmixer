@@ -19,8 +19,6 @@ export async function GET() {
     return NextResponse.json({ pending_tokens: 0, pending_proposals: 0, total: 0 })
   }
 
-  const processIds = processes.map(p => p.id)
-
   // Count pending tokens (questionnaire open + not completed)
   const openProcessIds = processes
     .filter(p => p.status === "cuestionario_abierto")
