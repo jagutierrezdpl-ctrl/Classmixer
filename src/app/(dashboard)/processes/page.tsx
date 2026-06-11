@@ -67,33 +67,25 @@ export default async function ProcessesPage() {
           <h1 className="text-2xl font-bold">Procesos</h1>
           <p className="text-muted-foreground text-sm mt-1">{processes.length} procesos en total</p>
         </div>
-        {isAdmin && (
-          <Button asChild>
-            <Link href="/processes/new">
-              <Plus className="w-4 h-4" />
-              Nuevo proceso
-            </Link>
-          </Button>
-        )}
+        <Button asChild>
+          <Link href="/processes/new">
+            <Plus className="w-4 h-4" />
+            Nuevo proceso
+          </Link>
+        </Button>
       </div>
 
       {processes.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-30" />
-          <p className="font-medium mb-1">
-            {isAdmin ? "No hay procesos todavía" : "No tienes procesos asignados"}
-          </p>
-          <p className="text-sm mb-6">
-            {isAdmin ? "Crea tu primer proceso para empezar a mezclar clases" : "El administrador del centro debe asignarte a un proceso"}
-          </p>
-          {isAdmin && (
-            <Button asChild>
-              <Link href="/processes/new">
-                <Plus className="w-4 h-4" />
-                Crear primer proceso
-              </Link>
-            </Button>
-          )}
+          <p className="font-medium mb-1">No hay procesos todavía</p>
+          <p className="text-sm mb-6">Crea tu primer proceso para empezar a mezclar clases</p>
+          <Button asChild>
+            <Link href="/processes/new">
+              <Plus className="w-4 h-4" />
+              Crear primer proceso
+            </Link>
+          </Button>
         </div>
       ) : (
         <>

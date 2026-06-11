@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-  if (!["admin", "superadmin"].includes(profile.role)) {
+  if (!["admin", "superadmin", "tutor", "orientador"].includes(profile.role)) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
   }
 
