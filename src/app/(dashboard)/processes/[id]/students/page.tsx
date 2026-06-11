@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   Upload, Download, CheckCircle, XCircle, AlertTriangle,
-  Users, Search, ArrowLeft, Loader2, FileSpreadsheet, RefreshCw,
+  Users, Search, ArrowLeft, Loader2, FileSpreadsheet, RefreshCw, Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import type { ImportPreview, Student } from "@/types"
@@ -35,6 +35,8 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
   const { id } = use(params)
 
   const [view, setView] = useState<"list" | "import" | "preview" | "update-grades" | "update-grades-preview">("list")
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
   const [gradesPreview, setGradesPreview] = useState<{
     total: number; matched: number; unmatched: number; unmatched_list: string[];
     preview: { name: string; grade: number; level: string }[];
@@ -167,6 +169,44 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
       toast.error(e instanceof Error ? e.message : "Error al actualizar")
     } finally {
       setImporting(false)
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return
+    if (!confirm(`¿Eliminar ${selected.size} alumno${selected.size > 1 ? "s" : ""} de este proceso? Esta acción no se puede deshacer.`)) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/students`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_ids: [...selected] }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`${data.deleted} alumnos eliminados`)
+      setStudents(prev => prev.filter(s => !selected.has(s.id)))
+      setSelected(new Set())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al eliminar")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === filteredStudents.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(filteredStudents.map(s => s.id)))
     }
   }
 
@@ -572,12 +612,38 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+            {selected.size > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20">
+                <span className="text-sm font-medium text-destructive">{selected.size} seleccionados</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="h-7"
+                  onClick={handleBulkDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  Eliminar
+                </Button>
+                <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(new Set())}>
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
+                  <th className="px-3 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      className="rounded border-border"
+                      checked={filteredStudents.length > 0 && selected.size === filteredStudents.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Alumno</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Clase</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Género</th>
@@ -589,10 +655,20 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
               </thead>
               <tbody className="divide-y">
                 {filteredStudents.map(s => (
-                  <tr key={s.id} className="hover:bg-muted/30 transition-colors">
+                  <tr key={s.id} className={`hover:bg-muted/30 transition-colors ${selected.has(s.id) ? "bg-primary/5" : ""}`}>
+                    <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="rounded border-border"
+                        checked={selected.has(s.id)}
+                        onChange={() => toggleSelect(s.id)}
+                      />
+                    </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium">{s.first_name} {s.last_name}</p>
-                      <p className="text-xs text-muted-foreground">{s.external_id}</p>
+                      <Link href={`/processes/${id}/students/${s.id}`} className="block hover:underline">
+                        <p className="font-medium">{s.first_name} {s.last_name}</p>
+                        <p className="text-xs text-muted-foreground">{s.external_id}</p>
+                      </Link>
                     </td>
                     <td className="px-4 py-3"><Badge variant="outline">{s.current_class}</Badge></td>
                     <td className="px-4 py-3 text-muted-foreground">{s.gender}</td>

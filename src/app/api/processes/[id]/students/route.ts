@@ -139,3 +139,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ error: "Acción no válida" }, { status: 400 })
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const profile = await getUserProfile()
+  if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
+  }
+
+  const { id } = await params
+  const { student_ids } = await request.json()
+  if (!Array.isArray(student_ids) || student_ids.length === 0) {
+    return NextResponse.json({ error: "Sin IDs" }, { status: 400 })
+  }
+
+  const supabase = createServiceClient()
+  const { error } = await supabase
+    .from("students")
+    .update({ active: false })
+    .in("id", student_ids)
+    .eq("process_id", id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await logAudit(profile.id, profile.center_id, "delete_students", "student", {
+    processId: id,
+    metadata: { count: student_ids.length },
+  })
+
+  return NextResponse.json({ deleted: student_ids.length })
+}
