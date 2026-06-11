@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const body = await request.json()
-  const { first_name, last_name, external_id, current_class, gender, average_grade, academic_level, behavior_level, needs_type, observations } = body
+  const { first_name, last_name, external_id, current_class, gender, average_grade, academic_level, behavior_level, needs_type, email, observations } = body
 
   if (!first_name?.trim() || !last_name?.trim()) {
     return NextResponse.json({ error: "Nombre y apellidos son obligatorios" }, { status: 400 })
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       academic_level: academic_level || null,
       behavior_level: behavior_level || null,
       needs_type: needs_type || null,
+      email: email?.trim() || null,
       observations: observations?.trim() || null,
     })
     .select()

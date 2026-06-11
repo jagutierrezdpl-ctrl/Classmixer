@@ -68,7 +68,7 @@ export default function AlumnadoPage() {
   const [newStudentForm, setNewStudentForm] = useState({
     first_name: "", last_name: "", external_id: "",
     current_class: "", gender: "", average_grade: "",
-    academic_level: "", behavior_level: "", needs_type: "", observations: "",
+    academic_level: "", behavior_level: "", needs_type: "", email: "", observations: "",
   })
 
   // Import dialog
@@ -686,6 +686,15 @@ export default function AlumnadoPage() {
               </select>
             </div>
             <div className="space-y-1.5">
+              <label className="text-sm font-medium">Email institucional <span className="text-amber-600 text-xs">(Google Workspace)</span></label>
+              <Input
+                type="email"
+                value={newStudentForm.email}
+                onChange={e => setNewStudentForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="alumno@colegio.es"
+              />
+            </div>
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">Observaciones</label>
               <Textarea
                 value={newStudentForm.observations}
@@ -753,7 +762,8 @@ export default function AlumnadoPage() {
                 <p className="text-sm text-destructive">{importError}</p>
               )}
               <div className="text-xs text-muted-foreground">
-                Columnas esperadas: <code>id_alumno, nombre, apellidos, clase_actual, genero, nivel_academico, conducta, necesidades, observaciones</code>
+                Columnas esperadas: <code>id_alumno, nombre, apellidos, clase_actual, genero, nivel_academico, conducta, necesidades, nota_media, email, observaciones</code>
+                <br /><span className="text-amber-600">El campo <strong>email</strong> es necesario para el acceso con Google Workspace.</span>
               </div>
             </div>
           )}
