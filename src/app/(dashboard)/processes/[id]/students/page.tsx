@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use } from "react"
+import { useState, use, useEffect } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,22 +44,23 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
   } | null>(null)
   const [loadFromProfilesOpen, setLoadFromProfilesOpen] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
-  const [, setLoadingInit] = useState(true)
+  const [loadingStudents, setLoadingStudents] = useState(true)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [importing, setImporting] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [search, setSearch] = useState("")
 
   // Load students on mount
-  useState(() => {
+  useEffect(() => {
     fetch(`/api/processes/${id}/students`)
       .then(r => r.json())
       .then(data => {
         setStudents(Array.isArray(data) ? data : [])
-        setLoadingInit(false)
+        setLoadingStudents(false)
       })
-      .catch(() => setLoadingInit(false))
-  })
+      .catch(() => setLoadingStudents(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   async function handleFileUpload(file: File) {
     if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
@@ -580,7 +581,11 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
         }}
       />
 
-      {students.length === 0 ? (
+      {loadingStudents ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : students.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
           <p className="font-medium mb-1">No hay alumnos todavía</p>
@@ -694,7 +699,7 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
                 ))}
               </tbody>
             </table>
-            {filteredStudents.length === 0 && (
+            {filteredStudents.length === 0 && search && (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 No hay resultados para &quot;{search}&quot;
               </div>

@@ -10,13 +10,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = createServiceClient()
 
-  const { data: proposalRaw, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: proposalRaw, error } = await (supabase as any)
     .from("proposals")
-    .select("*, proposal_assignments(*, students(*))")
+    .select("*, processes!inner(center_id), proposal_assignments(*, students(*))")
     .eq("id", id)
     .single()
 
   if (error || !proposalRaw) return NextResponse.json({ error: "No encontrada" }, { status: 404 })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((proposalRaw as any).processes?.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 })
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proposal = proposalRaw as any

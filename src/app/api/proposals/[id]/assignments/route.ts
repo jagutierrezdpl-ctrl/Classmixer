@@ -22,14 +22,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const supabase = createServiceClient()
 
-  const { data: proposal, error: propError } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: proposal, error: propError } = await (supabase as any)
     .from("proposals")
-    .select("id, process_id")
+    .select("id, process_id, processes!inner(center_id)")
     .eq("id", id)
-    .single()
+    .single() as { data: { id: string; process_id: string; processes: { center_id: string } } | null; error: unknown }
 
   if (propError || !proposal) {
     return NextResponse.json({ error: "Propuesta no encontrada" }, { status: 404 })
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((proposal as any).processes?.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   }
 
   // Replace all assignments

@@ -45,9 +45,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
   if (!owned) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
+  const allowed: { status?: string; name?: string } = {}
+  if ("status" in body) allowed.status = body.status
+  if ("name" in body) allowed.name = body.name
+  if (Object.keys(allowed).length === 0) {
+    return NextResponse.json({ error: "Sin campos para actualizar" }, { status: 400 })
+  }
+
   const { data, error } = await supabase
     .from("proposals")
-    .update(body)
+    .update(allowed)
     .eq("id", id)
     .select()
     .single()
