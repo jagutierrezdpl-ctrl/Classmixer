@@ -145,5 +145,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     .update({ used: true, completed_at: new Date().toISOString() })
     .eq("token", token)
 
+  // Link to student_profile if not already linked
+  // This ensures token-based responses are tracked historically, same as Google login
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: studentRow } = await (supabase as any)
+    .from("students")
+    .select("id, first_name, last_name, student_profile_id, processes!inner(center_id)")
+    .eq("id", tokenData.student_id)
+    .single()
+
+  if (studentRow && !studentRow.student_profile_id) {
+    const centerId = studentRow.processes?.center_id
+    if (centerId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profile } = await (supabase as any)
+        .from("student_profiles")
+        .select("id")
+        .eq("center_id", centerId)
+        .eq("first_name", studentRow.first_name)
+        .eq("last_name", studentRow.last_name)
+        .maybeSingle()
+
+      if (profile) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("students")
+          .update({ student_profile_id: profile.id })
+          .eq("id", tokenData.student_id)
+      }
+    }
+  }
+
   return NextResponse.json({ success: true })
 }
