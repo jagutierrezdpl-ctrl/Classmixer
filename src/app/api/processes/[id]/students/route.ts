@@ -155,26 +155,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("students").insert(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      validRows.map((r: any) => ({
-        process_id: id,
-        external_id: r.external_id,
-        first_name: r.first_name,
-        last_name: r.last_name,
-        email: r.email ?? null,
-        current_class: r.current_class,
-        gender: r.gender,
-        average_grade: r.average_grade,
-        academic_level: r.academic_level ?? null,
-        behavior_level: r.behavior_level ?? null,
-        needs_type: r.needs_type ?? null,
-        observations: r.observations ?? null,
-        tutor: r.tutor ?? null,
-        student_profile_id: (r.external_id && profileIds[r.external_id]) ? profileIds[r.external_id] : null,
-      }))
-    )
+    const studentRows = validRows.map((r: any) => ({
+      process_id: id,
+      external_id: r.external_id,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email ?? null,
+      current_class: r.current_class,
+      gender: r.gender,
+      average_grade: r.average_grade,
+      academic_level: r.academic_level ?? null,
+      behavior_level: r.behavior_level ?? null,
+      needs_type: r.needs_type ?? null,
+      observations: r.observations ?? null,
+      tutor: r.tutor ?? null,
+      student_profile_id: (r.external_id && profileIds[r.external_id]) ? profileIds[r.external_id] : null,
+    }))
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let { error } = await (supabase as any).from("students").insert(studentRows)
+    if (error?.message?.includes("email")) {
+      // Migration 018 not yet applied — retry without email
+      const withoutEmail = studentRows.map(({ email: _e, ...rest }) => rest)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const retry = await (supabase as any).from("students").insert(withoutEmail)
+      error = retry.error
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const profilesCreated = Object.keys(profileIds).length

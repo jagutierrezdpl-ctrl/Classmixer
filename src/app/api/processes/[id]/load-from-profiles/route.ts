@@ -8,10 +8,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { id: processId } = await params
   const body = await request.json()
-  const { groups } = body as { groups: string[] }  // array of current_class values
+  const { groups, profile_ids } = body as { groups?: string[]; profile_ids?: string[] }
 
-  if (!groups || groups.length === 0) {
-    return NextResponse.json({ error: "Debes seleccionar al menos un grupo" }, { status: 400 })
+  if ((!groups || groups.length === 0) && (!profile_ids || profile_ids.length === 0)) {
+    return NextResponse.json({ error: "Debes seleccionar al menos un grupo o alumno" }, { status: 400 })
   }
 
   const supabase = createServiceClient()
@@ -29,17 +29,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "No se pueden añadir alumnos a un proceso cerrado" }, { status: 400 })
   }
 
-  // Fetch student profiles for selected groups
+  // Fetch student profiles — by group or by individual IDs
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profiles, error: profilesError } = await (supabase as any)
+  let profilesQuery = (supabase as any)
     .from("student_profiles")
     .select("*")
     .eq("center_id", profile.center_id)
-    .in("current_class", groups)
+
+  if (profile_ids && profile_ids.length > 0) {
+    profilesQuery = profilesQuery.in("id", profile_ids)
+  } else {
+    profilesQuery = profilesQuery.in("current_class", groups!)
+  }
+
+  const { data: profiles, error: profilesError } = await profilesQuery
 
   if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 })
   if (!profiles || profiles.length === 0) {
-    return NextResponse.json({ error: "No se encontraron alumnos en los grupos seleccionados" }, { status: 400 })
+    return NextResponse.json({ error: "No se encontraron alumnos" }, { status: 400 })
   }
 
   // Get existing students in this process (to avoid duplicates via student_profile_id)
@@ -95,12 +102,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     })
   }
 
-  // Insert in batches
+  // Insert in batches — retry without email if column doesn't exist yet (migration 018)
   let added = 0
   for (let i = 0; i < newStudents.length; i += 100) {
     const batch = newStudents.slice(i, i + 100)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("students").insert(batch)
+    let { error } = await (supabase as any).from("students").insert(batch)
+    if (error?.message?.includes("email")) {
+      // Migration 018 not yet applied — retry without email field
+      const batchWithoutEmail = batch.map(({ email: _e, ...rest }: { email?: string | null; [key: string]: unknown }) => rest)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const retry = await (supabase as any).from("students").insert(batchWithoutEmail)
+      error = retry.error
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     added += batch.length
   }
