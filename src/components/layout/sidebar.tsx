@@ -22,9 +22,15 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { UserRole } from "@/types"
 import { DemoButton } from "@/components/layout/demo-button"
+
+interface Notifications {
+  pending_tokens: number
+  pending_proposals: number
+  total: number
+}
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -63,12 +69,14 @@ function NavLink({
   icon: Icon,
   active,
   onClick,
+  badge,
 }: {
   href: string
   label: string
   icon: React.ElementType
   active: boolean
   onClick?: () => void
+  badge?: number
 }) {
   return (
     <Link
@@ -82,7 +90,12 @@ function NavLink({
       )}
     >
       <Icon className="w-4 h-4 shrink-0" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge != null && badge > 0 && (
+        <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </Link>
   )
 }
@@ -91,6 +104,21 @@ export function Sidebar({ processId, userName, centerName, userRole }: SidebarPr
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [notifications, setNotifications] = useState<Notifications | null>(null)
+
+  useEffect(() => {
+    async function fetchNotifications() {
+      try {
+        const res = await fetch("/api/notifications")
+        if (res.ok) setNotifications(await res.json())
+      } catch {
+        // non-critical
+      }
+    }
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   async function handleLogout() {
     const supabase = createClient()
@@ -130,6 +158,7 @@ export function Sidebar({ processId, userName, centerName, userRole }: SidebarPr
               icon={Icon}
               active={pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/"))}
               onClick={onNavigate}
+              badge={href === "/processes" && notifications ? notifications.total : undefined}
             />
           ))}
 
