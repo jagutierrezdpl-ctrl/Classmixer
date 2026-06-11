@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
-  ArrowLeft, Heart, Briefcase, Users, UserCheck, UserX,
+  ArrowLeft, Heart, Users, UserCheck, UserX,
   AlertTriangle, BarChart3, Network, BookOpen, FileText,
 } from "lucide-react"
 
@@ -43,7 +43,6 @@ export default async function StudentDetailPage({
     { data: allStudents },
     { data: givenResponses },
     { data: receivedResponses },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     { data: metricsRaw },
     { data: proposals },
   ] = await Promise.all([

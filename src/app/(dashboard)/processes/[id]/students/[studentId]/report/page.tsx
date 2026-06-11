@@ -29,7 +29,6 @@ export default async function StudentReportPage({
     { data: allStudents },
     { data: givenResponses },
     { data: receivedResponses },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     { data: metricsRaw },
     { data: proposals },
   ] = await Promise.all([
