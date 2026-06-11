@@ -44,6 +44,63 @@ export async function requireRole(allowedRoles: UserRole[]) {
   return profile
 }
 
+/** Roles that have unrestricted read/write access to all center data. */
+export function hasFullAccess(role: string): boolean {
+  return ["admin", "superadmin", "orientador"].includes(role)
+}
+
+/** Returns the group names assigned to a tutor at this center. */
+export async function getTutorGroups(centerId: string, userId: string): Promise<string[]> {
+  const supabase = createServiceClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from("group_tutors")
+    .select("group_name")
+    .eq("center_id", centerId)
+    .eq("user_id", userId)
+  return (data ?? []).map((g: { group_name: string }) => g.group_name)
+}
+
+/**
+ * Returns true if a tutor has access to the given process.
+ * A tutor has access when:
+ *   - they are explicitly in process_tutors, OR
+ *   - any of their assigned groups overlaps with the process's source_groups
+ */
+export async function tutorCanAccessProcess(
+  centerId: string,
+  userId: string,
+  processId: string
+): Promise<boolean> {
+  const supabase = createServiceClient()
+
+  // Check explicit assignment first (faster)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: assignment } = await (supabase as any)
+    .from("process_tutors")
+    .select("id")
+    .eq("process_id", processId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (assignment) return true
+
+  // Check group overlap
+  const tutorGroups = await getTutorGroups(centerId, userId)
+  if (tutorGroups.length === 0) return false
+
+  const { data: process } = await supabase
+    .from("processes")
+    .select("source_groups")
+    .eq("id", processId)
+    .eq("center_id", centerId)
+    .single()
+
+  if (!process) return false
+  const sourceGroups = (process.source_groups ?? []) as string[]
+  return tutorGroups.some(g => sourceGroups.includes(g))
+}
+
 export async function logAudit(
   userId: string,
   centerId: string,

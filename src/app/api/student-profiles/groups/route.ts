@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, getTutorGroups } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function GET() {
@@ -8,13 +8,27 @@ export async function GET() {
 
   const supabase = createServiceClient()
 
+  // Tutors only see their assigned groups
+  let allowedGroups: string[] | null = null
+  if (!hasFullAccess(profile.role)) {
+    allowedGroups = await getTutorGroups(profile.center_id, profile.id)
+    if (allowedGroups.length === 0) return NextResponse.json([])
+  }
+
   // Get all student profiles for this center grouped by current_class
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: students, error } = await (supabase as any)
+  let query = (supabase as any)
     .from("student_profiles")
     .select("id, current_class, gender, academic_level, needs_type, school_year")
     .eq("center_id", profile.center_id)
     .not("current_class", "is", null)
+
+  if (allowedGroups !== null) {
+    query = query.in("current_class", allowedGroups)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: students, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

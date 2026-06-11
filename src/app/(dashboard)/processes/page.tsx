@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, getTutorGroups } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -23,11 +23,10 @@ export default async function ProcessesPage() {
   if (!profile || !profile.center_id) redirect("/pending")
   const supabase = createServiceClient()
 
-  const isAdmin = ["admin", "superadmin"].includes(profile.role)
-
   let processes: unknown[] = []
 
-  if (isAdmin) {
+  if (hasFullAccess(profile.role)) {
+    // Admin, superadmin, orientador: all center processes
     const { data } = await supabase
       .from("processes")
       .select("*")
@@ -35,24 +34,25 @@ export default async function ProcessesPage() {
       .order("created_at", { ascending: false })
     processes = data ?? []
   } else {
-    // Tutors and orientadors only see processes they've been assigned to
+    // Tutor: processes explicitly assigned OR whose source_groups overlap their groups
+    const tutorGroups = await getTutorGroups(profile.center_id, profile.id)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: assignments } = await (supabase as any)
       .from("process_tutors")
       .select("process_id")
       .eq("user_id", profile.id)
+    const assignedIds: string[] = (assignments ?? []).map((a: { process_id: string }) => a.process_id)
 
-    const ids = (assignments ?? []).map((a: { process_id: string }) => a.process_id)
+    const { data: allProcesses } = await supabase
+      .from("processes")
+      .select("*")
+      .eq("center_id", profile.center_id)
+      .order("created_at", { ascending: false })
 
-    if (ids.length > 0) {
-      const { data } = await supabase
-        .from("processes")
-        .select("*")
-        .in("id", ids)
-        .eq("center_id", profile.center_id)
-        .order("created_at", { ascending: false })
-      processes = data ?? []
-    }
+    processes = (allProcesses ?? []).filter((p: { id: string; source_groups: string[] }) => {
+      if (assignedIds.includes(p.id)) return true
+      return tutorGroups.some(g => (p.source_groups ?? []).includes(g))
+    })
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

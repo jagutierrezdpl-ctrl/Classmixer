@@ -1,14 +1,23 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
+
+async function checkAccess(profile: { id: string; center_id: string; role: string }, processId: string) {
+  if (hasFullAccess(profile.role)) return true
+  return tutorCanAccessProcess(profile.center_id, profile.id, processId)
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
-  const supabase = createServiceClient()
 
+  if (!(await checkAccess(profile, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
+
+  const supabase = createServiceClient()
   const { data, error } = await supabase
     .from("processes")
     .select("*")
@@ -44,6 +53,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  if (!(await checkAccess(profile, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
+
   const body = await request.json()
   const supabase = createServiceClient()
 
