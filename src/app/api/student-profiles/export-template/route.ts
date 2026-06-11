@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   ])
 
   // Always include headers; add one example row when no students exist
-  const exampleRow = ["A001", "María", "García López", "6A", "F", "7.5", "maria.garcia@colegio.es", ""]
+  const exampleRow = ["A001", "María", "García López", "6PA", "F", "7.5", "maria.garcia@colegio.es", ""]
   const aoa = [HEADERS, ...(dataRows.length > 0 ? dataRows : [exampleRow])]
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
