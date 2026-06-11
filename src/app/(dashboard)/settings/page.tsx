@@ -6,77 +6,66 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { ArrowLeft, Check } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
-import { z } from "zod"
-
-const centerSchema = z.object({
-  name: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
-  address: z.string().optional(),
-  city: z.string().optional(),
-})
+import { ArrowLeft, Check, Loader2 } from "lucide-react"
 
 interface Center {
   id: string
   name: string
-  address?: string
-  city?: string
-  country?: string
+  address?: string | null
+  city?: string | null
+  country?: string | null
 }
 
 export default function SettingsPage() {
   const [center, setCenter] = useState<Center | null>(null)
-  const [form, setForm] = useState({ name: "", address: "", city: "" })
+  const [form, setForm] = useState({ name: "", address: "", city: "", country: "" })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: profile } = await supabase
-        .from("users").select("center_id").eq("id", user.id).single()
-      if (!profile) return
-      const { data: centerData } = await supabase
-        .from("centers").select("*").eq("id", profile.center_id).single()
-      if (centerData) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const c = centerData as any
-        setCenter(c)
-        setForm({
-          name: c.name ?? "",
-          address: c.address ?? "",
-          city: c.city ?? "",
-        })
-      }
-    }
-    load()
+    fetch("/api/settings/center")
+      .then(r => r.json())
+      .then(data => {
+        if (data.id) {
+          setCenter(data)
+          setForm({
+            name: data.name ?? "",
+            address: data.address ?? "",
+            city: data.city ?? "",
+            country: data.country ?? "",
+          })
+        }
+      })
   }, [])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!center) return
-    const parsed = centerSchema.safeParse(form)
-    if (!parsed.success) {
-      const fieldErrors: Record<string, string> = {}
-      for (const [field, msgs] of Object.entries(parsed.error.flatten().fieldErrors)) {
-        fieldErrors[field] = (msgs as string[])[0] ?? ""
-      }
-      setErrors(fieldErrors)
+    if (!form.name.trim() || form.name.trim().length < 2) {
+      setError("El nombre debe tener al menos 2 caracteres")
       return
     }
-    setErrors({})
+    setError(null)
     setSaving(true)
-    const supabase = createClient()
-    await supabase
-      .from("centers")
-      .update({ name: parsed.data.name, address: parsed.data.address || null, city: parsed.data.city || null })
-      .eq("id", center.id)
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    try {
+      const res = await fetch("/api/settings/center", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? "Error al guardar")
+      } else {
+        setCenter(data)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2500)
+      }
+    } catch {
+      setError("Error de red al guardar")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -95,14 +84,13 @@ export default function SettingsPage() {
         <CardContent>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="name">Nombre del centro</Label>
+              <Label htmlFor="name">Nombre del centro *</Label>
               <Input
                 id="name"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="IES / CEIP..."
               />
-              {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="address">Dirección</Label>
@@ -113,18 +101,34 @@ export default function SettingsPage() {
                 placeholder="Calle, número..."
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="city">Localidad</Label>
-              <Input
-                id="city"
-                value={form.city}
-                onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                placeholder="Ciudad"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="city">Localidad</Label>
+                <Input
+                  id="city"
+                  value={form.city}
+                  onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                  placeholder="Ciudad"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="country">País</Label>
+                <Input
+                  id="country"
+                  value={form.country}
+                  onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+                  placeholder="España"
+                />
+              </div>
             </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
             <div className="flex items-center gap-3 pt-2">
-              <Button type="submit" disabled={saving}>
-                {saving ? "Guardando..." : "Guardar cambios"}
+              <Button type="submit" disabled={saving || !center}>
+                {saving
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando...</>
+                  : "Guardar cambios"}
               </Button>
               {saved && (
                 <span className="text-sm text-green-600 flex items-center gap-1">
