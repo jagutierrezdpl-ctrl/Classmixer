@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
+import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -47,6 +48,7 @@ function timeAgo(dateStr: string): string {
 
 export default async function DashboardPage() {
   const profile = await getUserProfile()
+  if (!profile || !profile.center_id) redirect("/pending")
   const supabase = createServiceClient()
 
   const [
@@ -56,13 +58,13 @@ export default async function DashboardPage() {
     supabase
       .from("processes")
       .select("*")
-      .eq("center_id", profile!.center_id)
+      .eq("center_id", profile.center_id)
       .order("created_at", { ascending: false })
       .limit(8),
     supabase
       .from("audit_logs")
       .select("*, users(name)")
-      .eq("center_id", profile!.center_id)
+      .eq("center_id", profile.center_id)
       .order("created_at", { ascending: false })
       .limit(8),
   ])
@@ -87,7 +89,7 @@ export default async function DashboardPage() {
     supabase
       .from("processes")
       .select("id", { count: "exact", head: true })
-      .eq("center_id", profile!.center_id)
+      .eq("center_id", profile.center_id)
       .eq("status", "cuestionario_abierto"),
     supabase
       .from("questionnaire_tokens")
@@ -109,7 +111,7 @@ export default async function DashboardPage() {
     (supabase as any)
       .from("student_profiles")
       .select("id", { count: "exact", head: true })
-      .eq("center_id", profile!.center_id),
+      .eq("center_id", profile.center_id),
     // Questionnaire progress per open process
     supabase
       .from("questionnaire_tokens")
@@ -118,7 +120,7 @@ export default async function DashboardPage() {
   ])
 
   const activeProcesses = (processes ?? []).filter(p => !["cerrado", "archivado"].includes(p.status))
-  const license = await getCenterLicense(supabase, profile!.center_id)
+  const license = await getCenterLicense(supabase, profile.center_id)
 
   // Build questionnaire completion map
   const tokenMap: Record<string, { total: number; completed: number }> = {}

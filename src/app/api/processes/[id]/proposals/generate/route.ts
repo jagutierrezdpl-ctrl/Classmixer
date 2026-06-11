@@ -183,9 +183,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const maxPerClass = (process as any).max_class_size ?? 35
 
+  // Filter out excluded students before sending to any solver
+  const excludedIds = new Set(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (rulesWithStudents as any[])
+      .filter(r => r.rule_type === "exclude_student" && r.active !== false)
+      .flatMap((r: { students: { student_id: string }[] }) => r.students.map(s => s.student_id))
+  )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const assignableStudents = (students as any[]).filter(s => !excludedIds.has(s.id))
+
   // Try Python OR-Tools solver first; fall back to heuristic
   let proposals: ClassProposal[] | null = await callPythonSolver(
-    students,
+    assignableStudents,
     responses ?? [],
     rulesWithStudents,
     targetClasses,
@@ -201,7 +211,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!proposals) {
     proposals = generateProposals(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      students as any,
+      assignableStudents as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (responses ?? []) as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

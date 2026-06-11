@@ -112,6 +112,7 @@ export async function POST(request: Request) {
     }, { onConflict: "id" })
 
   if (profileError) {
+    await supabase.auth.admin.deleteUser(invited.user.id)
     await supabase.from("centers").delete().eq("id", center.id)
     return NextResponse.json({ error: profileError.message }, { status: 500 })
   }

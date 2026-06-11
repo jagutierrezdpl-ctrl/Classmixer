@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
+import { redirect } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,9 +20,10 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
 
 export default async function ProcessesPage() {
   const profile = await getUserProfile()
+  if (!profile || !profile.center_id) redirect("/pending")
   const supabase = createServiceClient()
 
-  const isAdmin = ["admin", "superadmin"].includes(profile!.role)
+  const isAdmin = ["admin", "superadmin"].includes(profile.role)
 
   let processes: unknown[] = []
 
@@ -29,7 +31,7 @@ export default async function ProcessesPage() {
     const { data } = await supabase
       .from("processes")
       .select("*")
-      .eq("center_id", profile!.center_id)
+      .eq("center_id", profile.center_id)
       .order("created_at", { ascending: false })
     processes = data ?? []
   } else {
@@ -38,7 +40,7 @@ export default async function ProcessesPage() {
     const { data: assignments } = await (supabase as any)
       .from("process_tutors")
       .select("process_id")
-      .eq("user_id", profile!.id)
+      .eq("user_id", profile.id)
 
     const ids = (assignments ?? []).map((a: { process_id: string }) => a.process_id)
 
@@ -47,7 +49,7 @@ export default async function ProcessesPage() {
         .from("processes")
         .select("*")
         .in("id", ids)
-        .eq("center_id", profile!.center_id)
+        .eq("center_id", profile.center_id)
         .order("created_at", { ascending: false })
       processes = data ?? []
     }

@@ -797,7 +797,7 @@ export function generateProposals(
       a => !lockedStudents.has(a.student_id) && !mustTogetherLockedClass.has(a.student_id)
     )
 
-    for (let iter = 0; iter < maxIter; iter++) {
+    if (swappable.length >= 2) for (let iter = 0; iter < maxIter; iter++) {
       const s1 = (seed * 999983 + iter * 7919) & 0x7fffffff
       const s2 = (s1 * 1664525 + 1013904223) & 0x7fffffff
       const i = s1 % swappable.length
