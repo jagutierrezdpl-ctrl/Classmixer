@@ -644,47 +644,9 @@ export default function AlumnadoPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Nivel académico</label>
-                <select
-                  value={newStudentForm.academic_level}
-                  onChange={e => setNewStudentForm(f => ({ ...f, academic_level: e.target.value }))}
-                  className={SEL}
-                >
-                  <option value="">—</option>
-                  {["Alto", "Medio-alto", "Medio", "Medio-bajo", "Bajo"].map(l => (
-                    <option key={l} value={l}>{l}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Conducta</label>
-                <select
-                  value={newStudentForm.behavior_level}
-                  onChange={e => setNewStudentForm(f => ({ ...f, behavior_level: e.target.value }))}
-                  className={SEL}
-                >
-                  <option value="">—</option>
-                  {["Positiva", "Normal", "Seguimiento", "Conflictiva"].map(l => (
-                    <option key={l} value={l}>{l}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Necesidades educativas</label>
-              <select
-                value={newStudentForm.needs_type}
-                onChange={e => setNewStudentForm(f => ({ ...f, needs_type: e.target.value }))}
-                className={SEL}
-              >
-                <option value="">—</option>
-                {["No", "Sí", "ACNEAE", "NEE", "Refuerzo", "Altas capacidades", "Observación interna"].map(l => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
-            </div>
+            <p className="text-xs text-muted-foreground bg-muted rounded-md px-3 py-2">
+              Conducta y necesidades educativas se configuran desde el perfil del alumno una vez creado.
+            </p>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Email institucional <span className="text-amber-600 text-xs">(Google Workspace)</span></label>
               <Input
@@ -762,8 +724,9 @@ export default function AlumnadoPage() {
                 <p className="text-sm text-destructive">{importError}</p>
               )}
               <div className="text-xs text-muted-foreground">
-                Columnas esperadas: <code>id_alumno, nombre, apellidos, clase_actual, genero, nivel_academico, conducta, necesidades, nota_media, email, observaciones</code>
-                <br /><span className="text-amber-600">El campo <strong>email</strong> es necesario para el acceso con Google Workspace.</span>
+                Columnas: <code>id_alumno, nombre, apellidos, clase_actual, genero, nota_media, email, observaciones</code>
+                <br /><span className="text-amber-600">El campo <strong>email</strong> es necesario para Google Workspace.</span>
+                <br />Conducta y necesidades se asignan manualmente desde el perfil de cada alumno.
               </div>
             </div>
           )}

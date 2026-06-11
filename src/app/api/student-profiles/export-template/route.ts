@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (supabase as any)
     .from("student_profiles")
-    .select("external_id, first_name, last_name, current_class, gender, academic_level, behavior_level, needs_type, observations")
+    .select("external_id, first_name, last_name, current_class, gender, email, observations")
     .eq("center_id", profile.center_id)
     .order("last_name")
 
@@ -27,8 +27,7 @@ export async function GET(request: Request) {
 
   const HEADERS = [
     "id_alumno", "nombre", "apellidos", "clase_actual",
-    "genero", "nivel_academico", "conducta", "necesidades",
-    "nota_media", "email", "observaciones",
+    "genero", "nota_media", "email", "observaciones",
   ]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,27 +37,23 @@ export async function GET(request: Request) {
     s.last_name,
     s.current_class ?? "",
     s.gender ?? "",
-    s.academic_level ?? "",
-    s.behavior_level ?? "",
-    s.needs_type ?? "",
     "",   // nota_media — to be filled in
     s.email ?? "",
     s.observations ?? "",
   ])
 
   // Always include headers; add one example row when no students exist
-  const exampleRow = ["A001", "María", "García López", "6A", "F", "Medio", "Normal", "No", "7.5", "maria.garcia@colegio.es", ""]
+  const exampleRow = ["A001", "María", "García López", "6A", "F", "7.5", "maria.garcia@colegio.es", ""]
   const aoa = [HEADERS, ...(dataRows.length > 0 ? dataRows : [exampleRow])]
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, "Alumnos")
 
-  // Column widths
+  // Column widths: id_alumno, nombre, apellidos, clase_actual, genero, nota_media, email, observaciones
   ws["!cols"] = [
     { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 12 },
-    { wch: 8 },  { wch: 14 }, { wch: 14 }, { wch: 18 },
-    { wch: 10 }, { wch: 28 }, { wch: 30 },
+    { wch: 8 },  { wch: 10 }, { wch: 30 }, { wch: 35 },
   ]
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" })
