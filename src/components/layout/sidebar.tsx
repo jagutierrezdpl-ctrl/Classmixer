@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   BarChart3,
+  UserCircle,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -169,11 +170,15 @@ export function Sidebar({ processId, userName, centerName, userRole }: SidebarPr
           )}
         </nav>
 
-        <div className="px-3 py-4 border-t border-sidebar-border space-y-2">
+        <div className="px-3 py-4 border-t border-sidebar-border space-y-1">
           <DemoButton />
-          {userName && (
-            <p className="px-3 text-xs text-sidebar-foreground/50 truncate">{userName}</p>
-          )}
+          <NavLink
+            href="/profile"
+            label={userName ?? "Mi perfil"}
+            icon={UserCircle}
+            active={pathname === "/profile"}
+            onClick={onNavigate}
+          />
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"

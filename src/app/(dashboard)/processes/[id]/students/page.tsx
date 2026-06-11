@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   Upload, Download, CheckCircle, XCircle, AlertTriangle,
-  Users, Search, ArrowLeft, Loader2, FileSpreadsheet
+  Users, Search, ArrowLeft, Loader2, FileSpreadsheet, RefreshCw,
 } from "lucide-react"
 import Link from "next/link"
 import type { ImportPreview, Student } from "@/types"
@@ -34,7 +34,12 @@ const LEVEL_COLORS: Record<string, BadgeVariant> = {
 export default function StudentsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
-  const [view, setView] = useState<"list" | "import" | "preview">("list")
+  const [view, setView] = useState<"list" | "import" | "preview" | "update-grades" | "update-grades-preview">("list")
+  const [gradesPreview, setGradesPreview] = useState<{
+    total: number; matched: number; unmatched: number; unmatched_list: string[];
+    preview: { name: string; grade: number; level: string }[];
+    file?: File;
+  } | null>(null)
   const [loadFromProfilesOpen, setLoadFromProfilesOpen] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
   const [, setLoadingInit] = useState(true)
@@ -115,6 +120,54 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
     a.download = "plantilla_alumnos.xlsx"
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function handleGradesFileUpload(file: File) {
+    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+      toast.error("Solo se admiten archivos Excel (.xlsx, .xls)")
+      return
+    }
+    setImporting(true)
+    const formData = new FormData()
+    formData.append("file", file)
+    try {
+      const res = await fetch(`/api/processes/${id}/students/update-grades?action=preview`, {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error ?? "Error al procesar"); return }
+      setGradesPreview({ ...data, file })
+      setView("update-grades-preview")
+    } catch {
+      toast.error("Error al procesar el archivo")
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleConfirmGradesUpdate() {
+    if (!gradesPreview?.file) return
+    setImporting(true)
+    const formData = new FormData()
+    formData.append("file", gradesPreview.file)
+    try {
+      const res = await fetch(`/api/processes/${id}/students/update-grades?action=confirm`, {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`${data.updated} alumnos actualizados`)
+      const updated = await fetch(`/api/processes/${id}/students`).then(r => r.json())
+      setStudents(Array.isArray(updated) ? updated : [])
+      setView("list")
+      setGradesPreview(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al actualizar")
+    } finally {
+      setImporting(false)
+    }
   }
 
   const filteredStudents = students.filter(s => {
@@ -317,6 +370,134 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
     )
   }
 
+  // ── UPDATE GRADES VIEW ───────────────────────────────────────────────────────
+  if (view === "update-grades") {
+    return (
+      <div className="p-8 max-w-2xl">
+        <div className="flex items-center gap-3 mb-8">
+          <Button variant="ghost" size="icon" onClick={() => setView("list")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Actualizar notas</h1>
+            <p className="text-muted-foreground text-sm">
+              Sube un Excel con <strong>id_alumno</strong> (o nombre+apellidos) y <strong>nota_media</strong>
+            </p>
+          </div>
+        </div>
+        <div
+          className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors cursor-pointer ${
+            dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+          }`}
+          onDragOver={e => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={e => {
+            e.preventDefault()
+            setDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) handleGradesFileUpload(file)
+          }}
+          onClick={() => document.getElementById("grades-file-input")?.click()}
+        >
+          {importing ? (
+            <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin text-primary" />
+          ) : (
+            <RefreshCw className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+          )}
+          <p className="font-medium mb-1">{importing ? "Procesando..." : "Arrastra tu Excel aquí"}</p>
+          <p className="text-sm text-muted-foreground">o haz clic para seleccionar</p>
+          <p className="text-xs text-muted-foreground mt-2">Solo columnas: id_alumno / nota_media</p>
+          <input
+            id="grades-file-input"
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={e => e.target.files?.[0] && handleGradesFileUpload(e.target.files[0])}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // ── UPDATE GRADES PREVIEW VIEW ───────────────────────────────────────────────
+  if (view === "update-grades-preview" && gradesPreview) {
+    return (
+      <div className="p-8 max-w-2xl">
+        <div className="flex items-center gap-3 mb-8">
+          <Button variant="ghost" size="icon" onClick={() => { setView("update-grades"); setGradesPreview(null) }}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Confirmar actualización de notas</h1>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <Card><CardContent className="pt-4 pb-4">
+            <p className="text-2xl font-bold">{gradesPreview.total}</p>
+            <p className="text-xs text-muted-foreground">Filas en Excel</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4">
+            <p className="text-2xl font-bold text-green-600">{gradesPreview.matched}</p>
+            <p className="text-xs text-muted-foreground">Se actualizarán</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4">
+            <p className="text-2xl font-bold text-yellow-600">{gradesPreview.unmatched}</p>
+            <p className="text-xs text-muted-foreground">Sin coincidencia</p>
+          </CardContent></Card>
+        </div>
+        {gradesPreview.unmatched_list.length > 0 && (
+          <Card className="mb-4 border-yellow-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-yellow-700">
+                <AlertTriangle className="w-4 h-4" /> Sin coincidencia (primeros {gradesPreview.unmatched_list.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {gradesPreview.unmatched_list.map((name, i) => (
+                <p key={i} className="text-xs text-yellow-700">{name}</p>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+        {gradesPreview.preview.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Vista previa (primeros {gradesPreview.preview.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <table className="w-full text-sm">
+                <thead><tr className="border-b">
+                  <th className="text-left py-1 text-muted-foreground">Alumno</th>
+                  <th className="text-center py-1 text-muted-foreground">Nueva nota</th>
+                  <th className="text-center py-1 text-muted-foreground">Nivel inferido</th>
+                </tr></thead>
+                <tbody>{gradesPreview.preview.map((p, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="py-1">{p.name}</td>
+                    <td className="py-1 text-center font-medium">{p.grade.toFixed(1)}</td>
+                    <td className="py-1 text-center text-muted-foreground">{p.level}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </CardContent>
+          </Card>
+        )}
+        <div className="flex gap-3">
+          {gradesPreview.matched > 0 && (
+            <Button onClick={handleConfirmGradesUpdate} disabled={importing}>
+              {importing ? <><Loader2 className="w-4 h-4 animate-spin" /> Actualizando...</> : (
+                <><CheckCircle className="w-4 h-4" /> Actualizar {gradesPreview.matched} alumnos</>
+              )}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => { setView("update-grades"); setGradesPreview(null) }}>
+            Volver
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   // ── LIST VIEW ────────────────────────────────────────────────────────────────
   return (
     <div className="p-8">
@@ -335,6 +516,12 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
             <Users className="w-4 h-4" />
             Desde Alumnado
           </Button>
+          {students.length > 0 && (
+            <Button variant="outline" onClick={() => setView("update-grades")}>
+              <RefreshCw className="w-4 h-4" />
+              Actualizar notas
+            </Button>
+          )}
           <Button onClick={() => setView("import")}>
             <Upload className="w-4 h-4" />
             Importar Excel

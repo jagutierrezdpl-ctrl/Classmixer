@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare } from "lucide-react"
 import ProcessActions from "./ProcessActions"
 import ProcessTeam from "./ProcessTeam"
+import { ProcessStepper } from "@/components/processes/ProcessStepper"
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "success" | "warning" | "outline" }> = {
   borrador: { label: "Borrador", variant: "secondary" },
@@ -60,11 +61,18 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
     { count: responseCount },
     { count: completedTokens },
     { count: totalTokens },
+    { count: proposalCount },
+    { count: sociogramCount },
+    { count: ruleCount },
   ] = await Promise.all([
     supabase.from("students").select("id", { count: "exact", head: true }).eq("process_id", id).eq("active", true),
     supabase.from("responses").select("id", { count: "exact", head: true }).eq("process_id", id),
     supabase.from("questionnaire_tokens").select("id", { count: "exact", head: true }).eq("process_id", id).eq("used", true),
     supabase.from("questionnaire_tokens").select("id", { count: "exact", head: true }).eq("process_id", id),
+    supabase.from("proposals").select("id", { count: "exact", head: true }).eq("process_id", id),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from("sociogram_metrics").select("id", { count: "exact", head: true }).eq("process_id", id),
+    supabase.from("rules").select("id", { count: "exact", head: true }).eq("process_id", id).eq("active", true),
   ])
 
   const st = STATUS_MAP[process.status] ?? { label: process.status, variant: "outline" as const }
@@ -73,6 +81,22 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isSociograma = (process as any).process_type === "sociograma"
   const SECTIONS = isSociograma ? SECTIONS_SOCIOGRAMA : SECTIONS_MEZCLA
+
+  const approved = ["propuesta_seleccionada", "cerrado", "archivado"].includes(process.status)
+  const stepperSteps = isSociograma ? [
+    { label: "Alumnos", href: "students", done: (studentCount ?? 0) > 0 },
+    { label: "Cuestionario", href: "questionnaire", done: (totalTokens ?? 0) > 0 },
+    { label: "Respuestas", href: "responses", done: (responseCount ?? 0) > 0 },
+    { label: "Sociograma", href: "sociogram", done: (sociogramCount ?? 0) > 0 },
+  ] : [
+    { label: "Alumnos", href: "students", done: (studentCount ?? 0) > 0 },
+    { label: "Cuestionario", href: "questionnaire", done: (totalTokens ?? 0) > 0 },
+    { label: "Respuestas", href: "responses", done: (responseCount ?? 0) > 0 },
+    { label: "Sociograma", href: "sociogram", done: (sociogramCount ?? 0) > 0 },
+    { label: "Reglas", href: "rules", done: (ruleCount ?? 0) > 0, optional: true },
+    { label: "Algoritmo", href: "algorithm", done: (proposalCount ?? 0) > 0 },
+    { label: "Propuestas", href: "proposals", done: approved },
+  ]
 
   return (
     <div className="p-8">
@@ -105,6 +129,9 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
           isAdmin={isAdmin}
         />
       </div>
+
+      {/* Progress stepper */}
+      <ProcessStepper processId={id} steps={stepperSteps} />
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
