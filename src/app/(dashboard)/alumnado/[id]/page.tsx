@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, use } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import {
   ArrowLeft, User, BookOpen, Network, GraduationCap, TrendingUp,
-  AlertTriangle, CheckCircle2, Loader2, Calendar, Pencil, Save, X
+  AlertTriangle, CheckCircle2, Loader2, Calendar, Pencil, Save, X, Trash2
 } from "lucide-react"
 import Link from "next/link"
 
@@ -27,6 +28,7 @@ interface StudentProfile {
   academic_level: string | null
   behavior_level: string | null
   needs_type: string | null
+  average_grade: number | null
   observations: string | null
   school_year: string | null
   created_at: string
@@ -85,13 +87,15 @@ const BEHAVIOR_COLORS: Record<string, string> = {
 
 export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
   const [data, setData] = useState<{ profile: StudentProfile; trajectory: TrajectoryEntry[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [editForm, setEditForm] = useState<Partial<StudentProfile>>({})
+  const [editForm, setEditForm] = useState<Partial<StudentProfile & { average_grade: number | null }>>({})
   const [saveOk, setSaveOk] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     fetch(`/api/student-profiles/${id}`)
@@ -113,6 +117,7 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
       current_class: data.profile.current_class ?? "",
       gender: data.profile.gender ?? "",
       birth_year: data.profile.birth_year ?? undefined,
+      average_grade: data.profile.average_grade ?? null,
       academic_level: data.profile.academic_level ?? "",
       behavior_level: data.profile.behavior_level ?? "",
       needs_type: data.profile.needs_type ?? "",
@@ -120,6 +125,22 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
       school_year: data.profile.school_year ?? "",
     })
     setEditing(true)
+  }
+
+  async function handleDelete() {
+    if (!confirm(`¿Eliminar el perfil de ${data?.profile.first_name} ${data?.profile.last_name}? Esta acción no se puede deshacer.`)) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/student-profiles/${id}`, { method: "DELETE" })
+      const result = await res.json()
+      if (result.error) {
+        setError(result.error)
+      } else {
+        router.push("/alumnado")
+      }
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function handleSave() {
@@ -214,9 +235,20 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
               </Button>
             </>
           ) : (
-            <Button variant="outline" size="sm" onClick={startEdit}>
-              <Pencil className="w-4 h-4 mr-2" />Editar
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={startEdit}>
+                <Pencil className="w-4 h-4 mr-2" />Editar
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                Eliminar
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -256,6 +288,15 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
                     <SelectItem value="No especificado">No especificado</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Nota media</Label>
+                <Input
+                  type="number" min={0} max={10} step={0.1}
+                  value={editForm.average_grade ?? ""}
+                  onChange={e => setEditForm(f => ({ ...f, average_grade: e.target.value === "" ? null : parseFloat(e.target.value) }))}
+                  placeholder="0 – 10"
+                />
               </div>
               <div>
                 <Label className="text-xs">Año nacimiento</Label>

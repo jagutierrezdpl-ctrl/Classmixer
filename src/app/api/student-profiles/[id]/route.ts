@@ -60,7 +60,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const allowed = [
     "first_name", "last_name", "external_id", "gender", "current_class",
-    "birth_year", "academic_level", "behavior_level", "needs_type",
+    "birth_year", "average_grade", "academic_level", "behavior_level", "needs_type",
     "observations", "school_year",
   ]
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
