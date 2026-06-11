@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Loader2, ArrowLeft, Shuffle, Network, CheckCircle2, AlertTriangle, Users, Plus, X } from "lucide-react"
 import Link from "next/link"
 
@@ -62,9 +63,11 @@ export default function NewProcessPage() {
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedSourceGroups, setSelectedSourceGroups] = useState<string[]>([])
   const [targetGroups, setTargetGroups] = useState<string[]>([])
-  const [newGroupInput, setNewGroupInput] = useState("")
-  const [showNewGroupInput, setShowNewGroupInput] = useState(false)
-  const newGroupInputRef = useRef<HTMLInputElement>(null)
+  const [newGroupDialogOpen, setNewGroupDialogOpen] = useState(false)
+  const [newGroupCourse, setNewGroupCourse] = useState("")
+  const [newGroupLetter, setNewGroupLetter] = useState("A")
+  const [newGroupSaving, setNewGroupSaving] = useState(false)
+  const [newGroupError, setNewGroupError] = useState<string | null>(null)
   const router = useRouter()
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<CreateProcessInput>({
@@ -105,18 +108,40 @@ export default function NewProcessPage() {
     })
   }
 
-  function addNewTargetGroup() {
-    const name = newGroupInput.trim().toUpperCase()
+  async function handleCreateGroupDialog(e: React.FormEvent) {
+    e.preventDefault()
+    const name = (newGroupCourse + newGroupLetter).toUpperCase()
     if (!name) return
-    setTargetGroups(prev => {
-      if (prev.includes(name)) return prev
-      const next = [...prev, name]
-      setValue("target_groups", next.join(", "))
-      setValue("target_class_count", next.length)
-      return next
-    })
-    setNewGroupInput("")
-    setShowNewGroupInput(false)
+    setNewGroupSaving(true)
+    setNewGroupError(null)
+    try {
+      const res = await fetch("/api/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, school_year: null }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setNewGroupError(data.error ?? "Error al crear el grupo")
+        return
+      }
+      // Add to groups list and select as target
+      setGroups(prev => prev.some(g => g.name === name) ? prev : [...prev, { name, count: 0 }])
+      setTargetGroups(prev => {
+        if (prev.includes(name)) return prev
+        const next = [...prev, name]
+        setValue("target_groups", next.join(", "))
+        setValue("target_class_count", next.length)
+        return next
+      })
+      setNewGroupDialogOpen(false)
+      setNewGroupCourse("")
+      setNewGroupLetter("A")
+    } catch {
+      setNewGroupError("Error de red al guardar")
+    } finally {
+      setNewGroupSaving(false)
+    }
   }
 
   function removeTargetGroup(name: string) {
@@ -414,46 +439,16 @@ export default function NewProcessPage() {
                 )}
 
                 {/* Add new group */}
-                <div className="flex items-center gap-2">
-                  {showNewGroupInput ? (
-                    <>
-                      <Input
-                        ref={newGroupInputRef}
-                        value={newGroupInput}
-                        onChange={e => setNewGroupInput(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === "Enter") { e.preventDefault(); addNewTargetGroup() }
-                          if (e.key === "Escape") { setShowNewGroupInput(false); setNewGroupInput("") }
-                        }}
-                        placeholder="Ej: 1A"
-                        className="h-8 w-32 text-sm uppercase"
-                        autoFocus
-                        maxLength={6}
-                      />
-                      <Button type="button" size="sm" className="h-8" onClick={addNewTargetGroup} disabled={!newGroupInput.trim()}>
-                        Añadir
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowNewGroupInput(false); setNewGroupInput("") }}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5"
-                      onClick={() => setShowNewGroupInput(true)}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Nuevo grupo
-                    </Button>
-                  )}
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => setNewGroupDialogOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Nuevo grupo
+                </Button>
 
                 {targetGroups.length === 0 && (
                   <p className="text-xs text-muted-foreground">
@@ -517,6 +512,92 @@ export default function NewProcessPage() {
           </Button>
         </div>
       </form>
+
+      {/* New group dialog */}
+      <Dialog open={newGroupDialogOpen} onOpenChange={open => { if (!open) { setNewGroupDialogOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupError(null) } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nuevo grupo</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateGroupDialog} className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Curso *</Label>
+                <select
+                  value={newGroupCourse}
+                  onChange={e => setNewGroupCourse(e.target.value)}
+                  className={SELECT_CLASS}
+                  required
+                  autoFocus
+                >
+                  <option value="">Selecciona...</option>
+                  <optgroup label="Infantil">
+                    <option value="I3">Infantil 3 años</option>
+                    <option value="I4">Infantil 4 años</option>
+                    <option value="I5">Infantil 5 años</option>
+                  </optgroup>
+                  <optgroup label="Primaria">
+                    <option value="1P">1º Primaria</option>
+                    <option value="2P">2º Primaria</option>
+                    <option value="3P">3º Primaria</option>
+                    <option value="4P">4º Primaria</option>
+                    <option value="5P">5º Primaria</option>
+                    <option value="6P">6º Primaria</option>
+                  </optgroup>
+                  <optgroup label="ESO">
+                    <option value="1E">1º ESO</option>
+                    <option value="2E">2º ESO</option>
+                    <option value="3E">3º ESO</option>
+                    <option value="4E">4º ESO</option>
+                  </optgroup>
+                  <optgroup label="Bachillerato">
+                    <option value="1B">1º Bachillerato</option>
+                    <option value="2B">2º Bachillerato</option>
+                  </optgroup>
+                  <optgroup label="FP">
+                    <option value="1FP">1º FP Básica</option>
+                    <option value="2FP">2º FP Básica</option>
+                    <option value="1GM">1º CFGM</option>
+                    <option value="2GM">2º CFGM</option>
+                    <option value="1GS">1º CFGS</option>
+                    <option value="2GS">2º CFGS</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Letra *</Label>
+                <select
+                  value={newGroupLetter}
+                  onChange={e => setNewGroupLetter(e.target.value)}
+                  className={SELECT_CLASS}
+                >
+                  {["A","B","C","D","E"].map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {newGroupCourse && (
+              <div className="rounded-lg bg-muted px-4 py-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Nombre del grupo</p>
+                <p className="text-2xl font-bold tracking-wide">{newGroupCourse}{newGroupLetter}</p>
+              </div>
+            )}
+
+            {newGroupError && <p className="text-sm text-destructive">{newGroupError}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setNewGroupDialogOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupError(null) }}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={newGroupSaving || !newGroupCourse}>
+                {newGroupSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Crear grupo
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
