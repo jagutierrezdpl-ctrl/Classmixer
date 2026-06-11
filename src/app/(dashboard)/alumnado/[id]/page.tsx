@@ -31,6 +31,7 @@ interface StudentProfile {
   average_grade: number | null
   observations: string | null
   school_year: string | null
+  active: boolean
   created_at: string
 }
 
@@ -127,16 +128,25 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
     setEditing(true)
   }
 
-  async function handleDelete() {
-    if (!confirm(`¿Eliminar el perfil de ${data?.profile.first_name} ${data?.profile.last_name}? Esta acción no se puede deshacer.`)) return
+  async function handleToggleActive() {
+    const isActive = data?.profile.active !== false
+    const msg = isActive
+      ? `¿Dar de baja a ${data?.profile.first_name} ${data?.profile.last_name}? Sus datos se conservarán.`
+      : `¿Reactivar a ${data?.profile.first_name} ${data?.profile.last_name}?`
+    if (!confirm(msg)) return
     setDeleting(true)
     try {
-      const res = await fetch(`/api/student-profiles/${id}`, { method: "DELETE" })
+      const res = await fetch(`/api/student-profiles/${id}`, {
+        method: isActive ? "DELETE" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: isActive ? undefined : JSON.stringify({ active: true }),
+      })
       const result = await res.json()
       if (result.error) {
         setError(result.error)
       } else {
-        router.push("/alumnado")
+        const updated = await fetch(`/api/student-profiles/${id}`).then(r => r.json())
+        if (!updated.error) setData(updated)
       }
     } finally {
       setDeleting(false)
@@ -206,8 +216,11 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
             <User className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-bold flex items-center gap-2">
               {profile.first_name} {profile.last_name}
+              {profile.active === false && (
+                <span className="text-sm font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Baja</span>
+              )}
             </h1>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-sm text-muted-foreground">ID: {profile.external_id}</span>
@@ -241,12 +254,16 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
               </Button>
               <Button
                 variant="outline" size="sm"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
-                onClick={handleDelete}
+                className={data?.profile.active !== false
+                  ? "text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                  : "text-green-600 hover:text-green-700 hover:bg-green-50 border-green-300"}
+                onClick={handleToggleActive}
                 disabled={deleting}
               >
-                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
-                Eliminar
+                {deleting
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Trash2 className="w-4 h-4 mr-1" />}
+                {data?.profile.active !== false ? "Dar de baja" : "Reactivar"}
               </Button>
             </>
           )}

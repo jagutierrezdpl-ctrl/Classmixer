@@ -31,17 +31,16 @@ export async function GET(request: Request) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet("Alumnos")
 
-  // Column definitions
+  // Column definitions (no id_alumno — assigned automatically by the system)
   ws.columns = [
-    { header: "id_alumno",    key: "id",      width: 12 },
-    { header: "nombre",       key: "nombre",  width: 16 },
+    { header: "nombre",       key: "nombre",    width: 16 },
     { header: "apellidos",    key: "apellidos", width: 22 },
-    { header: "curso",        key: "curso",   width: 10 },
-    { header: "letra",        key: "letra",   width: 8  },
-    { header: "genero",       key: "genero",  width: 10 },
-    { header: "nota_media",   key: "nota",    width: 12 },
-    { header: "email",        key: "email",   width: 32 },
-    { header: "observaciones", key: "obs",   width: 35 },
+    { header: "curso",        key: "curso",     width: 10 },
+    { header: "letra",        key: "letra",     width: 8  },
+    { header: "genero",       key: "genero",    width: 10 },
+    { header: "nota_media",   key: "nota",      width: 12 },
+    { header: "email",        key: "email",     width: 32 },
+    { header: "observaciones", key: "obs",      width: 35 },
   ]
 
   // Header style
@@ -60,7 +59,6 @@ export async function GET(request: Request) {
       const letra = cls.length > 0 ? cls.slice(-1) : ""
       const curso = cls.length > 0 ? cls.slice(0, -1) : ""
       ws.addRow({
-        id: s.external_id ?? "",
         nombre: s.first_name,
         apellidos: s.last_name,
         curso,
@@ -73,7 +71,6 @@ export async function GET(request: Request) {
     })
   } else {
     ws.addRow({
-      id: "A001",
       nombre: "María",
       apellidos: "García López",
       curso: "6P",
@@ -88,17 +85,18 @@ export async function GET(request: Request) {
   // Data validation dropdowns for rows 2–500
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dv = (ws as any).dataValidations
-  dv.add("D2:D500", {
+  // Columns: A=nombre, B=apellidos, C=curso, D=letra, E=genero, F=nota_media, G=email, H=observaciones
+  dv.add("C2:C500", {
     type: "list", allowBlank: true, formulae: [`"${COURSE_CODES}"`],
     showErrorMessage: true, errorTitle: "Valor no válido",
     error: "Selecciona un código de curso del desplegable",
   })
-  dv.add("E2:E500", {
+  dv.add("D2:D500", {
     type: "list", allowBlank: true, formulae: [`"${LETTERS}"`],
     showErrorMessage: true, errorTitle: "Valor no válido",
     error: "Selecciona una letra del desplegable",
   })
-  dv.add("F2:F500", {
+  dv.add("E2:E500", {
     type: "list", allowBlank: true, formulae: [`"${GENDERS}"`],
     showErrorMessage: true, errorTitle: "Valor no válido",
     error: "Selecciona F, M u Otro",

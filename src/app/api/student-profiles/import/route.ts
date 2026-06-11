@@ -43,10 +43,9 @@ export async function POST(request: Request) {
   })
 
   const upsertRows = rows.map(r => {
-    const external_id     = pick(r, "id_alumno", "id", "external_id")
     const first_name      = pick(r, "nombre", "first_name")
     const last_name       = pick(r, "apellidos", "last_name")
-    // Support new two-column format (curso + letra) or legacy single column (clase_actual)
+    // Support two-column format (curso + letra) or legacy single column (clase_actual)
     const curso           = pick(r, "curso", "course")
     const letra           = pick(r, "letra", "letter")
     const current_class   = (curso && letra)
@@ -56,27 +55,22 @@ export async function POST(request: Request) {
     const gender          = VALID_GENDERS.includes(gender_raw) ? gender_raw : null
     const birth_year_raw  = pick(r, "año_nacimiento", "anyo_nacimiento", "birth_year", "nacimiento")
     const birth_year      = birth_year_raw ? parseInt(birth_year_raw) || null : null
-    const academic_level_raw = pick(r, "nivel_academico", "nivel", "academic_level")
-    const academic_level  = VALID_LEVELS.includes(academic_level_raw) ? academic_level_raw : null
-    const behavior_raw    = pick(r, "conducta", "behavior_level", "comportamiento")
-    const behavior_level  = VALID_BEHAVIOR.includes(behavior_raw) ? behavior_raw : null
-    const needs_raw       = pick(r, "necesidades", "needs_type", "nee")
-    const needs_type      = VALID_NEEDS.includes(needs_raw) ? needs_raw : null
     const observations    = pick(r, "observaciones", "observations", "notas")
-    const school_year     = pick(r, "curso_escolar", "school_year", "curso")
+    const school_year     = pick(r, "curso_escolar", "school_year")
     const email           = pick(r, "email", "correo", "email_alumno")
+    const nota_raw        = pick(r, "nota_media", "nota", "average_grade")
+    const average_grade   = nota_raw ? parseFloat(nota_raw) || null : null
 
+    // Do NOT include external_id — the DB trigger assigns it on INSERT.
+    // On conflict (existing student by name), external_id is preserved unchanged.
     return {
       center_id: profile.center_id,
-      external_id: external_id || null,
       first_name,
       last_name,
       current_class: current_class || null,
       gender,
       birth_year,
-      academic_level,
-      behavior_level,
-      needs_type,
+      average_grade,
       observations: observations || null,
       school_year: school_year || null,
       email: email || null,
@@ -90,25 +84,12 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
-  // Rows with external_id → upsert on (center_id, external_id)
-  // Rows without external_id → upsert on (center_id, first_name, last_name) to avoid duplicates
-  const withId    = upsertRows.filter(r => r.external_id)
-  const withoutId = upsertRows.filter(r => !r.external_id)
-
+  // All rows upsert on (center_id, first_name, last_name).
+  // New students get external_id from the trigger; existing keep theirs.
   let upserted = 0
 
-  for (let i = 0; i < withId.length; i += 100) {
-    const batch = withId.slice(i, i + 100)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from("student_profiles")
-      .upsert(batch, { onConflict: "center_id,external_id", ignoreDuplicates: false })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    upserted += batch.length
-  }
-
-  for (let i = 0; i < withoutId.length; i += 100) {
-    const batch = withoutId.slice(i, i + 100)
+  for (let i = 0; i < upsertRows.length; i += 100) {
+    const batch = upsertRows.slice(i, i + 100)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from("student_profiles")

@@ -30,6 +30,7 @@ interface StudentProfile {
   gender: string | null
   academic_level: string | null
   needs_type: string | null
+  active: boolean
   birth_year: number | null
 }
 
@@ -50,6 +51,7 @@ export default function AlumnadoPage() {
   const [debouncedQ, setDebouncedQ] = useState("")
   const [filterClass, setFilterClass] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
 
@@ -66,9 +68,9 @@ export default function AlumnadoPage() {
   const [newStudentSaving, setNewStudentSaving] = useState(false)
   const [newStudentError, setNewStudentError] = useState<string | null>(null)
   const [newStudentForm, setNewStudentForm] = useState({
-    first_name: "", last_name: "", external_id: "",
+    first_name: "", last_name: "",
     current_class: "", gender: "", average_grade: "",
-    academic_level: "", behavior_level: "", needs_type: "", email: "", observations: "",
+    email: "", observations: "",
   })
 
   // Import dialog
@@ -90,6 +92,7 @@ export default function AlumnadoPage() {
       const params = new URLSearchParams({ page: String(page) })
       if (debouncedQ) params.set("q", debouncedQ)
       if (filterClass) params.set("class", filterClass)
+      if (showInactive) params.set("include_inactive", "true")
       const res = await fetch(`/api/student-profiles?${params}`)
       const data = await res.json()
       setProfiles(data.profiles ?? [])
@@ -97,7 +100,7 @@ export default function AlumnadoPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedQ, filterClass])
+  }, [page, debouncedQ, filterClass, showInactive])
 
   const loadGroups = useCallback(async () => {
     setGroupsLoading(true)
@@ -151,9 +154,9 @@ export default function AlumnadoPage() {
     setNewStudentOpen(false)
     setNewStudentError(null)
     setNewStudentForm({
-      first_name: "", last_name: "", external_id: "",
+      first_name: "", last_name: "",
       current_class: "", gender: "", average_grade: "",
-      academic_level: "", behavior_level: "", needs_type: "", email: "", observations: "",
+      email: "", observations: "",
     })
   }
 
@@ -299,8 +302,8 @@ export default function AlumnadoPage() {
 
         {/* ALUMNOS TAB */}
         <TabsContent value="alumnos">
-          <div className="flex gap-3 mb-6">
-            <div className="relative flex-1">
+          <div className="flex gap-3 mb-6 flex-wrap">
+            <div className="relative flex-1 min-w-48">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -311,10 +314,20 @@ export default function AlumnadoPage() {
             </div>
             <Input
               className="w-32"
-              placeholder="Clase (ej. 6A)"
+              placeholder="Clase (ej. 6PA)"
               value={filterClass}
               onChange={e => { setFilterClass(e.target.value); setPage(1) }}
             />
+            <button
+              onClick={() => { setShowInactive(s => !s); setPage(1) }}
+              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                showInactive
+                  ? "bg-red-50 border-red-300 text-red-700"
+                  : "border-input text-muted-foreground hover:bg-muted/50"
+              }`}
+            >
+              {showInactive ? "Ocultar bajas" : "Ver bajas"}
+            </button>
           </div>
 
           {loading ? (
@@ -353,15 +366,15 @@ export default function AlumnadoPage() {
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          {p.active === false && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Baja</span>
+                          )}
                           {p.gender && (
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                               GENDER_COLORS[p.gender] ?? "bg-muted text-muted-foreground"
                             }`}>
                               {p.gender}
                             </span>
-                          )}
-                          {p.academic_level && (
-                            <Badge variant="outline" className="text-xs">{p.academic_level}</Badge>
                           )}
                           {p.needs_type && p.needs_type !== "No" && (
                             <Badge className="text-xs bg-amber-100 text-amber-700 border-0">{p.needs_type}</Badge>
@@ -594,28 +607,18 @@ export default function AlumnadoPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">ID externo</label>
-                <Input
-                  value={newStudentForm.external_id}
-                  onChange={e => setNewStudentForm(f => ({ ...f, external_id: e.target.value }))}
-                  placeholder="Ej: A001"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Clase actual</label>
-                <select
-                  value={newStudentForm.current_class}
-                  onChange={e => setNewStudentForm(f => ({ ...f, current_class: e.target.value }))}
-                  className={SEL}
-                >
-                  <option value="">Sin asignar</option>
-                  {groups.map(g => (
-                    <option key={g.name} value={g.name}>{g.name} ({g.count} alumnos)</option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Clase actual</label>
+              <select
+                value={newStudentForm.current_class}
+                onChange={e => setNewStudentForm(f => ({ ...f, current_class: e.target.value }))}
+                className={SEL}
+              >
+                <option value="">Sin asignar</option>
+                {groups.map(g => (
+                  <option key={g.name} value={g.name}>{g.name} ({g.count} alumnos)</option>
+                ))}
+              </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

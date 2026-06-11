@@ -59,9 +59,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const supabase = createServiceClient()
 
   const allowed = [
-    "first_name", "last_name", "external_id", "gender", "current_class",
+    "first_name", "last_name", "gender", "current_class",
     "birth_year", "average_grade", "academic_level", "behavior_level", "needs_type",
-    "observations", "school_year",
+    "observations", "school_year", "active",
   ]
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of allowed) {
@@ -86,10 +86,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { id } = await params
   const supabase = createServiceClient()
 
+  // Soft delete — preserves all data and history
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
     .from("student_profiles")
-    .delete()
+    .update({ active: false, updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("center_id", profile.center_id)
 

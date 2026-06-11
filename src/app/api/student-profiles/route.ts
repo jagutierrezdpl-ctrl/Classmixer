@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const body = await request.json()
-  const { first_name, last_name, external_id, current_class, gender, average_grade, academic_level, behavior_level, needs_type, email, observations } = body
+  const { first_name, last_name, current_class, gender, average_grade, email, observations } = body
 
   if (!first_name?.trim() || !last_name?.trim()) {
     return NextResponse.json({ error: "Nombre y apellidos son obligatorios" }, { status: 400 })
@@ -15,6 +15,7 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
+  // external_id is assigned automatically by DB trigger (student_auto_id_trigger)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("student_profiles")
@@ -22,13 +23,9 @@ export async function POST(request: Request) {
       center_id: profile.center_id,
       first_name: first_name.trim(),
       last_name: last_name.trim(),
-      external_id: external_id?.trim() || null,
       current_class: current_class?.trim() || null,
       gender: gender || null,
       average_grade: average_grade !== "" && average_grade != null ? parseFloat(average_grade) : null,
-      academic_level: academic_level || null,
-      behavior_level: behavior_level || null,
-      needs_type: needs_type || null,
       email: email?.trim() || null,
       observations: observations?.trim() || null,
     })
@@ -47,6 +44,7 @@ export async function GET(request: Request) {
   const q = searchParams.get("q") ?? ""
   const filterClass = searchParams.get("class") ?? ""
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"))
+  const includeInactive = searchParams.get("include_inactive") === "true"
   const pageSize = 50
 
   const supabase = createServiceClient()
@@ -59,6 +57,9 @@ export async function GET(request: Request) {
     .order("last_name")
     .range((page - 1) * pageSize, page * pageSize - 1)
 
+  if (!includeInactive) {
+    query = query.eq("active", true)
+  }
   if (q) {
     query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,external_id.ilike.%${q}%`)
   }
