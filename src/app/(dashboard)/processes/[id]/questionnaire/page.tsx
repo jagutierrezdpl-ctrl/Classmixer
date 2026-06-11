@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft, Loader2, Link2, Copy,
-  CheckCircle2, Clock, Users, QrCode, X,
+  CheckCircle2, Clock, Users, QrCode, X, Download, Filter,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -42,6 +42,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [tokens, setTokens] = useState<TokenInfo[]>([])
   const [, setLoadingTokens] = useState(false)
   const [qrToken, setQrToken] = useState<string | null>(null)
+  const [showOnlyPending, setShowOnlyPending] = useState(false)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { isDirty } } =
     useForm<QuestionnaireSettingsInput>({
@@ -118,6 +119,32 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
 
   const completed = tokens.filter(t => t.used).length
   const pct = tokens.length > 0 ? Math.round((completed / tokens.length) * 100) : 0
+  const pendingTokens = tokens.filter(t => !t.used)
+  const visibleTokens = showOnlyPending ? pendingTokens : tokens
+
+  function copyAllPending() {
+    const text = pendingTokens
+      .map(t => `${t.students?.first_name ?? ""} ${t.students?.last_name ?? ""}: ${t.url}`)
+      .join("\n")
+    navigator.clipboard.writeText(text)
+    toast.success(`${pendingTokens.length} enlaces copiados`)
+  }
+
+  function exportPendingExcel() {
+    const rows = [["Nombre", "Apellidos", "Enlace"]]
+    for (const t of pendingTokens) {
+      rows.push([t.students?.first_name ?? "", t.students?.last_name ?? "", t.url])
+    }
+    const csvContent = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n")
+    const bom = "﻿"
+    const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "pendientes_cuestionario.csv"
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="p-8 max-w-3xl">
@@ -293,10 +320,48 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                 </div>
                 <span className="text-sm font-medium">{pct}%</span>
               </div>
-              <Progress value={pct} className="mb-4" />
+              <Progress value={pct} className="mb-3" />
+
+              {/* Pending controls */}
+              {pendingTokens.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                  <span className="text-xs text-amber-800 font-medium flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    {pendingTokens.length} sin responder
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowOnlyPending(v => !v)}
+                    className={`text-xs px-2 py-0.5 rounded-full border transition-colors flex items-center gap-1 ${
+                      showOnlyPending
+                        ? "bg-amber-600 text-white border-amber-600"
+                        : "text-amber-700 border-amber-400 hover:bg-amber-100"
+                    }`}
+                  >
+                    <Filter className="w-3 h-3" />
+                    {showOnlyPending ? "Mostrar todos" : "Solo pendientes"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyAllPending}
+                    className="text-xs px-2 py-0.5 rounded-full border text-amber-700 border-amber-400 hover:bg-amber-100 transition-colors flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copiar todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportPendingExcel}
+                    className="text-xs px-2 py-0.5 rounded-full border text-amber-700 border-amber-400 hover:bg-amber-100 transition-colors flex items-center gap-1"
+                  >
+                    <Download className="w-3 h-3" />
+                    Exportar CSV
+                  </button>
+                </div>
+              )}
 
               <div className="max-h-64 overflow-y-auto space-y-1">
-                {tokens.map(t => (
+                {visibleTokens.map(t => (
                   <div key={t.token}>
                     <div className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-muted/50 text-sm">
                       <div className="flex items-center gap-2">
