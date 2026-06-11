@@ -43,6 +43,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const q = searchParams.get("q") ?? ""
   const filterClass = searchParams.get("class") ?? ""
+  const filterBehavior = searchParams.get("behavior") ?? ""
+  const filterNeeds = searchParams.get("needs") ?? ""
+  const filterGender = searchParams.get("gender") ?? ""
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"))
   const includeInactive = searchParams.get("include_inactive") === "true"
   const pageSize = 50
@@ -57,15 +60,12 @@ export async function GET(request: Request) {
     .order("last_name")
     .range((page - 1) * pageSize, page * pageSize - 1)
 
-  if (!includeInactive) {
-    query = query.eq("active", true)
-  }
-  if (q) {
-    query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,external_id.ilike.%${q}%`)
-  }
-  if (filterClass) {
-    query = query.eq("current_class", filterClass)
-  }
+  if (!includeInactive) query = query.eq("active", true)
+  if (q) query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,external_id.ilike.%${q}%`)
+  if (filterClass) query = query.eq("current_class", filterClass)
+  if (filterBehavior) query = query.eq("behavior_level", filterBehavior)
+  if (filterGender) query = query.eq("gender", filterGender)
+  if (filterNeeds === "true") query = query.not("needs_type", "in", '("No","")')
 
   const { data, count, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

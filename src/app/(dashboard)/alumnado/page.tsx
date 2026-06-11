@@ -13,7 +13,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import {
   Search, User, ChevronRight, Loader2,
-  Upload, Download, Users, LayoutGrid, AlertTriangle, Plus, Trash2
+  Upload, Download, Users, LayoutGrid, AlertTriangle, Plus, Trash2, Pencil
 } from "lucide-react"
 import Link from "next/link"
 import { getCurrentSchoolYear, getSchoolYears } from "@/utils/school-year"
@@ -29,6 +29,7 @@ interface StudentProfile {
   current_class: string | null
   gender: string | null
   academic_level: string | null
+  behavior_level: string | null
   needs_type: string | null
   active: boolean
   birth_year: number | null
@@ -50,8 +51,13 @@ export default function AlumnadoPage() {
   const [q, setQ] = useState("")
   const [debouncedQ, setDebouncedQ] = useState("")
   const [filterClass, setFilterClass] = useState("")
+  const [filterBehavior, setFilterBehavior] = useState("")
+  const [filterNeeds, setFilterNeeds] = useState(false)
+  const [filterGender, setFilterGender] = useState("")
   const [loading, setLoading] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
+  const [inlineEdit, setInlineEdit] = useState<{ id: string; behavior_level: string; needs_type: string } | null>(null)
+  const [inlineSaving, setInlineSaving] = useState(false)
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
 
@@ -92,6 +98,9 @@ export default function AlumnadoPage() {
       const params = new URLSearchParams({ page: String(page) })
       if (debouncedQ) params.set("q", debouncedQ)
       if (filterClass) params.set("class", filterClass)
+      if (filterBehavior) params.set("behavior", filterBehavior)
+      if (filterNeeds) params.set("needs", "true")
+      if (filterGender) params.set("gender", filterGender)
       if (showInactive) params.set("include_inactive", "true")
       const res = await fetch(`/api/student-profiles?${params}`)
       const data = await res.json()
@@ -100,7 +109,7 @@ export default function AlumnadoPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedQ, filterClass, showInactive])
+  }, [page, debouncedQ, filterClass, filterBehavior, filterNeeds, filterGender, showInactive])
 
   const loadGroups = useCallback(async () => {
     setGroupsLoading(true)
@@ -225,6 +234,26 @@ export default function AlumnadoPage() {
     }
   }
 
+  async function handleInlineSave() {
+    if (!inlineEdit) return
+    setInlineSaving(true)
+    try {
+      await fetch(`/api/student-profiles/${inlineEdit.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ behavior_level: inlineEdit.behavior_level || null, needs_type: inlineEdit.needs_type || null }),
+      })
+      setProfiles(prev => prev.map(p =>
+        p.id === inlineEdit.id
+          ? { ...p, behavior_level: inlineEdit.behavior_level as StudentProfile["behavior_level"] || null, needs_type: inlineEdit.needs_type as StudentProfile["needs_type"] || null }
+          : p
+      ))
+      setInlineEdit(null)
+    } finally {
+      setInlineSaving(false)
+    }
+  }
+
   const GENDER_COLORS: Record<string, string> = {
     F: "bg-pink-100 text-pink-700",
     M: "bg-blue-100 text-blue-700",
@@ -302,32 +331,72 @@ export default function AlumnadoPage() {
 
         {/* ALUMNOS TAB */}
         <TabsContent value="alumnos">
-          <div className="flex gap-3 mb-6 flex-wrap">
+          {/* Search row */}
+          <div className="flex gap-3 mb-3 flex-wrap">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 className="pl-9"
-                placeholder="Buscar por nombre, apellidos o ID..."
+                placeholder="Nombre, apellidos o ID..."
                 value={q}
                 onChange={e => setQ(e.target.value)}
               />
             </div>
             <Input
-              className="w-32"
-              placeholder="Clase (ej. 6PA)"
+              className="w-28"
+              placeholder="Clase (6PA)"
               value={filterClass}
               onChange={e => { setFilterClass(e.target.value); setPage(1) }}
             />
+          </div>
+
+          {/* Filter chips */}
+          <div className="flex gap-2 mb-5 flex-wrap">
+            {/* Conducta chips */}
+            {["Seguimiento", "Conflictiva"].map(b => (
+              <button
+                key={b}
+                onClick={() => { setFilterBehavior(filterBehavior === b ? "" : b); setPage(1) }}
+                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                  filterBehavior === b
+                    ? b === "Conflictiva" ? "bg-red-100 border-red-400 text-red-700" : "bg-amber-100 border-amber-400 text-amber-700"
+                    : "border-input text-muted-foreground hover:bg-muted/50"
+                }`}
+              >{b}</button>
+            ))}
+            {/* Necesidades chip */}
+            <button
+              onClick={() => { setFilterNeeds(n => !n); setPage(1) }}
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                filterNeeds ? "bg-purple-100 border-purple-400 text-purple-700" : "border-input text-muted-foreground hover:bg-muted/50"
+              }`}
+            >Con necesidades</button>
+            {/* Género chips */}
+            {["F", "M"].map(g => (
+              <button
+                key={g}
+                onClick={() => { setFilterGender(filterGender === g ? "" : g); setPage(1) }}
+                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                  filterGender === g
+                    ? g === "F" ? "bg-pink-100 border-pink-400 text-pink-700" : "bg-blue-100 border-blue-400 text-blue-700"
+                    : "border-input text-muted-foreground hover:bg-muted/50"
+                }`}
+              >{g === "F" ? "Chicas" : "Chicos"}</button>
+            ))}
+            {/* Bajas toggle */}
             <button
               onClick={() => { setShowInactive(s => !s); setPage(1) }}
-              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-                showInactive
-                  ? "bg-red-50 border-red-300 text-red-700"
-                  : "border-input text-muted-foreground hover:bg-muted/50"
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                showInactive ? "bg-red-50 border-red-300 text-red-700" : "border-input text-muted-foreground hover:bg-muted/50"
               }`}
-            >
-              {showInactive ? "Ocultar bajas" : "Ver bajas"}
-            </button>
+            >{showInactive ? "Ocultar bajas" : "Ver bajas"}</button>
+            {/* Clear filters */}
+            {(filterBehavior || filterNeeds || filterGender || showInactive || filterClass) && (
+              <button
+                onClick={() => { setFilterBehavior(""); setFilterNeeds(false); setFilterGender(""); setShowInactive(false); setFilterClass(""); setPage(1) }}
+                className="px-2.5 py-1 text-xs rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground hover:bg-muted/50 transition-colors"
+              >✕ Limpiar</button>
+            )}
           </div>
 
           {loading ? (
@@ -349,42 +418,98 @@ export default function AlumnadoPage() {
               </div>
 
               <div className="space-y-2">
-                {profiles.map(p => (
-                  <Card key={p.id} className="hover:bg-muted/30 transition-colors">
-                    <CardContent className="py-3 px-4">
-                      <Link href={`/alumnado/${p.id}`} className="flex items-center gap-4">
-                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                          <User className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">
-                            {p.last_name}, {p.first_name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            ID: {p.external_id ?? "—"}
-                            {p.current_class && ` · ${p.current_class}`}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {p.active === false && (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Baja</span>
-                          )}
-                          {p.gender && (
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              GENDER_COLORS[p.gender] ?? "bg-muted text-muted-foreground"
-                            }`}>
-                              {p.gender}
-                            </span>
-                          )}
-                          {p.needs_type && p.needs_type !== "No" && (
-                            <Badge className="text-xs bg-amber-100 text-amber-700 border-0">{p.needs_type}</Badge>
-                          )}
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                      </Link>
-                    </CardContent>
-                  </Card>
-                ))}
+                {profiles.map(p => {
+                  const isEditing = inlineEdit?.id === p.id
+                  const behaviorColor: Record<string, string> = {
+                    Seguimiento: "bg-amber-100 text-amber-700",
+                    Conflictiva: "bg-red-100 text-red-700",
+                    Positiva: "bg-green-100 text-green-700",
+                    Normal: "bg-muted text-muted-foreground",
+                  }
+                  return (
+                    <Card key={p.id} className={`transition-colors ${isEditing ? "ring-2 ring-primary/30" : "hover:bg-muted/30"}`}>
+                      <CardContent className="py-3 px-4">
+                        {isEditing ? (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-sm font-medium flex-1">{p.last_name}, {p.first_name}</span>
+                            <select
+                              value={inlineEdit.behavior_level}
+                              onChange={e => setInlineEdit(i => i ? { ...i, behavior_level: e.target.value } : i)}
+                              className={SEL + " w-36"}
+                            >
+                              <option value="">Conducta —</option>
+                              {["Positiva", "Normal", "Seguimiento", "Conflictiva"].map(v => (
+                                <option key={v} value={v}>{v}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={inlineEdit.needs_type}
+                              onChange={e => setInlineEdit(i => i ? { ...i, needs_type: e.target.value } : i)}
+                              className={SEL + " w-44"}
+                            >
+                              <option value="">Necesidades —</option>
+                              {["No", "Sí", "ACNEAE", "NEE", "Refuerzo", "Altas capacidades", "Observación interna"].map(v => (
+                                <option key={v} value={v}>{v}</option>
+                              ))}
+                            </select>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={handleInlineSave}
+                                disabled={inlineSaving}
+                                className="px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50"
+                              >{inlineSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Guardar"}</button>
+                              <button
+                                onClick={() => setInlineEdit(null)}
+                                className="px-3 py-1.5 text-xs rounded-md border text-muted-foreground hover:bg-muted/50"
+                              >✕</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-4">
+                            <Link href={`/alumnado/${p.id}`} className="flex items-center gap-4 flex-1 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                <User className="w-4 h-4 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm">{p.last_name}, {p.first_name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  ID: {p.external_id ?? "—"}
+                                  {p.current_class && ` · ${p.current_class}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                                {p.active === false && (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Baja</span>
+                                )}
+                                {p.gender && (
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${GENDER_COLORS[p.gender] ?? "bg-muted text-muted-foreground"}`}>
+                                    {p.gender}
+                                  </span>
+                                )}
+                                {p.behavior_level && p.behavior_level !== "Normal" && (
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${behaviorColor[p.behavior_level] ?? "bg-muted text-muted-foreground"}`}>
+                                    {p.behavior_level}
+                                  </span>
+                                )}
+                                {p.needs_type && p.needs_type !== "No" && (
+                                  <Badge className="text-xs bg-purple-100 text-purple-700 border-0">{p.needs_type}</Badge>
+                                )}
+                              </div>
+                            </Link>
+                            <button
+                              onClick={() => setInlineEdit({ id: p.id, behavior_level: p.behavior_level ?? "", needs_type: p.needs_type ?? "" })}
+                              className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              title="Editar conducta/necesidades"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
 
               {totalPages > 1 && (

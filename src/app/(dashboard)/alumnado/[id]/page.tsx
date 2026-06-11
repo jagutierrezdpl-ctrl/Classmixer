@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/select"
 import {
   ArrowLeft, User, BookOpen, Network, GraduationCap, TrendingUp,
-  AlertTriangle, CheckCircle2, Loader2, Calendar, Pencil, Save, X, Trash2
+  AlertTriangle, CheckCircle2, Loader2, Calendar, Pencil, Save, X, Trash2,
+  ShieldAlert, Plus, Trash
 } from "lucide-react"
 import Link from "next/link"
 
@@ -97,6 +98,11 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
   const [editForm, setEditForm] = useState<Partial<StudentProfile & { average_grade: number | null }>>({})
   const [saveOk, setSaveOk] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [notes, setNotes] = useState<{ id: string; content: string; author_name: string; created_at: string }[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [newNote, setNewNote] = useState("")
+  const [savingNote, setSavingNote] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/student-profiles/${id}`)
@@ -107,6 +113,18 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
       })
       .catch(() => setError("Error al cargar los datos"))
       .finally(() => setLoading(false))
+
+    // Load user role and notes (notes only for orientador/admin)
+    fetch("/api/auth/me").then(r => r.json()).then(d => {
+      setUserRole(d.role ?? null)
+      if (["admin", "superadmin", "orientador"].includes(d.role)) {
+        setNotesLoading(true)
+        fetch(`/api/student-profiles/${id}/notes`)
+          .then(r => r.json())
+          .then(n => { if (Array.isArray(n)) setNotes(n) })
+          .finally(() => setNotesLoading(false))
+      }
+    }).catch(() => {})
   }, [id])
 
   function startEdit() {
@@ -126,6 +144,32 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
       school_year: data.profile.school_year ?? "",
     })
     setEditing(true)
+  }
+
+  async function handleAddNote(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newNote.trim()) return
+    setSavingNote(true)
+    try {
+      const res = await fetch(`/api/student-profiles/${id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newNote.trim() }),
+      })
+      const d = await res.json()
+      if (!d.error) {
+        setNotes(prev => [d, ...prev])
+        setNewNote("")
+      }
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    if (!confirm("¿Eliminar esta nota?")) return
+    await fetch(`/api/orientation-notes/${noteId}`, { method: "DELETE" })
+    setNotes(prev => prev.filter(n => n.id !== noteId))
   }
 
   async function handleToggleActive() {
@@ -579,6 +623,63 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Orientation notes — only visible to orientador/admin */}
+      {["admin", "superadmin", "orientador"].includes(userRole ?? "") && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <ShieldAlert className="w-4 h-4 text-purple-600" />
+            <h2 className="font-semibold text-sm">Notas de orientación</h2>
+            <span className="text-xs text-muted-foreground">(solo visibles para orientación y administración)</span>
+          </div>
+
+          <form onSubmit={handleAddNote} className="flex gap-2 mb-4">
+            <Textarea
+              value={newNote}
+              onChange={e => setNewNote(e.target.value)}
+              placeholder="Añadir nota privada..."
+              rows={2}
+              className="flex-1 resize-none text-sm"
+            />
+            <button
+              type="submit"
+              disabled={savingNote || !newNote.trim()}
+              className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 shrink-0 self-start"
+            >
+              {savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            </button>
+          </form>
+
+          {notesLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+              <Loader2 className="w-4 h-4 animate-spin" />Cargando notas...
+            </div>
+          ) : notes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No hay notas de orientación para este alumno.</p>
+          ) : (
+            <div className="space-y-2">
+              {notes.map(n => (
+                <Card key={n.id} className="border-purple-100 bg-purple-50/40">
+                  <CardContent className="py-3 px-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm flex-1">{n.content}</p>
+                      <button
+                        onClick={() => handleDeleteNote(n.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                      >
+                        <Trash className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {n.author_name} · {new Date(n.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
