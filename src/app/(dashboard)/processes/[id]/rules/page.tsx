@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useState } from "react"
+import { use, useEffect, useState, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
@@ -49,6 +49,8 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
   const [loading, setLoading] = useState(false)
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([])
   const [studentSearch, setStudentSearch] = useState("")
+  const [studentDropdownOpen, setStudentDropdownOpen] = useState(false)
+  const studentPickerRef = useRef<HTMLDivElement>(null)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } =
     useForm<CreateRuleInput>({
@@ -61,6 +63,17 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     setValue("student_ids", selectedStudents.map(s => s.id))
   }, [selectedStudents, setValue])
+
+  useEffect(() => {
+    if (!studentDropdownOpen) return
+    function handle(e: MouseEvent) {
+      if (studentPickerRef.current && !studentPickerRef.current.contains(e.target as Node)) {
+        setStudentDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handle)
+    return () => document.removeEventListener("mousedown", handle)
+  }, [studentDropdownOpen])
 
   useEffect(() => {
     loadRules()
@@ -195,7 +208,7 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {/* Create rule dialog */}
-      <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) { reset(); setSelectedStudents([]) } }}>
+      <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) { reset(); setSelectedStudents([]); setStudentSearch(""); setStudentDropdownOpen(false) } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Nueva regla</DialogTitle>
@@ -269,6 +282,8 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
               {errors.student_ids && (
                 <p className="text-xs text-destructive">{errors.student_ids.message}</p>
               )}
+
+              {/* Selected chips */}
               {selectedStudents.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {selectedStudents.map(s => (
@@ -276,44 +291,75 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
                       key={s.id}
                       type="button"
                       onClick={() => setSelectedStudents(prev => prev.filter(x => x.id !== s.id))}
-                      className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs"
+                      className="flex items-center gap-1 pl-2.5 pr-1.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium border border-primary/20 hover:bg-primary/20"
                     >
                       {s.first_name} {s.last_name}
-                      <X className="w-3 h-3" />
+                      <span className="text-[10px] text-muted-foreground ml-0.5">{s.current_class}</span>
+                      <X className="w-3 h-3 ml-0.5" />
                     </button>
                   ))}
                 </div>
               )}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar alumno..."
-                  className="pl-9"
-                  value={studentSearch}
-                  onChange={e => setStudentSearch(e.target.value)}
-                />
-              </div>
-              <div className="max-h-36 overflow-y-auto border rounded-md divide-y">
-                {filteredStudents.map(s => {
-                  const isSelected = selectedStudents.some(x => x.id === s.id)
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedStudents(prev =>
-                          isSelected ? prev.filter(x => x.id !== s.id) : [...prev, s]
-                        )
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
-                        isSelected ? "bg-primary/5 text-primary" : "hover:bg-muted/50"
-                      }`}
-                    >
-                      <span>{s.first_name} {s.last_name}</span>
-                      <Badge variant="outline" className="text-xs">{s.current_class}</Badge>
-                    </button>
-                  )
-                })}
+
+              {/* Combobox */}
+              <div ref={studentPickerRef} className="relative">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder={students.length === 0 ? "Cargando alumnos..." : `Buscar entre ${students.length} alumnos...`}
+                    className="pl-9"
+                    value={studentSearch}
+                    onChange={e => { setStudentSearch(e.target.value); setStudentDropdownOpen(true) }}
+                    onFocus={() => setStudentDropdownOpen(true)}
+                    autoComplete="off"
+                  />
+                </div>
+
+                {studentDropdownOpen && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    {filteredStudents.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                        {students.length === 0
+                          ? "No hay alumnos en este proceso"
+                          : "No se encontraron alumnos con ese nombre"}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="px-3 py-1.5 border-b bg-muted/30">
+                          <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">
+                            {filteredStudents.length} alumno{filteredStudents.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                        {filteredStudents.map(s => {
+                          const isSelected = selectedStudents.some(x => x.id === s.id)
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedStudents(prev =>
+                                  isSelected ? prev.filter(x => x.id !== s.id) : [...prev, s]
+                                )
+                                setStudentSearch("")
+                              }}
+                              className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors border-b last:border-0 ${
+                                isSelected ? "bg-primary/8 text-primary" : "hover:bg-muted/50"
+                              }`}
+                            >
+                              <span className={isSelected ? "font-medium" : ""}>
+                                {s.last_name}, {s.first_name}
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <Badge variant="outline" className="text-xs">{s.current_class}</Badge>
+                                {isSelected && <span className="text-primary text-xs">✓</span>}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
