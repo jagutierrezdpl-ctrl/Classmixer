@@ -19,7 +19,7 @@ function SetPasswordForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
-  const [hasSession, setHasSession] = useState(false)
+  const [hasSession, setHasSession] = useState<boolean | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -50,7 +50,15 @@ function SetPasswordForm() {
     }
   }
 
-  if (!hasSession) {
+  if (hasSession === null) {
+    return (
+      <div className="text-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (hasSession === false) {
     return (
       <div className="text-center py-8">
         <p className="text-muted-foreground text-sm">

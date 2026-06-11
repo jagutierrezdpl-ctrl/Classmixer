@@ -1,51 +1,71 @@
-import { createClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
 import type { EmailOtpType } from "@supabase/supabase-js"
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get("code")
   const token_hash = searchParams.get("token_hash")
   const type = searchParams.get("type") as EmailOtpType | null
   const next = searchParams.get("next") ?? "/dashboard"
 
-  const supabase = await createClient()
+  // Build a mutable redirect response so we can attach cookies to it
+  const makeRedirect = (url: string) => {
+    const res = NextResponse.redirect(url)
+    return res
+  }
 
-  // Email OTP: signup confirmation, password recovery, invite
+  const buildSupabase = (response: NextResponse) =>
+    createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options)
+            })
+          },
+        },
+      }
+    )
+
+  // Email OTP: invite or password recovery
   if (token_hash && type) {
+    const response = makeRedirect(`${origin}/login?error=auth_callback`)
+    const supabase = buildSupabase(response)
+
     const { data: { user }, error } = await supabase.auth.verifyOtp({ token_hash, type })
 
     if (!error && user) {
-      // Recovery → always go to set-password
       if (type === "recovery") {
-        return NextResponse.redirect(`${origin}/set-password`)
+        response.headers.set("Location", `${origin}/set-password`)
+        return response
       }
-
-      // Invite → go to set-password so they create their password
       if (type === "invite") {
-        return NextResponse.redirect(`${origin}/set-password?invite=1`)
+        response.headers.set("Location", `${origin}/set-password?invite=1`)
+        return response
       }
-
-      // Regular signup confirmation
-      const { data: profile } = await supabase
-        .from("users")
-        .select("id")
-        .eq("id", user.id)
-        .single()
-
-      if (!profile) {
-        return NextResponse.redirect(`${origin}/pending`)
-      }
-      return NextResponse.redirect(`${origin}${next}`)
+      // Regular email confirmation
+      response.headers.set("Location", `${origin}${next}`)
+      return response
     }
 
-    return NextResponse.redirect(`${origin}/login?error=email_confirm_failed`)
+    return response
   }
 
-  // OAuth / PKCE code exchange
+  // PKCE / OAuth code exchange
   if (code) {
+    const response = makeRedirect(`${origin}/login?error=auth_callback`)
+    const supabase = buildSupabase(response)
+
     const { data: { user }, error } = await supabase.auth.exchangeCodeForSession(code)
+
     if (!error && user) {
+      // Staff user (has a users row) → go to next or dashboard
       const { data: profile } = await supabase
         .from("users")
         .select("id")
@@ -53,10 +73,15 @@ export async function GET(request: Request) {
         .single()
 
       if (!profile) {
-        return NextResponse.redirect(`${origin}/pending`)
+        response.headers.set("Location", `${origin}/pending`)
+        return response
       }
-      return NextResponse.redirect(`${origin}${next}`)
+
+      response.headers.set("Location", `${origin}${next}`)
+      return response
     }
+
+    return response
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth_callback`)
