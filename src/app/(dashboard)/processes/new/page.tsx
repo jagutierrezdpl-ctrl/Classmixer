@@ -14,6 +14,26 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2, ArrowLeft, Shuffle, Network, CheckCircle2, AlertTriangle, Users } from "lucide-react"
 import Link from "next/link"
 
+const SELECT_CLASS = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+
+function buildSchoolYears() {
+  const years: string[] = []
+  for (let y = 2023; y <= 2028; y++) years.push(`${y}-${y + 1}`)
+  return years
+}
+const SCHOOL_YEARS = buildSchoolYears()
+
+const EDUCATION_LEVELS = [
+  "Infantil 3 años", "Infantil 4 años", "Infantil 5 años",
+  "1º Primaria", "2º Primaria", "3º Primaria",
+  "4º Primaria", "5º Primaria", "6º Primaria",
+  "1º ESO", "2º ESO", "3º ESO", "4º ESO",
+  "1º Bachillerato", "2º Bachillerato",
+  "1º FP Básica", "2º FP Básica",
+  "1º CFGM", "2º CFGM",
+  "1º CFGS", "2º CFGS",
+]
+
 const PROCESS_TYPES = [
   {
     value: "mezcla" as const,
@@ -200,7 +220,12 @@ export default function NewProcessPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="school_year">Curso escolar *</Label>
-              <Input id="school_year" placeholder="Ej: 2025-2026" {...register("school_year")} />
+              <select id="school_year" {...register("school_year")} className={SELECT_CLASS}>
+                <option value="">Selecciona un curso</option>
+                {SCHOOL_YEARS.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
               {errors.school_year && <p className="text-xs text-destructive">{errors.school_year.message}</p>}
             </div>
 
@@ -208,13 +233,23 @@ export default function NewProcessPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="source_level">{isSociograma ? "Nivel / Etapa *" : "Nivel de origen *"}</Label>
-                <Input id="source_level" placeholder="Ej: 6º Primaria" {...register("source_level")} />
+                <select id="source_level" {...register("source_level")} className={SELECT_CLASS}>
+                  <option value="">Selecciona un nivel</option>
+                  {EDUCATION_LEVELS.map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
                 {errors.source_level && <p className="text-xs text-destructive">{errors.source_level.message}</p>}
               </div>
               {!isSociograma && (
                 <div className="space-y-1.5">
                   <Label htmlFor="target_level">Nivel destino *</Label>
-                  <Input id="target_level" placeholder="Ej: 1º ESO" {...register("target_level")} />
+                  <select id="target_level" {...register("target_level")} className={SELECT_CLASS}>
+                    <option value="">Selecciona un nivel</option>
+                    {EDUCATION_LEVELS.map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
                   {errors.target_level && <p className="text-xs text-destructive">{errors.target_level.message}</p>}
                 </div>
               )}

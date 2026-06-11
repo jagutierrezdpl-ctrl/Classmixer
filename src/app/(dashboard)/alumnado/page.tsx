@@ -10,9 +10,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter
 } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Search, User, ChevronRight, Loader2,
-  Upload, Download, Users, LayoutGrid, AlertTriangle
+  Upload, Download, Users, LayoutGrid, AlertTriangle, Plus
 } from "lucide-react"
 import Link from "next/link"
 
@@ -47,6 +48,16 @@ export default function AlumnadoPage() {
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
+
+  // New student dialog
+  const [newStudentOpen, setNewStudentOpen] = useState(false)
+  const [newStudentSaving, setNewStudentSaving] = useState(false)
+  const [newStudentError, setNewStudentError] = useState<string | null>(null)
+  const [newStudentForm, setNewStudentForm] = useState({
+    first_name: "", last_name: "", external_id: "",
+    current_class: "", gender: "", average_grade: "",
+    academic_level: "", behavior_level: "", needs_type: "", observations: "",
+  })
 
   // Import dialog
   const [importOpen, setImportOpen] = useState(false)
@@ -124,11 +135,48 @@ export default function AlumnadoPage() {
     setImportError(null)
   }
 
+  function handleNewStudentClose() {
+    setNewStudentOpen(false)
+    setNewStudentError(null)
+    setNewStudentForm({
+      first_name: "", last_name: "", external_id: "",
+      current_class: "", gender: "", average_grade: "",
+      academic_level: "", behavior_level: "", needs_type: "", observations: "",
+    })
+  }
+
+  async function handleCreateStudent(e: React.FormEvent) {
+    e.preventDefault()
+    setNewStudentSaving(true)
+    setNewStudentError(null)
+    try {
+      const res = await fetch("/api/student-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newStudentForm),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setNewStudentError(data.error ?? "Error al crear el alumno")
+      } else {
+        handleNewStudentClose()
+        loadProfiles()
+        loadGroups()
+      }
+    } catch {
+      setNewStudentError("Error de red al guardar")
+    } finally {
+      setNewStudentSaving(false)
+    }
+  }
+
   const GENDER_COLORS: Record<string, string> = {
     F: "bg-pink-100 text-pink-700",
     M: "bg-blue-100 text-blue-700",
     Otro: "bg-purple-100 text-purple-700",
   }
+
+  const SEL = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 
   return (
     <div className="p-8 max-w-5xl">
@@ -145,8 +193,11 @@ export default function AlumnadoPage() {
               <Download className="w-4 h-4 mr-2" />Plantilla
             </a>
           </Button>
-          <Button size="sm" onClick={() => setImportOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
             <Upload className="w-4 h-4 mr-2" />Importar Excel
+          </Button>
+          <Button size="sm" onClick={() => setNewStudentOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />Nuevo alumno
           </Button>
         </div>
       </div>
@@ -340,6 +391,148 @@ export default function AlumnadoPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* New student dialog */}
+      <Dialog open={newStudentOpen} onOpenChange={open => { if (!open) handleNewStudentClose() }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nuevo alumno</DialogTitle>
+            <DialogDescription>Crea un perfil de alumno manualmente.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateStudent} className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Nombre *</label>
+                <Input
+                  value={newStudentForm.first_name}
+                  onChange={e => setNewStudentForm(f => ({ ...f, first_name: e.target.value }))}
+                  placeholder="Nombre"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Apellidos *</label>
+                <Input
+                  value={newStudentForm.last_name}
+                  onChange={e => setNewStudentForm(f => ({ ...f, last_name: e.target.value }))}
+                  placeholder="Apellidos"
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">ID externo</label>
+                <Input
+                  value={newStudentForm.external_id}
+                  onChange={e => setNewStudentForm(f => ({ ...f, external_id: e.target.value }))}
+                  placeholder="Ej: A001"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Clase actual</label>
+                <select
+                  value={newStudentForm.current_class}
+                  onChange={e => setNewStudentForm(f => ({ ...f, current_class: e.target.value }))}
+                  className={SEL}
+                >
+                  <option value="">Sin asignar</option>
+                  {groups.map(g => (
+                    <option key={g.name} value={g.name}>{g.name} ({g.count} alumnos)</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Género</label>
+                <select
+                  value={newStudentForm.gender}
+                  onChange={e => setNewStudentForm(f => ({ ...f, gender: e.target.value }))}
+                  className={SEL}
+                >
+                  <option value="">No especificado</option>
+                  <option value="F">F</option>
+                  <option value="M">M</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Nota media</label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={10}
+                  step={0.1}
+                  value={newStudentForm.average_grade}
+                  onChange={e => setNewStudentForm(f => ({ ...f, average_grade: e.target.value }))}
+                  placeholder="0 – 10"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Nivel académico</label>
+                <select
+                  value={newStudentForm.academic_level}
+                  onChange={e => setNewStudentForm(f => ({ ...f, academic_level: e.target.value }))}
+                  className={SEL}
+                >
+                  <option value="">—</option>
+                  {["Alto", "Medio-alto", "Medio", "Medio-bajo", "Bajo"].map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Conducta</label>
+                <select
+                  value={newStudentForm.behavior_level}
+                  onChange={e => setNewStudentForm(f => ({ ...f, behavior_level: e.target.value }))}
+                  className={SEL}
+                >
+                  <option value="">—</option>
+                  {["Positiva", "Normal", "Seguimiento", "Conflictiva"].map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Necesidades educativas</label>
+              <select
+                value={newStudentForm.needs_type}
+                onChange={e => setNewStudentForm(f => ({ ...f, needs_type: e.target.value }))}
+                className={SEL}
+              >
+                <option value="">—</option>
+                {["No", "Sí", "ACNEAE", "NEE", "Refuerzo", "Altas capacidades", "Observación interna"].map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Observaciones</label>
+              <Textarea
+                value={newStudentForm.observations}
+                onChange={e => setNewStudentForm(f => ({ ...f, observations: e.target.value }))}
+                placeholder="Observaciones internas..."
+                rows={2}
+              />
+            </div>
+            {newStudentError && (
+              <p className="text-sm text-destructive">{newStudentError}</p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleNewStudentClose}>Cancelar</Button>
+              <Button type="submit" disabled={newStudentSaving}>
+                {newStudentSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Crear alumno
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Import dialog */}
       <Dialog open={importOpen} onOpenChange={open => { if (!open) handleImportClose() }}>

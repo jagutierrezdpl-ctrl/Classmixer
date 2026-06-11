@@ -2,6 +2,42 @@ import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
+export async function POST(request: Request) {
+  const profile = await getUserProfile()
+  if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+
+  const body = await request.json()
+  const { first_name, last_name, external_id, current_class, gender, average_grade, academic_level, behavior_level, needs_type, observations } = body
+
+  if (!first_name?.trim() || !last_name?.trim()) {
+    return NextResponse.json({ error: "Nombre y apellidos son obligatorios" }, { status: 400 })
+  }
+
+  const supabase = createServiceClient()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from("student_profiles")
+    .insert({
+      center_id: profile.center_id,
+      first_name: first_name.trim(),
+      last_name: last_name.trim(),
+      external_id: external_id?.trim() || null,
+      current_class: current_class?.trim() || null,
+      gender: gender || null,
+      average_grade: average_grade !== "" && average_grade != null ? parseFloat(average_grade) : null,
+      academic_level: academic_level || null,
+      behavior_level: behavior_level || null,
+      needs_type: needs_type || null,
+      observations: observations?.trim() || null,
+    })
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data, { status: 201 })
+}
+
 export async function GET(request: Request) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
