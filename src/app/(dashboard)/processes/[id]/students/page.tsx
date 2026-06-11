@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use, useEffect } from "react"
+import { useState, use, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,21 +14,107 @@ import Link from "next/link"
 import type { ImportPreview, Student } from "@/types"
 import LoadFromProfilesDialog from "@/components/students/LoadFromProfilesDialog"
 
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning"
+// ── Color maps ────────────────────────────────────────────────────────────────
 
-const BEHAVIOR_COLORS: Record<string, BadgeVariant> = {
-  Positiva: "success",
-  Normal: "secondary",
-  Seguimiento: "warning",
-  Conflictiva: "destructive",
+const BEHAVIOR_STYLES: Record<string, string> = {
+  Positiva:    "bg-green-100 text-green-800 border-green-200 hover:bg-green-200",
+  Normal:      "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200",
+  Seguimiento: "bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200",
+  Conflictiva: "bg-red-100 text-red-800 border-red-200 hover:bg-red-200",
 }
 
-const LEVEL_COLORS: Record<string, BadgeVariant> = {
-  Alto: "success",
-  "Medio-alto": "secondary",
-  Medio: "secondary",
-  "Medio-bajo": "warning",
-  Bajo: "destructive",
+const NEEDS_STYLES: Record<string, string> = {
+  No:                    "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200",
+  Sí:                    "bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200",
+  ACNEAE:                "bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200",
+  NEE:                   "bg-pink-100 text-pink-800 border-pink-200 hover:bg-pink-200",
+  Refuerzo:              "bg-cyan-100 text-cyan-800 border-cyan-200 hover:bg-cyan-200",
+  "Altas capacidades":   "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200",
+  "Observación interna": "bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200",
+}
+
+const BEHAVIOR_OPTIONS = ["Positiva", "Normal", "Seguimiento", "Conflictiva"]
+const NEEDS_OPTIONS = ["No", "Sí", "ACNEAE", "NEE", "Refuerzo", "Altas capacidades", "Observación interna"]
+
+// ── Inline editable badge ─────────────────────────────────────────────────────
+
+function EditableBadge({
+  value,
+  options,
+  styles,
+  emptyLabel,
+  onSave,
+}: {
+  value: string | null
+  options: string[]
+  styles: Record<string, string>
+  emptyLabel: string
+  onSave: (v: string) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handle)
+    return () => document.removeEventListener("mousedown", handle)
+  }, [open])
+
+  async function handleSelect(v: string) {
+    setSaving(true)
+    setOpen(false)
+    await onSave(v)
+    setSaving(false)
+  }
+
+  const displayStyle = value ? (styles[value] ?? "bg-gray-100 text-gray-600 border-gray-200") : "bg-gray-50 text-gray-400 border-dashed border-gray-300 hover:bg-gray-100"
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={() => setOpen(o => !o)}
+        disabled={saving}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border cursor-pointer transition-colors select-none ${displayStyle}`}
+        title="Clic para cambiar"
+      >
+        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+        {value ?? emptyLabel}
+        <span className="opacity-40 text-[10px]">▾</span>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 py-1 bg-white rounded-lg shadow-lg border min-w-[140px]">
+          {options.map(opt => (
+            <button
+              key={opt}
+              onClick={() => handleSelect(opt)}
+              className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-2 ${
+                opt === value ? "bg-primary/10 text-primary" : "hover:bg-muted/60"
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${
+                styles[opt]?.includes("green") ? "bg-green-500" :
+                styles[opt]?.includes("amber") ? "bg-amber-500" :
+                styles[opt]?.includes("red") ? "bg-red-500" :
+                styles[opt]?.includes("blue") ? "bg-blue-500" :
+                styles[opt]?.includes("purple") ? "bg-purple-500" :
+                styles[opt]?.includes("pink") ? "bg-pink-500" :
+                styles[opt]?.includes("cyan") ? "bg-cyan-500" :
+                styles[opt]?.includes("emerald") ? "bg-emerald-500" :
+                styles[opt]?.includes("orange") ? "bg-orange-500" :
+                "bg-gray-400"
+              }`} />
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function StudentsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -209,6 +295,19 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
     } else {
       setSelected(new Set(filteredStudents.map(s => s.id)))
     }
+  }
+
+  async function updateStudent(studentId: string, field: string, value: string) {
+    const res = await fetch(`/api/processes/${id}/students/${studentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value }),
+    })
+    if (!res.ok) {
+      toast.error("Error al guardar")
+      return
+    }
+    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, [field]: value } : s))
   }
 
   const filteredStudents = students.filter(s => {
@@ -678,22 +777,38 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
                     <td className="px-4 py-3"><Badge variant="outline">{s.current_class}</Badge></td>
                     <td className="px-4 py-3 text-muted-foreground">{s.gender}</td>
                     <td className="px-4 py-3 font-medium">{s.average_grade}</td>
-                    <td className="px-4 py-3">
-                      {s.academic_level && (
-                        <Badge variant={LEVEL_COLORS[s.academic_level] ?? "secondary"} className="text-xs">
-                          {s.academic_level}
-                        </Badge>
-                      )}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <EditableBadge
+                        value={s.academic_level ?? null}
+                        options={["Alto", "Medio-alto", "Medio", "Medio-bajo", "Bajo"]}
+                        styles={{
+                          Alto:         "bg-green-100 text-green-800 border-green-200 hover:bg-green-200",
+                          "Medio-alto": "bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-200",
+                          Medio:        "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200",
+                          "Medio-bajo": "bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200",
+                          Bajo:         "bg-red-100 text-red-800 border-red-200 hover:bg-red-200",
+                        }}
+                        emptyLabel="Sin definir"
+                        onSave={v => updateStudent(s.id, "academic_level", v)}
+                      />
                     </td>
-                    <td className="px-4 py-3">
-                      {s.behavior_level && (
-                        <Badge variant={BEHAVIOR_COLORS[s.behavior_level] ?? "secondary"} className="text-xs">
-                          {s.behavior_level}
-                        </Badge>
-                      )}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <EditableBadge
+                        value={s.behavior_level ?? null}
+                        options={BEHAVIOR_OPTIONS}
+                        styles={BEHAVIOR_STYLES}
+                        emptyLabel="Sin definir"
+                        onSave={v => updateStudent(s.id, "behavior_level", v)}
+                      />
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {s.needs_type ?? "—"}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <EditableBadge
+                        value={s.needs_type ?? null}
+                        options={NEEDS_OPTIONS}
+                        styles={NEEDS_STYLES}
+                        emptyLabel="Sin definir"
+                        onSave={v => updateStudent(s.id, "needs_type", v)}
+                      />
                     </td>
                   </tr>
                 ))}
