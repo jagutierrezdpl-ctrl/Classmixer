@@ -153,7 +153,7 @@ export default function AlumnadoPage() {
     setNewStudentForm({
       first_name: "", last_name: "", external_id: "",
       current_class: "", gender: "", average_grade: "",
-      academic_level: "", behavior_level: "", needs_type: "", observations: "",
+      academic_level: "", behavior_level: "", needs_type: "", email: "", observations: "",
     })
   }
 
