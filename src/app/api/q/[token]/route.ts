@@ -146,31 +146,48 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     .eq("token", token)
 
   // Link to student_profile if not already linked
-  // This ensures token-based responses are tracked historically, same as Google login
+  // Ensures token-based responses are tracked historically, same as Google login
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: studentRow } = await (supabase as any)
     .from("students")
-    .select("id, first_name, last_name, student_profile_id, processes!inner(center_id)")
+    .select("id, first_name, last_name, email, student_profile_id, processes!inner(center_id)")
     .eq("id", tokenData.student_id)
     .single()
 
   if (studentRow && !studentRow.student_profile_id) {
     const centerId = studentRow.processes?.center_id
     if (centerId) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: profile } = await (supabase as any)
-        .from("student_profiles")
-        .select("id")
-        .eq("center_id", centerId)
-        .eq("first_name", studentRow.first_name)
-        .eq("last_name", studentRow.last_name)
-        .maybeSingle()
+      let profileId: string | null = null
 
-      if (profile) {
+      // 1. Match by email — reliable even with duplicate names
+      if (studentRow.email) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: byEmail } = await (supabase as any)
+          .from("student_profiles")
+          .select("id")
+          .eq("center_id", centerId)
+          .eq("email", studentRow.email)
+          .maybeSingle()
+        if (byEmail) profileId = byEmail.id
+      }
+
+      // 2. Fallback: match by name only if exactly one result (avoids wrong links with same-name students)
+      if (!profileId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: byName } = await (supabase as any)
+          .from("student_profiles")
+          .select("id")
+          .eq("center_id", centerId)
+          .eq("first_name", studentRow.first_name)
+          .eq("last_name", studentRow.last_name)
+        if (byName?.length === 1) profileId = byName[0].id
+      }
+
+      if (profileId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
           .from("students")
-          .update({ student_profile_id: profile.id })
+          .update({ student_profile_id: profileId })
           .eq("id", tokenData.student_id)
       }
     }
