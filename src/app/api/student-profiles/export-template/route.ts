@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const HEADERS = [
     "id_alumno", "nombre", "apellidos", "clase_actual",
     "genero", "nivel_academico", "conducta", "necesidades",
-    "nota_media", "observaciones",
+    "nota_media", "email", "observaciones",
   ]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,11 +42,12 @@ export async function GET(request: Request) {
     s.behavior_level ?? "",
     s.needs_type ?? "",
     "",   // nota_media — to be filled in
+    s.email ?? "",
     s.observations ?? "",
   ])
 
   // Always include headers; add one example row when no students exist
-  const exampleRow = ["A001", "María", "García López", "6A", "F", "Medio", "Normal", "No", "7.5", ""]
+  const exampleRow = ["A001", "María", "García López", "6A", "F", "Medio", "Normal", "No", "7.5", "maria.garcia@colegio.es", ""]
   const aoa = [HEADERS, ...(dataRows.length > 0 ? dataRows : [exampleRow])]
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
   ws["!cols"] = [
     { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 12 },
     { wch: 8 },  { wch: 14 }, { wch: 14 }, { wch: 18 },
-    { wch: 10 }, { wch: 30 },
+    { wch: 10 }, { wch: 28 }, { wch: 30 },
   ]
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" })

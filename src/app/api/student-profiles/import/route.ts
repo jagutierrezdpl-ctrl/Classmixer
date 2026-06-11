@@ -59,6 +59,7 @@ export async function POST(request: Request) {
     const needs_type      = VALID_NEEDS.includes(needs_raw) ? needs_raw : null
     const observations    = pick(r, "observaciones", "observations", "notas")
     const school_year     = pick(r, "curso_escolar", "school_year", "curso")
+    const email           = pick(r, "email", "correo", "email_alumno")
 
     return {
       center_id: profile.center_id,
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
       needs_type,
       observations: observations || null,
       school_year: school_year || null,
+      email: email || null,
       updated_at: new Date().toISOString(),
     }
   }).filter(r => r.first_name && r.last_name)
