@@ -25,21 +25,31 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (students ?? []).map((s: any) => ({
-    id_alumno:        s.external_id ?? "",
-    nombre:           s.first_name,
-    apellidos:        s.last_name,
-    clase_actual:     s.current_class ?? "",
-    genero:           s.gender ?? "",
-    nivel_academico:  s.academic_level ?? "",
-    conducta:         s.behavior_level ?? "",
-    necesidades:      s.needs_type ?? "",
-    nota_media:       "",   // to be filled in
-    observaciones:    s.observations ?? "",
-  }))
+  const HEADERS = [
+    "id_alumno", "nombre", "apellidos", "clase_actual",
+    "genero", "nivel_academico", "conducta", "necesidades",
+    "nota_media", "observaciones",
+  ]
 
-  const ws = XLSX.utils.json_to_sheet(rows)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dataRows = (students ?? []).map((s: any) => [
+    s.external_id ?? "",
+    s.first_name,
+    s.last_name,
+    s.current_class ?? "",
+    s.gender ?? "",
+    s.academic_level ?? "",
+    s.behavior_level ?? "",
+    s.needs_type ?? "",
+    "",   // nota_media — to be filled in
+    s.observations ?? "",
+  ])
+
+  // Always include headers; add one example row when no students exist
+  const exampleRow = ["A001", "María", "García López", "6A", "F", "Medio", "Normal", "No", "7.5", ""]
+  const aoa = [HEADERS, ...(dataRows.length > 0 ? dataRows : [exampleRow])]
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, "Alumnos")
 
