@@ -138,6 +138,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               first_name: r.first_name,
               last_name: r.last_name,
               email: r.email ?? null,
+              gender: r.gender ?? null,
+              current_class: r.current_class ?? null,
+              average_grade: r.average_grade ?? null,
+              academic_level: r.academic_level ?? null,
+              behavior_level: r.behavior_level ?? null,
+              needs_type: r.needs_type ?? null,
+              observations: r.observations ?? null,
             }))
           )
           .select("id, external_id")

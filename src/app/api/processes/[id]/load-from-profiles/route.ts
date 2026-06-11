@@ -78,6 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       last_name: p.last_name,
       current_class: p.current_class ?? "",
       gender: p.gender ?? null,
+      average_grade: p.average_grade != null ? p.average_grade : 5.0,
       academic_level: p.academic_level ?? null,
       behavior_level: p.behavior_level ?? null,
       needs_type: p.needs_type ?? null,

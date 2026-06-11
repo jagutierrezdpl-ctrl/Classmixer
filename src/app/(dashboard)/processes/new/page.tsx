@@ -4,14 +4,14 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createProcessSchema, type CreateProcessInput } from "@/schemas"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2, ArrowLeft, Shuffle, Network, CheckCircle2, AlertTriangle, Users } from "lucide-react"
+import { Loader2, ArrowLeft, Shuffle, Network, CheckCircle2, AlertTriangle, Users, Plus, X } from "lucide-react"
 import Link from "next/link"
 
 import { getCurrentSchoolYear, getSchoolYears } from "@/utils/school-year"
@@ -61,6 +61,10 @@ export default function NewProcessPage() {
   const [groups, setGroups] = useState<Group[]>([])
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedSourceGroups, setSelectedSourceGroups] = useState<string[]>([])
+  const [targetGroups, setTargetGroups] = useState<string[]>([])
+  const [newGroupInput, setNewGroupInput] = useState("")
+  const [showNewGroupInput, setShowNewGroupInput] = useState(false)
+  const newGroupInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<CreateProcessInput>({
@@ -88,6 +92,38 @@ export default function NewProcessPage() {
     setSelectedSourceGroups(prev => {
       const next = prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
       setValue("source_groups", next.join(", "))
+      return next
+    })
+  }
+
+  function toggleTargetGroup(name: string) {
+    setTargetGroups(prev => {
+      const next = prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
+      setValue("target_groups", next.join(", "))
+      setValue("target_class_count", next.length || 2)
+      return next
+    })
+  }
+
+  function addNewTargetGroup() {
+    const name = newGroupInput.trim().toUpperCase()
+    if (!name) return
+    setTargetGroups(prev => {
+      if (prev.includes(name)) return prev
+      const next = [...prev, name]
+      setValue("target_groups", next.join(", "))
+      setValue("target_class_count", next.length)
+      return next
+    })
+    setNewGroupInput("")
+    setShowNewGroupInput(false)
+  }
+
+  function removeTargetGroup(name: string) {
+    setTargetGroups(prev => {
+      const next = prev.filter(g => g !== name)
+      setValue("target_groups", next.join(", "))
+      setValue("target_class_count", next.length || 2)
       return next
     })
   }
@@ -314,19 +350,117 @@ export default function NewProcessPage() {
           <>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Grupos destino (nuevas clases) *</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="target_groups">Nombres de las nuevas clases</Label>
-                  <Input
-                    id="target_groups"
-                    placeholder="Ej: 1A, 1B, 1C"
-                    {...register("target_groups")}
-                  />
-                  <p className="text-xs text-muted-foreground">Separados por comas. Ej: 1A, 1B</p>
-                  {errors.target_groups && <p className="text-xs text-destructive">{errors.target_groups.message}</p>}
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Grupos destino (nuevas clases) *</CardTitle>
+                  {targetGroups.length > 0 && (
+                    <span className="text-xs text-muted-foreground">{targetGroups.length} {targetGroups.length === 1 ? "clase" : "clases"}</span>
+                  )}
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <input type="hidden" {...register("target_groups")} />
+
+                {/* Existing groups as quick-select */}
+                {groups.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Selecciona grupos existentes o crea nuevos:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {groups.map(g => {
+                        const selected = targetGroups.includes(g.name)
+                        return (
+                          <button
+                            key={g.name}
+                            type="button"
+                            onClick={() => toggleTargetGroup(g.name)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
+                              selected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background hover:border-primary/50 hover:bg-primary/5"
+                            }`}
+                          >
+                            {selected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                            {g.name}
+                            <span className="text-xs opacity-60">({g.count})</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected target groups chips */}
+                {targetGroups.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Clases destino seleccionadas:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {targetGroups.map(g => (
+                        <span
+                          key={g}
+                          className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-sm font-semibold bg-primary/10 text-primary border border-primary/20"
+                        >
+                          {g}
+                          <button
+                            type="button"
+                            onClick={() => removeTargetGroup(g)}
+                            className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-primary/20 transition-colors"
+                            title={`Eliminar ${g}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Add new group */}
+                <div className="flex items-center gap-2">
+                  {showNewGroupInput ? (
+                    <>
+                      <Input
+                        ref={newGroupInputRef}
+                        value={newGroupInput}
+                        onChange={e => setNewGroupInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") { e.preventDefault(); addNewTargetGroup() }
+                          if (e.key === "Escape") { setShowNewGroupInput(false); setNewGroupInput("") }
+                        }}
+                        placeholder="Ej: 1A"
+                        className="h-8 w-32 text-sm uppercase"
+                        autoFocus
+                        maxLength={6}
+                      />
+                      <Button type="button" size="sm" className="h-8" onClick={addNewTargetGroup} disabled={!newGroupInput.trim()}>
+                        Añadir
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewGroupInput(false); setNewGroupInput("") }}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5"
+                      onClick={() => setShowNewGroupInput(true)}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Nuevo grupo
+                    </Button>
+                  )}
+                </div>
+
+                {targetGroups.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Selecciona grupos existentes arriba o crea nuevos con el botón.
+                  </p>
+                )}
+                {errors.target_groups && <p className="text-xs text-destructive">{errors.target_groups.message}</p>}
               </CardContent>
             </Card>
 

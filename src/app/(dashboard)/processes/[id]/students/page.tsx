@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   Upload, Download, CheckCircle, XCircle, AlertTriangle,
-  Users, Search, ArrowLeft, Loader2, FileSpreadsheet, RefreshCw, Trash2,
+  Users, Search, ArrowLeft, Loader2, FileSpreadsheet, RefreshCw, Trash2, Filter, X,
 } from "lucide-react"
 import Link from "next/link"
 import type { ImportPreview, Student } from "@/types"
@@ -135,6 +135,18 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
   const [importing, setImporting] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [search, setSearch] = useState("")
+  const [filterClasses, setFilterClasses] = useState<string[]>([])
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!filterOpen) return
+    function handle(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false)
+    }
+    document.addEventListener("mousedown", handle)
+    return () => document.removeEventListener("mousedown", handle)
+  }, [filterOpen])
 
   // Load students on mount
   useEffect(() => {
@@ -310,9 +322,13 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, [field]: value } : s))
   }
 
+  const availableClasses = [...new Set(students.map(s => s.current_class).filter(Boolean))].sort()
+
   const filteredStudents = students.filter(s => {
     const q = search.toLowerCase()
-    return !q || `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) || s.current_class.toLowerCase().includes(q)
+    const matchesSearch = !q || `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) || s.current_class.toLowerCase().includes(q)
+    const matchesClass = filterClasses.length === 0 || filterClasses.includes(s.current_class)
+    return matchesSearch && matchesClass
   })
 
   // ── IMPORT VIEW ─────────────────────────────────────────────────────────────
@@ -648,7 +664,11 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Alumnos</h1>
-            <p className="text-muted-foreground text-sm">{students.length} alumnos en este proceso</p>
+            <p className="text-muted-foreground text-sm">
+              {filteredStudents.length !== students.length
+                ? `${filteredStudents.length} de ${students.length} alumnos`
+                : `${students.length} alumnos en este proceso`}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -706,16 +726,87 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar alumno o clase..."
+                placeholder="Buscar alumno..."
                 className="pl-9"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+
+            {/* Group/class filter dropdown */}
+            {availableClasses.length > 0 && (
+              <div ref={filterRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setFilterOpen(o => !o)}
+                  className={`inline-flex items-center gap-2 h-9 px-3 rounded-md border text-sm font-medium transition-colors ${
+                    filterClasses.length > 0
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input bg-background hover:bg-muted/50 text-muted-foreground"
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                  {filterClasses.length > 0 ? (
+                    <>Grupos: {filterClasses.join(", ")}</>
+                  ) : (
+                    "Filtrar por grupo"
+                  )}
+                </button>
+
+                {filterOpen && (
+                  <div className="absolute z-50 top-full left-0 mt-1 bg-white rounded-lg shadow-lg border min-w-[180px] py-1">
+                    <div className="flex items-center justify-between px-3 pt-1 pb-2 border-b">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Grupos</span>
+                      {filterClasses.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setFilterClasses([])}
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                        >
+                          <X className="w-3 h-3" /> Limpiar
+                        </button>
+                      )}
+                    </div>
+                    {availableClasses.map(cls => {
+                      const checked = filterClasses.includes(cls)
+                      const count = students.filter(s => s.current_class === cls).length
+                      return (
+                        <label
+                          key={cls}
+                          className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded border-border w-4 h-4"
+                            checked={checked}
+                            onChange={() => setFilterClasses(prev =>
+                              checked ? prev.filter(c => c !== cls) : [...prev, cls]
+                            )}
+                          />
+                          <span className="text-sm font-medium flex-1">{cls}</span>
+                          <span className="text-xs text-muted-foreground">{count}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Active filter chips */}
+            {filterClasses.map(cls => (
+              <span key={cls} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                {cls}
+                <button type="button" onClick={() => setFilterClasses(prev => prev.filter(c => c !== cls))} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-primary/20">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+
             {selected.size > 0 && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20">
                 <span className="text-sm font-medium text-destructive">{selected.size} seleccionados</span>
