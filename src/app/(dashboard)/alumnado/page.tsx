@@ -16,6 +16,10 @@ import {
   Upload, Download, Users, LayoutGrid, AlertTriangle, Plus, Trash2
 } from "lucide-react"
 import Link from "next/link"
+import { getCurrentSchoolYear, getSchoolYears } from "@/utils/school-year"
+
+const SCHOOL_YEARS = getSchoolYears(1, 3)
+const DEFAULT_SCHOOL_YEAR = getCurrentSchoolYear()
 
 interface StudentProfile {
   id: string
@@ -53,7 +57,7 @@ export default function AlumnadoPage() {
   const [newGroupOpen, setNewGroupOpen] = useState(false)
   const [newGroupCourse, setNewGroupCourse] = useState("")
   const [newGroupLetter, setNewGroupLetter] = useState("A")
-  const [newGroupYear, setNewGroupYear] = useState("")
+  const [newGroupYear, setNewGroupYear] = useState(DEFAULT_SCHOOL_YEAR)
   const [newGroupSaving, setNewGroupSaving] = useState(false)
   const [newGroupError, setNewGroupError] = useState<string | null>(null)
 
@@ -462,7 +466,7 @@ export default function AlumnadoPage() {
       </Tabs>
 
       {/* New group dialog */}
-      <Dialog open={newGroupOpen} onOpenChange={open => { if (!open) { setNewGroupOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupError(null) } }}>
+      <Dialog open={newGroupOpen} onOpenChange={open => { if (!open) { setNewGroupOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupYear(DEFAULT_SCHOOL_YEAR); setNewGroupError(null) } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Nuevo grupo</DialogTitle>
@@ -542,7 +546,7 @@ export default function AlumnadoPage() {
                 className={SEL}
               >
                 <option value="">Sin especificar</option>
-                {["2023-2024","2024-2025","2025-2026","2026-2027","2027-2028"].map(y => (
+                {SCHOOL_YEARS.map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
@@ -550,7 +554,7 @@ export default function AlumnadoPage() {
 
             {newGroupError && <p className="text-sm text-destructive">{newGroupError}</p>}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setNewGroupOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupError(null) }}>
+              <Button type="button" variant="outline" onClick={() => { setNewGroupOpen(false); setNewGroupCourse(""); setNewGroupLetter("A"); setNewGroupYear(DEFAULT_SCHOOL_YEAR); setNewGroupError(null) }}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={newGroupSaving || !newGroupCourse}>

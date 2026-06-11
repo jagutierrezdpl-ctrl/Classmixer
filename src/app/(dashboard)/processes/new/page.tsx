@@ -14,14 +14,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2, ArrowLeft, Shuffle, Network, CheckCircle2, AlertTriangle, Users } from "lucide-react"
 import Link from "next/link"
 
+import { getCurrentSchoolYear, getSchoolYears } from "@/utils/school-year"
+
 const SELECT_CLASS = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
 
-function buildSchoolYears() {
-  const years: string[] = []
-  for (let y = 2023; y <= 2028; y++) years.push(`${y}-${y + 1}`)
-  return years
-}
-const SCHOOL_YEARS = buildSchoolYears()
+const SCHOOL_YEARS = getSchoolYears(1, 3)
+const DEFAULT_SCHOOL_YEAR = getCurrentSchoolYear()
 
 const EDUCATION_LEVELS = [
   "Infantil 3 años", "Infantil 4 años", "Infantil 5 años",
@@ -69,6 +67,7 @@ export default function NewProcessPage() {
     resolver: zodResolver(createProcessSchema),
     defaultValues: {
       process_type: "mezcla",
+      school_year: DEFAULT_SCHOOL_YEAR,
       target_class_count: 2,
       min_class_size: 20,
       max_class_size: 30,
