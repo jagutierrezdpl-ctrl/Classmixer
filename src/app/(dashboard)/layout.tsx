@@ -9,6 +9,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!profile) redirect("/login")
 
   const supabase = await createClient()
+
+  // Redirect to change-password page if it's the user's first login
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user?.user_metadata?.must_change_password) redirect("/change-password")
+
   const { data: center } = await supabase
     .from("centers")
     .select("name")
