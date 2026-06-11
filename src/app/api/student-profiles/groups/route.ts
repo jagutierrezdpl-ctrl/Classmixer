@@ -29,8 +29,15 @@ export async function GET() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: students, error } = await query
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Also include groups registered in center_groups (even if empty)
+  // Only full-access roles see pre-created empty groups
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: centerGroups } = await (supabase as any)
+    .from("center_groups")
+    .select("name, school_year")
+    .eq("center_id", profile.center_id)
 
   // Get group-tutor assignments for this center
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,9 +46,22 @@ export async function GET() {
     .select("group_name, school_year, user_id, users(id, name, email)")
     .eq("center_id", profile.center_id)
 
-  // Build group map
+  // Build group map — seed from center_groups first so empty groups appear
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const groupMap: Record<string, any> = {}
+
+  for (const cg of (centerGroups ?? [])) {
+    groupMap[cg.name] = {
+      name: cg.name,
+      count: 0,
+      female: 0,
+      male: 0,
+      with_needs: 0,
+      school_year: cg.school_year || null,
+      tutor: null,
+      registered: true,
+    }
+  }
 
   for (const s of (students ?? [])) {
     const cls = s.current_class as string

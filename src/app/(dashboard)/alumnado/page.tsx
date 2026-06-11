@@ -13,7 +13,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import {
   Search, User, ChevronRight, Loader2,
-  Upload, Download, Users, LayoutGrid, AlertTriangle, Plus
+  Upload, Download, Users, LayoutGrid, AlertTriangle, Plus, Trash2
 } from "lucide-react"
 import Link from "next/link"
 
@@ -48,6 +48,13 @@ export default function AlumnadoPage() {
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
+
+  // New group dialog
+  const [newGroupOpen, setNewGroupOpen] = useState(false)
+  const [newGroupName, setNewGroupName] = useState("")
+  const [newGroupYear, setNewGroupYear] = useState("")
+  const [newGroupSaving, setNewGroupSaving] = useState(false)
+  const [newGroupError, setNewGroupError] = useState<string | null>(null)
 
   // New student dialog
   const [newStudentOpen, setNewStudentOpen] = useState(false)
@@ -143,6 +150,44 @@ export default function AlumnadoPage() {
       current_class: "", gender: "", average_grade: "",
       academic_level: "", behavior_level: "", needs_type: "", observations: "",
     })
+  }
+
+  async function handleCreateGroup(e: React.FormEvent) {
+    e.preventDefault()
+    setNewGroupSaving(true)
+    setNewGroupError(null)
+    try {
+      const res = await fetch("/api/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newGroupName, school_year: newGroupYear }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setNewGroupError(data.error ?? "Error al crear el grupo")
+      } else {
+        setNewGroupOpen(false)
+        setNewGroupName("")
+        setNewGroupYear("")
+        setNewGroupError(null)
+        loadGroups()
+      }
+    } catch {
+      setNewGroupError("Error de red al guardar")
+    } finally {
+      setNewGroupSaving(false)
+    }
+  }
+
+  async function handleDeleteGroup(name: string) {
+    if (!confirm(`¿Eliminar el grupo "${name}"? Solo es posible si no tiene alumnos asignados.`)) return
+    const res = await fetch(`/api/groups?name=${encodeURIComponent(name)}`, { method: "DELETE" })
+    const data = await res.json()
+    if (!res.ok) {
+      alert(data.error ?? "Error al eliminar el grupo")
+    } else {
+      loadGroups()
+    }
   }
 
   async function handleCreateStudent(e: React.FormEvent) {
@@ -339,51 +384,72 @@ export default function AlumnadoPage() {
 
         {/* GRUPOS TAB */}
         <TabsContent value="grupos">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              Crea los grupos primero y luego asigna alumnos. Los tutores se asignan desde el detalle de cada grupo.
+            </p>
+            <Button size="sm" onClick={() => setNewGroupOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />Nuevo grupo
+            </Button>
+          </div>
+
           {groupsLoading ? (
             <div className="flex items-center justify-center py-20 text-muted-foreground">
               <Loader2 className="w-6 h-6 animate-spin mr-2" />Cargando grupos...
             </div>
           ) : groups.length === 0 ? (
-            <div className="text-center py-20 text-muted-foreground">
-              No hay grupos configurados
-              <p className="text-sm mt-1">Los grupos se crean al importar alumnos con clase asignada</p>
+            <div className="text-center py-16 text-muted-foreground">
+              <LayoutGrid className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No hay grupos configurados</p>
+              <p className="text-sm mt-1">Crea grupos antes de importar alumnos</p>
+              <Button size="sm" className="mt-4" onClick={() => setNewGroupOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />Crear primer grupo
+              </Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {groups.map(g => (
                 <Card key={g.name} className="hover:bg-muted/30 transition-colors">
                   <CardContent className="py-4 px-5">
-                    <Link href={`/alumnado/grupos/${encodeURIComponent(g.name)}`} className="block">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-bold text-lg">{g.name}</h3>
-                            <Badge variant="outline">{g.count} alumnos</Badge>
-                          </div>
-                          <div className="flex gap-3 text-xs text-muted-foreground">
-                            {g.female > 0 && <span className="text-pink-600">{g.female}F</span>}
-                            {g.male > 0 && <span className="text-blue-600">{g.male}M</span>}
-                            {g.with_needs > 0 && (
-                              <span className="text-amber-600 flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" />{g.with_needs} NEE
-                              </span>
-                            )}
-                          </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <Link href={`/alumnado/grupos/${encodeURIComponent(g.name)}`} className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-bold text-lg">{g.name}</h3>
+                          <Badge variant={g.count === 0 ? "outline" : "secondary"}>
+                            {g.count === 0 ? "Vacío" : `${g.count} alumnos`}
+                          </Badge>
                         </div>
-                        <div className="text-right">
+                        <div className="flex gap-3 text-xs text-muted-foreground">
+                          {g.female > 0 && <span className="text-pink-600">{g.female}F</span>}
+                          {g.male > 0 && <span className="text-blue-600">{g.male}M</span>}
+                          {g.with_needs > 0 && (
+                            <span className="text-amber-600 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />{g.with_needs} NEE
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2">
                           {g.tutor ? (
-                            <div>
-                              <p className="text-xs text-muted-foreground">Tutor/a</p>
-                              <p className="text-sm font-medium">{g.tutor.name}</p>
-                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              Tutor/a: <span className="font-medium text-foreground">{g.tutor.name}</span>
+                            </span>
                           ) : (
                             <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                              Sin tutor
+                              Sin tutor asignado
                             </Badge>
                           )}
                         </div>
-                      </div>
-                    </Link>
+                      </Link>
+                      {g.count === 0 && (
+                        <button
+                          onClick={() => handleDeleteGroup(g.name)}
+                          className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-1"
+                          title="Eliminar grupo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -391,6 +457,51 @@ export default function AlumnadoPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* New group dialog */}
+      <Dialog open={newGroupOpen} onOpenChange={open => { if (!open) { setNewGroupOpen(false); setNewGroupError(null) } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nuevo grupo</DialogTitle>
+            <DialogDescription>Crea un grupo vacío para luego asignarle alumnos y tutor.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateGroup} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Nombre del grupo *</label>
+              <Input
+                value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
+                placeholder="Ej: 6A, 6B, 1ºESO-A"
+                required
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Curso escolar</label>
+              <select
+                value={newGroupYear}
+                onChange={e => setNewGroupYear(e.target.value)}
+                className={SEL}
+              >
+                <option value="">Sin especificar</option>
+                {["2023-2024","2024-2025","2025-2026","2026-2027","2027-2028"].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+            {newGroupError && <p className="text-sm text-destructive">{newGroupError}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setNewGroupOpen(false); setNewGroupError(null) }}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={newGroupSaving || !newGroupName.trim()}>
+                {newGroupSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Crear grupo
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* New student dialog */}
       <Dialog open={newStudentOpen} onOpenChange={open => { if (!open) handleNewStudentClose() }}>
