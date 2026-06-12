@@ -44,6 +44,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [qrToken, setQrToken] = useState<string | null>(null)
   const [showOnlyPending, setShowOnlyPending] = useState(false)
   const [sendingReminder, setSendingReminder] = useState(false)
+  const [sendingReminderFor, setSendingReminderFor] = useState<string | null>(null)
   const [resettingId, setResettingId] = useState<string | null>(null)
   const [resettingAll, setResettingAll] = useState(false)
 
@@ -190,6 +191,30 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
     }
   }
 
+  async function sendReminderToStudent(studentId: string, name: string) {
+    setSendingReminderFor(studentId)
+    try {
+      const res = await fetch(`/api/processes/${id}/questionnaire/remind`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: studentId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      if (data.sentIndividual > 0) {
+        toast.success(`Email enviado a ${name}`)
+      } else if (data.withoutEmail > 0) {
+        toast.warning(`${name} no tiene email registrado`)
+      } else {
+        toast.info(data.reason ?? "No se pudo enviar")
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al enviar")
+    } finally {
+      setSendingReminderFor(null)
+    }
+  }
+
   async function sendReminder() {
     setSendingReminder(true)
     try {
@@ -197,7 +222,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       if (data.sent) {
-        toast.success(`Recordatorio enviado (${data.pending} alumnos pendientes)`)
+        const parts = []
+        if (data.sentIndividual > 0) parts.push(`${data.sentIndividual} emails a alumnos`)
+        if (data.withoutEmail > 0) parts.push(`${data.withoutEmail} sin email`)
+        if (data.adminEmailSent) parts.push("resumen enviado al admin")
+        toast.success(`Recordatorio enviado — ${parts.join(" · ")}`)
       } else {
         toast.info(data.reason ?? "Email no configurado — revisa RESEND_API_KEY en entorno")
       }
@@ -382,18 +411,16 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{pct}%</span>
-                  {completed > 0 && (
-                    <button
-                      type="button"
-                      onClick={resetAll}
-                      disabled={resettingAll}
-                      className="text-xs px-2 py-0.5 rounded-full border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 disabled:opacity-50"
-                      title="Reiniciar todo el cuestionario"
-                    >
-                      {resettingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                      Reiniciar todo
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={resetAll}
+                    disabled={resettingAll}
+                    className="text-xs px-2 py-0.5 rounded-full border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    title="Reiniciar todo el cuestionario"
+                  >
+                    {resettingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                    Reiniciar todo
+                  </button>
                 </div>
               </div>
               <Progress value={pct} className="mb-3" />
@@ -458,6 +485,20 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                         <span>{t.students?.first_name} {t.students?.last_name}</span>
                       </div>
                       <div className="flex items-center gap-1">
+                        {!t.used && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-muted-foreground hover:text-blue-600"
+                            onClick={() => sendReminderToStudent(t.student_id, `${t.students?.first_name} ${t.students?.last_name}`)}
+                            disabled={sendingReminderFor === t.student_id}
+                            title="Enviar recordatorio por email"
+                          >
+                            {sendingReminderFor === t.student_id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <Mail className="w-3 h-3" />}
+                          </Button>
+                        )}
                         {t.used && (
                           <Button
                             variant="ghost"
