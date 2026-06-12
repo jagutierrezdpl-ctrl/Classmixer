@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Plus, Trash2, Shield, Search, X, Loader2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Shield, Search, X, Loader2, Pencil } from "lucide-react"
 import Link from "next/link"
 import type { Rule, Student } from "@/types"
 
@@ -46,6 +46,7 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
   const [students, setStudents] = useState<Student[]>([])
   const [centerUsers, setCenterUsers] = useState<{ id: string; name: string; email: string; role: string }[]>([])
   const [open, setOpen] = useState(false)
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([])
   const [studentSearch, setStudentSearch] = useState("")
@@ -92,26 +93,93 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
     if (res.ok) setRules(await res.json())
   }
 
+  function openCreate() {
+    setEditingRuleId(null)
+    reset({ priority: "media", rule_type: "must_separate", student_ids: [] })
+    setSelectedStudents([])
+    setStudentSearch("")
+    setOpen(true)
+  }
+
+  function openEdit(rule: Rule) {
+    setEditingRuleId(rule.id)
+    reset({
+      rule_type: rule.rule_type,
+      priority: rule.priority,
+      description: rule.description ?? "",
+      target_class: rule.target_class ?? "",
+      max_count: rule.max_count ?? undefined,
+      student_ids: (rule.students ?? []).map(rs => rs.student_id),
+    })
+    // Pre-populate selected students from the rule's student list
+    const preSelected: Student[] = []
+    for (const rs of rule.students ?? []) {
+      if (rs.student) {
+        preSelected.push({
+          id: rs.student_id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          first_name: (rs.student as any).first_name,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          last_name: (rs.student as any).last_name,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          current_class: (rs.student as any).current_class,
+        } as Student)
+      }
+    }
+    setSelectedStudents(preSelected)
+    setStudentSearch("")
+    setOpen(true)
+  }
+
+  function closeDialog() {
+    setOpen(false)
+    setEditingRuleId(null)
+    reset()
+    setSelectedStudents([])
+    setStudentSearch("")
+    setStudentDropdownOpen(false)
+  }
+
   async function onSubmit(data: CreateRuleInput) {
     setLoading(true)
     try {
-      const body: Record<string, unknown> = { ...data, process_id: id, student_ids: selectedStudents.map(s => s.id) }
-      if (data.rule_type === "avoid_tutor" && data.tutor_id) {
-        body.metadata = { tutor_id: data.tutor_id }
+      const studentIds = selectedStudents.map(s => s.id)
+
+      if (editingRuleId) {
+        // Edit existing rule
+        const body: Record<string, unknown> = {
+          ...data,
+          student_ids: studentIds,
+        }
+        if (data.rule_type === "avoid_tutor" && data.tutor_id) {
+          body.metadata = { tutor_id: data.tutor_id }
+        }
+        const res = await fetch(`/api/rules/${editingRuleId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        toast.success("Regla actualizada")
+      } else {
+        // Create new rule
+        const body: Record<string, unknown> = { ...data, process_id: id, student_ids: studentIds }
+        if (data.rule_type === "avoid_tutor" && data.tutor_id) {
+          body.metadata = { tutor_id: data.tutor_id }
+        }
+        const res = await fetch("/api/rules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        toast.success("Regla creada")
       }
-      const res = await fetch("/api/rules", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success("Regla creada")
+
       await loadRules()
-      setOpen(false)
-      reset()
-      setSelectedStudents([])
+      closeDialog()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al crear la regla")
+      toast.error(e instanceof Error ? e.message : "Error al guardar la regla")
     } finally {
       setLoading(false)
     }
@@ -138,6 +206,8 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
     return !q || `${s.first_name} ${s.last_name}`.toLowerCase().includes(q)
   })
 
+  const isEditing = !!editingRuleId
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -150,7 +220,7 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
             <p className="text-muted-foreground text-sm">{rules.length} reglas configuradas</p>
           </div>
         </div>
-        <Button onClick={() => setOpen(true)}>
+        <Button onClick={openCreate}>
           <Plus className="w-4 h-4" />
           Nueva regla
         </Button>
@@ -161,7 +231,7 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
           <Shield className="w-12 h-12 mx-auto mb-4 opacity-30" />
           <p className="font-medium mb-1">No hay reglas todavía</p>
           <p className="text-sm mb-6">Las reglas definen restricciones entre alumnos para la mezcla</p>
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus className="w-4 h-4" />
             Crear primera regla
           </Button>
@@ -171,13 +241,19 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
           {rules.map(rule => (
             <Card key={rule.id} className={!rule.active ? "opacity-50" : ""}>
               <CardContent className="flex items-center justify-between p-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <p className="font-medium text-sm">{RULE_LABELS[rule.rule_type] ?? rule.rule_type}</p>
                     <Badge variant={PRIORITY_COLORS[rule.priority] ?? "secondary"} className="text-xs">
                       {rule.priority}
                     </Badge>
                     {!rule.active && <Badge variant="outline" className="text-xs">Desactivada</Badge>}
+                    {rule.target_class && (
+                      <Badge variant="outline" className="text-xs font-mono">{rule.target_class}</Badge>
+                    )}
+                    {rule.max_count != null && (
+                      <Badge variant="outline" className="text-xs">Máx. {rule.max_count}</Badge>
+                    )}
                   </div>
                   {rule.description && (
                     <p className="text-xs text-muted-foreground">{rule.description}</p>
@@ -186,17 +262,28 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
                     <div className="flex flex-wrap gap-1 mt-2">
                       {rule.students.map(rs => (
                         <Badge key={rs.id} variant="outline" className="text-xs">
-                          {rs.student?.first_name} {rs.student?.last_name}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {(rs.student as any)?.first_name} {(rs.student as any)?.last_name}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {(rs.student as any)?.current_class && (
+                            <span className="text-muted-foreground ml-1">
+                              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                              ({(rs.student as any).current_class})
+                            </span>
+                          )}
                         </Badge>
                       ))}
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 ml-4 shrink-0">
+                <div className="flex items-center gap-1 ml-4 shrink-0">
                   <Switch
                     checked={rule.active}
                     onCheckedChange={v => toggleRule(rule.id, v)}
                   />
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(rule)}>
+                    <Pencil className="w-4 h-4 text-muted-foreground" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteRule(rule.id)}>
                     <Trash2 className="w-4 h-4 text-destructive" />
                   </Button>
@@ -207,12 +294,14 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
         </div>
       )}
 
-      {/* Create rule dialog */}
-      <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) { reset(); setSelectedStudents([]); setStudentSearch(""); setStudentDropdownOpen(false) } }}>
+      {/* Create / Edit rule dialog */}
+      <Dialog open={open} onOpenChange={v => { if (!v) closeDialog(); else setOpen(v) }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Nueva regla</DialogTitle>
-            <DialogDescription className="sr-only">Configura los parámetros de la nueva regla de mezcla</DialogDescription>
+            <DialogTitle>{isEditing ? "Editar regla" : "Nueva regla"}</DialogTitle>
+            <DialogDescription className="sr-only">
+              {isEditing ? "Modifica los parámetros de esta regla" : "Configura los parámetros de la nueva regla de mezcla"}
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
@@ -230,7 +319,7 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Prioridad</Label>
-                <Select defaultValue="media" onValueChange={v => setValue("priority", v as CreateRuleInput["priority"])}>
+                <Select value={watch("priority")} onValueChange={v => setValue("priority", v as CreateRuleInput["priority"])}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="obligatoria">Obligatoria</SelectItem>
@@ -364,9 +453,12 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button type="button" variant="outline" onClick={closeDialog}>Cancelar</Button>
               <Button type="submit" disabled={loading}>
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Crear regla"}
+                {loading
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : isEditing ? "Guardar cambios" : "Crear regla"
+                }
               </Button>
             </DialogFooter>
           </form>

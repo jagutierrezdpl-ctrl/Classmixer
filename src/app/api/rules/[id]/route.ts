@@ -25,14 +25,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   }
 
+  const { student_ids, ...ruleFields } = body
+
   const { data, error } = await supabase
     .from("rules")
-    .update(body)
+    .update(ruleFields)
     .eq("id", id)
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // If student_ids provided, replace rule_students
+  if (Array.isArray(student_ids)) {
+    await supabase.from("rule_students").delete().eq("rule_id", id)
+    if (student_ids.length > 0) {
+      await supabase.from("rule_students").insert(
+        student_ids.map((sid: string) => ({ rule_id: id, student_id: sid }))
+      )
+    }
+  }
+
   return NextResponse.json(data)
 }
 

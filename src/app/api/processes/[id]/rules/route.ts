@@ -11,7 +11,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { data, error } = await supabase
     .from("rules")
-    .select("*, rule_students(*, students(first_name, last_name, current_class))")
+    .select("*, students:rule_students(id, rule_id, student_id, role, student:students(id, first_name, last_name, current_class))")
     .eq("process_id", id)
     .order("created_at", { ascending: false })
 
