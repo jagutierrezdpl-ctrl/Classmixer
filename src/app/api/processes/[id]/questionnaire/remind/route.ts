@@ -12,8 +12,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { id } = await params
   const body = await request.json().catch(() => ({}))
-  // student_id: send only to one student; omit to send to all pending
-  const { student_id }: { student_id?: string } = body
+  // student_id: single student; student_ids: selection; omit: all pending
+  const { student_id, student_ids }: { student_id?: string; student_ids?: string[] } = body
 
   const supabase = createServiceClient()
 
@@ -48,13 +48,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const allTokens = (tokens ?? []) as TokenRow[]
 
-  // Filter: all pending, or just the one student if specified
-  const pending = allTokens.filter(t =>
-    !t.completed_at && (!student_id || t.student_id === student_id)
-  )
+  // Filter candidates
+  const selectionSet = student_ids ? new Set(student_ids) : null
+  const pending = allTokens.filter(t => {
+    if (student_id) return !t.completed_at && t.student_id === student_id
+    if (selectionSet) return !t.completed_at && selectionSet.has(t.student_id)
+    return !t.completed_at
+  })
 
   if (pending.length === 0) {
-    return NextResponse.json({ sent: false, reason: student_id ? "El alumno ya respondió o no existe" : "No hay alumnos pendientes" })
+    const reason = student_id
+      ? "El alumno ya respondió o no existe"
+      : student_ids
+        ? "Todos los alumnos seleccionados ya respondieron"
+        : "No hay alumnos pendientes"
+    return NextResponse.json({ sent: false, reason })
   }
 
   const { origin } = new URL(request.url)
@@ -87,9 +95,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     else individualErrors.push(`${student.first_name} ${student.last_name}: ${result.error}`)
   }
 
-  // Send summary to admin only when sending to all (not single student)
+  // Send summary to admin only when sending to all (not single/selection)
   let adminEmailSent = false
-  if (!student_id) {
+  if (!student_id && !student_ids) {
     const adminResult = await sendEmail({
       to: profile.email,
       subject: `[ClassMixer] Recordatorio enviado: ${pending.length} alumnos pendientes — ${process.name}`,

@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft, Loader2, Link2, Copy,
   CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail, RotateCcw,
+  Square, CheckSquare, MinusSquare,
 } from "lucide-react"
 import Link from "next/link"
 import ImportResponsesDialog from "@/components/questionnaire/ImportResponsesDialog"
@@ -50,6 +51,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [sendingReminderFor, setSendingReminderFor] = useState<string | null>(null)
   const [resettingId, setResettingId] = useState<string | null>(null)
   const [resettingAll, setResettingAll] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [sendingReminderToSelection, setSendingReminderToSelection] = useState(false)
 
   const { register, handleSubmit, watch, setValue, reset, formState: { isDirty } } =
     useForm<QuestionnaireSettingsInput>({
@@ -248,6 +251,90 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
       toast.error(e instanceof Error ? e.message : "Error al enviar recordatorio")
     } finally {
       setSendingReminder(false)
+    }
+  }
+
+  function toggleSelect(studentId: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(studentId)) next.delete(studentId)
+      else next.add(studentId)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    const visibleStudentIds = visibleTokens.map(t => t.student_id)
+    const allSelected = visibleStudentIds.every(sid => selectedIds.has(sid))
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        visibleStudentIds.forEach(sid => next.delete(sid))
+        return next
+      })
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        visibleStudentIds.forEach(sid => next.add(sid))
+        return next
+      })
+    }
+  }
+
+  function copySelectedLinks() {
+    const selected = visibleTokens.filter(t => selectedIds.has(t.student_id))
+    const text = selected
+      .map(t => `${t.students?.first_name ?? ""} ${t.students?.last_name ?? ""}: ${t.url}`)
+      .join("\n")
+    navigator.clipboard.writeText(text)
+    toast.success(`${selected.length} enlaces copiados`)
+  }
+
+  function exportSelectedCSV() {
+    const selected = tokens.filter(t => selectedIds.has(t.student_id))
+    const rows = [["Nombre", "Apellidos", "Clase", "Estado", "Enlace"]]
+    for (const t of selected) {
+      rows.push([
+        t.students?.first_name ?? "",
+        t.students?.last_name ?? "",
+        t.students?.current_class ?? "",
+        t.used ? "Completado" : "Pendiente",
+        t.url,
+      ])
+    }
+    const csvContent = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n")
+    const blob = new Blob(["﻿" + csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "seleccion_cuestionario.csv"
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function sendReminderToSelection() {
+    const ids = [...selectedIds]
+    setSendingReminderToSelection(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/questionnaire/remind`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_ids: ids }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      if (data.sent) {
+        const parts = []
+        if (data.sentIndividual > 0) parts.push(`${data.sentIndividual} emails enviados`)
+        if (data.withoutEmail > 0) parts.push(`${data.withoutEmail} sin email`)
+        toast.success(parts.join(" · ") || "Recordatorio enviado")
+      } else {
+        toast.info(data.reason ?? "Sin pendientes en la selección")
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al enviar")
+    } finally {
+      setSendingReminderToSelection(false)
     }
   }
 
@@ -525,11 +612,80 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                 </div>
               )}
 
+              {/* Select all toggle */}
+              {visibleTokens.length > 0 && (() => {
+                const visibleIds = visibleTokens.map(t => t.student_id)
+                const allSelected = visibleIds.length > 0 && visibleIds.every(sid => selectedIds.has(sid))
+                const someSelected = visibleIds.some(sid => selectedIds.has(sid))
+                return (
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-1 mb-1 transition-colors"
+                  >
+                    {allSelected
+                      ? <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                      : someSelected
+                        ? <MinusSquare className="w-3.5 h-3.5 text-primary" />
+                        : <Square className="w-3.5 h-3.5" />}
+                    {allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+                    {selectedIds.size > 0 && (
+                      <span className="ml-1 text-primary font-medium">{selectedIds.size} seleccionados</span>
+                    )}
+                  </button>
+                )
+              })()}
+
+              {/* Selection action bar */}
+              {selectedIds.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mb-2 px-3 py-2 bg-primary/5 rounded-lg border border-primary/20">
+                  <span className="text-xs font-medium text-primary">{selectedIds.size} alumno{selectedIds.size !== 1 ? "s" : ""}</span>
+                  <button
+                    type="button"
+                    onClick={copySelectedLinks}
+                    className="text-xs px-2 py-0.5 rounded-full border text-primary border-primary/40 hover:bg-primary/10 transition-colors flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" /> Copiar enlaces
+                  </button>
+                  <button
+                    type="button"
+                    onClick={sendReminderToSelection}
+                    disabled={sendingReminderToSelection}
+                    className="text-xs px-2 py-0.5 rounded-full border text-primary border-primary/40 hover:bg-primary/10 transition-colors flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {sendingReminderToSelection ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                    Enviar email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportSelectedCSV}
+                    className="text-xs px-2 py-0.5 rounded-full border text-primary border-primary/40 hover:bg-primary/10 transition-colors flex items-center gap-1"
+                  >
+                    <Download className="w-3 h-3" /> Exportar CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-xs px-2 py-0.5 rounded-full border text-muted-foreground border-border hover:bg-muted/50 transition-colors flex items-center gap-1 ml-auto"
+                  >
+                    <X className="w-3 h-3" /> Limpiar
+                  </button>
+                </div>
+              )}
+
               <div className="max-h-64 overflow-y-auto space-y-1">
                 {visibleTokens.map(t => (
                   <div key={t.token}>
-                    <div className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-muted/50 text-sm">
+                    <div
+                      className={`flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-muted/50 text-sm cursor-pointer ${selectedIds.has(t.student_id) ? "bg-primary/5 border border-primary/20" : ""}`}
+                      onClick={() => toggleSelect(t.student_id)}
+                    >
                       <div className="flex items-center gap-2">
+                        <div className="shrink-0" onClick={e => { e.stopPropagation(); toggleSelect(t.student_id) }}>
+                          {selectedIds.has(t.student_id)
+                            ? <CheckSquare className="w-4 h-4 text-primary" />
+                            : <Square className="w-4 h-4 text-muted-foreground/40" />}
+                        </div>
                         {t.used ? (
                           <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                         ) : (
@@ -540,7 +696,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                           <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{t.students.current_class}</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                         {!t.used && (
                           <Button
                             variant="ghost"
