@@ -13,6 +13,7 @@ import {
 import { getCenterLicense } from "@/lib/license"
 import { OnboardingWizard } from "@/components/layout/OnboardingWizard"
 import DashboardCharts from "@/components/dashboard/DashboardCharts"
+import AlertsPanel from "@/components/dashboard/AlertsPanel"
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "success" | "warning" | "outline" }> = {
   borrador: { label: "Borrador", variant: "secondary" },
@@ -165,6 +166,9 @@ export default async function DashboardPage() {
           </span>
         </div>
       )}
+
+      {/* Alerts */}
+      <AlertsPanel centerId={profile.center_id} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

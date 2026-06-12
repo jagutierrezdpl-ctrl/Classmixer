@@ -197,6 +197,8 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
   const [loadFromProfilesOpen, setLoadFromProfilesOpen] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
   const [loadingStudents, setLoadingStudents] = useState(true)
+  const [sociogramMap, setSociogramMap] = useState<Record<string, { received: number; reciprocal: number }>>({})
+
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [importing, setImporting] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -216,13 +218,19 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
 
   // Load students on mount
   useEffect(() => {
-    fetch(`/api/processes/${id}/students`)
-      .then(r => r.json())
-      .then(data => {
-        setStudents(Array.isArray(data) ? data : [])
-        setLoadingStudents(false)
-      })
-      .catch(() => setLoadingStudents(false))
+    Promise.all([
+      fetch(`/api/processes/${id}/students`).then(r => r.json()),
+      fetch(`/api/processes/${id}/sociogram/metrics`).then(r => r.ok ? r.json() : []),
+    ]).then(([data, metrics]) => {
+      setStudents(Array.isArray(data) ? data : [])
+      if (Array.isArray(metrics)) {
+        const map: Record<string, { received: number; reciprocal: number }> = {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const m of metrics as any[]) map[m.student_id] = { received: m.received_count ?? 0, reciprocal: m.reciprocal_count ?? 0 }
+        setSociogramMap(map)
+      }
+      setLoadingStudents(false)
+    }).catch(() => setLoadingStudents(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -1170,7 +1178,18 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
                     </td>
                     <td className="px-4 py-3">
                       <Link href={`/processes/${id}/students/${s.id}`} className="block hover:underline">
-                        <p className="font-medium">{s.first_name} {s.last_name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium">{s.first_name} {s.last_name}</p>
+                          {(() => {
+                            const m = sociogramMap[s.id]
+                            if (!m) return null
+                            if (m.received === 0 && m.reciprocal === 0)
+                              return <span title="Aislado" className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">Aislado</span>
+                            if (m.reciprocal === 1)
+                              return <span title="Vulnerable" className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Vulnerable</span>
+                            return null
+                          })()}
+                        </div>
                         <p className="text-xs text-muted-foreground">{s.external_id}</p>
                       </Link>
                     </td>

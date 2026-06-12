@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
-import { ChevronRight, Archive, Trash2 } from "lucide-react"
+import { ChevronRight, Archive, Trash2, Copy, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 interface Transition {
   label: string
@@ -55,6 +56,21 @@ export default function ProcessActions({ processId, status, isAdmin }: ProcessAc
     router.refresh()
   }
 
+  async function handleDuplicate() {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/processes/${processId}/duplicate`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`Proceso duplicado: «${data.name}»`)
+      router.push(`/processes/${data.id}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al duplicar")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleDelete() {
     if (!confirm("¿Eliminar este proceso? Se borrarán todos los alumnos, respuestas, reglas y propuestas. Esta acción no se puede deshacer.")) return
     setLoading(true)
@@ -80,6 +96,19 @@ export default function ProcessActions({ processId, status, isAdmin }: ProcessAc
           <ChevronRight className="w-3.5 h-3.5" />
         </Button>
       ))}
+
+      {isAdmin && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleDuplicate}
+          disabled={loading}
+          className="gap-1.5 text-muted-foreground"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+          Duplicar
+        </Button>
+      )}
 
       {isAdmin && status !== "archivado" && transitions.every(t => t.nextStatus !== "archivado") && (
         <Button
