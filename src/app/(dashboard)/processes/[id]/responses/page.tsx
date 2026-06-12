@@ -9,6 +9,7 @@ import {
   ArrowLeft, CheckCircle2, Clock, AlertCircle, Users, Download,
   Heart, Briefcase, UsersRound, XCircle,
 } from "lucide-react"
+import StudentResponseRow from "@/components/responses/StudentResponseRow"
 
 type RelationType = "friendship" | "work" | "emotional" | "negative"
 
@@ -221,49 +222,18 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
                   {(classStudents ?? []).map(student => {
                     const token = tokenMap.get(student.id)
                     const studentResponses = responsesByStudent.get(student.id) ?? []
-                    const byType = studentResponses.reduce<Record<string, number>>((acc, r) => {
-                      acc[r.relation_type] = (acc[r.relation_type] ?? 0) + 1
-                      return acc
-                    }, {})
-
-                    let statusIcon = <AlertCircle className="w-4 h-4 text-amber-400" />
-                    let statusText = "Sin enlace"
-                    let statusClass = "text-amber-600"
-
-                    if (token?.used) {
-                      statusIcon = <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      statusText = token.completed_at
-                        ? new Date(token.completed_at).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
-                        : "Completado"
-                      statusClass = "text-green-600"
-                    } else if (token) {
-                      statusIcon = <Clock className="w-4 h-4 text-amber-400" />
-                      statusText = "Pendiente"
-                      statusClass = "text-amber-600"
-                    }
-
+                    const studentMap = Object.fromEntries(
+                      (students ?? []).map(s => [s.id, `${s.last_name}, ${s.first_name}`])
+                    )
                     return (
-                      <div key={student.id} className="flex items-center gap-3 px-4 py-2.5">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">
-                            {student.last_name}, {student.first_name}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                          {Object.entries(byType).map(([type, count]) => {
-                            const meta = RELATION_META[type as RelationType]
-                            return (
-                              <span key={type} className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${meta?.color ?? "bg-muted text-muted-foreground"}`}>
-                                {meta?.label ?? type} {count}
-                              </span>
-                            )
-                          })}
-                        </div>
-                        <div className={`flex items-center gap-1.5 text-xs shrink-0 ${statusClass}`}>
-                          {statusIcon}
-                          <span className="hidden sm:inline">{statusText}</span>
-                        </div>
-                      </div>
+                      <StudentResponseRow
+                        key={student.id}
+                        student={student}
+                        token={token ?? null}
+                        responses={studentResponses}
+                        studentMap={studentMap}
+                        relationMeta={RELATION_META}
+                      />
                     )
                   })}
                 </div>
