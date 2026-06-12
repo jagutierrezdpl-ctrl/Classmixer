@@ -245,7 +245,6 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
                         token={token ?? null}
                         responses={studentResponses}
                         studentMap={studentMap}
-                        relationMeta={RELATION_META}
                       />
                     )
                   })}

@@ -1,19 +1,26 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2, Clock, AlertCircle, ChevronDown } from "lucide-react"
+import { CheckCircle2, Clock, AlertCircle, ChevronDown, Heart, Briefcase, UsersRound, XCircle } from "lucide-react"
 
 type RelationType = "friendship" | "work" | "emotional" | "negative"
+
+const RELATION_META: Record<RelationType, { label: string; color: string; icon: React.ElementType }> = {
+  friendship: { label: "Amistad",   color: "bg-pink-100 text-pink-700",     icon: Heart },
+  work:       { label: "Trabajo",   color: "bg-blue-100 text-blue-700",     icon: Briefcase },
+  emotional:  { label: "Apoyo",     color: "bg-purple-100 text-purple-700", icon: UsersRound },
+  negative:   { label: "Conflicto", color: "bg-red-100 text-red-700",       icon: XCircle },
+}
 
 interface Props {
   student: { id: string; first_name: string; last_name: string; current_class: string }
   token: { student_id: string; used: boolean; completed_at?: string | null } | null
   responses: { relation_type: string; target_student_id: string }[]
   studentMap: Record<string, string>
-  relationMeta: Record<RelationType, { label: string; color: string; icon: React.ElementType }>
 }
 
-export default function StudentResponseRow({ student, token, responses, studentMap, relationMeta }: Props) {
+export default function StudentResponseRow({ student, token, responses, studentMap }: Props) {
+  const relationMeta = RELATION_META
   const [open, setOpen] = useState(false)
 
   const byType = responses.reduce<Record<string, string[]>>((acc, r) => {
