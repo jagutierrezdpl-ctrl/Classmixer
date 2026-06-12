@@ -101,7 +101,7 @@ export default function LandingPage() {
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-indigo-50 rounded-full blur-[80px] opacity-80" />
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-6 py-28 text-center">
+        <div className="relative max-w-6xl mx-auto px-6 py-16 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 font-medium mb-8">
             <Sparkles className="w-3.5 h-3.5" />
             Sociograma + algoritmo de mezcla para centros educativos
@@ -127,7 +127,7 @@ export default function LandingPage() {
 
       {/* Stats */}
       <section className="border-y bg-gray-50">
-        <div className="max-w-4xl mx-auto px-6 py-12 grid grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="max-w-4xl mx-auto px-6 py-8 grid grid-cols-2 lg:grid-cols-4 gap-8">
           {STATS.map(s => (
             <div key={s.label} className="text-center">
               <div className="text-4xl font-black text-indigo-600 mb-1">{s.value}</div>
@@ -138,8 +138,8 @@ export default function LandingPage() {
       </section>
 
       {/* Steps */}
-      <section className="max-w-6xl mx-auto px-6 py-24">
-        <div className="text-center mb-16">
+      <section className="max-w-6xl mx-auto px-6 py-14">
+        <div className="text-center mb-10">
           <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Flujo de trabajo</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">¿Cómo funciona?</h2>
           <p className="text-gray-500 max-w-xl mx-auto">
@@ -163,9 +163,9 @@ export default function LandingPage() {
       </section>
 
       {/* Sociogram illustration */}
-      <section className="bg-gray-50 border-y py-24">
+      <section className="bg-gray-50 border-y py-14">
         <div className="max-w-4xl mx-auto px-6">
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Sociograma</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               Entiende las relaciones antes de mezclar
@@ -182,8 +182,8 @@ export default function LandingPage() {
       </section>
 
       {/* Dashboard Preview Charts */}
-      <section className="max-w-6xl mx-auto px-6 py-24">
-        <div className="text-center mb-12">
+      <section className="max-w-6xl mx-auto px-6 py-14">
+        <div className="text-center mb-8">
           <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Analítica</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
             Compara propuestas con métricas reales
@@ -197,9 +197,9 @@ export default function LandingPage() {
       </section>
 
       {/* Features grid */}
-      <section className="bg-white border-y py-24">
+      <section className="bg-white border-y py-14">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
+          <div className="text-center mb-10">
             <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Funcionalidades</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">Todo lo que necesitas</h2>
             <p className="text-gray-500 max-w-xl mx-auto">
@@ -221,7 +221,7 @@ export default function LandingPage() {
       </section>
 
       {/* Sociogram + Rules */}
-      <section className="max-w-6xl mx-auto px-6 py-24">
+      <section className="max-w-6xl mx-auto px-6 py-14">
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-8">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 font-medium mb-6">
@@ -270,13 +270,13 @@ export default function LandingPage() {
       </section>
 
       {/* Principles */}
-      <section className="bg-gray-50 border-t py-24">
+      <section className="bg-gray-50 border-t py-14">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Principios</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
             El algoritmo propone.<br />El docente decide.
           </h2>
-          <p className="text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed">
+          <p className="text-gray-500 max-w-2xl mx-auto mb-8 leading-relaxed">
             ClassMixer nunca toma una decisión definitiva sin revisión humana.
             Cada propuesta explica métricas, reglas cumplidas e incumplidas y puntos débiles.
           </p>
@@ -299,13 +299,13 @@ export default function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="relative overflow-hidden bg-indigo-600 py-24">
+      <section className="relative overflow-hidden bg-indigo-600 py-16">
         <div className="absolute inset-0 pointer-events-none opacity-10"
           style={{ backgroundImage: "linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px)", backgroundSize: "40px 40px" }}
         />
         <div className="relative max-w-2xl mx-auto px-6 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">¿Listo para empezar?</h2>
-          <p className="text-indigo-200 mb-10 leading-relaxed">
+          <p className="text-indigo-200 mb-8 leading-relaxed">
             Accede a la plataforma con las credenciales de tu centro.
             Si no tienes acceso, contacta con tu administrador.
           </p>
