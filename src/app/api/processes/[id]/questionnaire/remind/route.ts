@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("questionnaire_tokens")
-      .select("student_id, token, completed_at, students(first_name, last_name, email)")
+      .select("student_id, token, completed_at, students(first_name, last_name, email, student_profiles(email))")
       .eq("process_id", id),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
@@ -38,7 +38,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     student_id: string
     token: string
     completed_at: string | null
-    students: { first_name: string; last_name: string; email?: string | null } | null
+    students: {
+      first_name: string
+      last_name: string
+      email?: string | null
+      student_profiles?: { email?: string | null } | null
+    } | null
   }
 
   const allTokens = (tokens ?? []) as TokenRow[]
@@ -58,8 +63,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? new Date(settings.deadline).toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })
     : undefined
 
-  const withEmail = pending.filter(t => t.students?.email)
-  const withoutEmail = pending.filter(t => !t.students?.email)
+  const getEmail = (t: TokenRow) => t.students?.email || t.students?.student_profiles?.email || null
+
+  const withEmail = pending.filter(t => getEmail(t))
+  const withoutEmail = pending.filter(t => !getEmail(t))
 
   let sentIndividual = 0
   const individualErrors: string[] = []
@@ -67,7 +74,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   for (const t of withEmail) {
     const student = t.students!
     const result = await sendEmail({
-      to: student.email!,
+      to: getEmail(t)!,
       subject: `Recuerda responder el cuestionario — ${process.name}`,
       html: buildStudentReminderHtml({
         firstName: student.first_name,
@@ -95,7 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         pendingStudents: pending.map(t => ({
           name: t.students ? `${t.students.first_name} ${t.students.last_name}` : "Alumno/a",
           url: `${origin}/q/${t.token}`,
-          hasEmail: !!t.students?.email,
+          hasEmail: !!getEmail(t),
         })),
         deadlineLabel,
       }),
