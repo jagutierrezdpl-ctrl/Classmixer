@@ -6,6 +6,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import SociogramIllustration from "@/components/landing/SociogramIllustration"
+import ProposalPreviewChart from "@/components/landing/ProposalPreviewChart"
 
 const FEATURES = [
   {
@@ -178,6 +179,21 @@ export default function LandingPage() {
             <SociogramIllustration />
           </div>
         </div>
+      </section>
+
+      {/* Dashboard Preview Charts */}
+      <section className="max-w-6xl mx-auto px-6 py-24">
+        <div className="text-center mb-12">
+          <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Analítica</p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+            Compara propuestas con métricas reales
+          </h2>
+          <p className="text-gray-500 max-w-xl mx-auto">
+            Radar de equilibrio multidimensional, comparativa académica por clase y seguimiento de participación — todo en tiempo real.
+          </p>
+        </div>
+        <ProposalPreviewChart />
+        <p className="text-center text-xs text-gray-400 mt-4">Datos de muestra. En la plataforma se muestran los datos reales de tu centro.</p>
       </section>
 
       {/* Features grid */}
