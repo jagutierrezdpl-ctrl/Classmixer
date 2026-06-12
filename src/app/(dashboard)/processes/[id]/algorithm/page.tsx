@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash } from "lucide-react"
+import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash, SlidersHorizontal, RotateCcw } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -52,6 +52,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   const router = useRouter()
 
   const [profile, setProfile] = useState<AlgorithmProfile>("equilibrado")
+  const [baseProfile, setBaseProfile] = useState<Exclude<AlgorithmProfile, "personalizado">>("equilibrado")
   const [weights, setWeights] = useState<AlgorithmWeights>(DEFAULT_WEIGHTS)
   const [constraints, setConstraints] = useState<AlgorithmConstraints>(DEFAULT_CONSTRAINTS)
   const [numProposals, setNumProposals] = useState(3)
@@ -68,12 +69,18 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
 
   function selectProfile(p: Exclude<AlgorithmProfile, "personalizado">) {
     setProfile(p)
+    setBaseProfile(p)
     setWeights(WEIGHT_PROFILES[p])
   }
 
   function updateWeight(key: keyof AlgorithmWeights, value: number) {
     setProfile("personalizado")
     setWeights(prev => ({ ...prev, [key]: value }))
+  }
+
+  function resetToBase() {
+    setProfile(baseProfile)
+    setWeights(WEIGHT_PROFILES[baseProfile])
   }
 
   async function handleRun() {
@@ -164,7 +171,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
           <CardTitle className="text-base">Perfil de configuración</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {PROFILES.map(p => {
               const Icon = p.icon
               const active = profile === p.id
@@ -189,12 +196,25 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
                 </button>
               )
             })}
+            {/* Personalizado tile */}
+            <button
+              onClick={() => setProfile("personalizado")}
+              className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all ${
+                profile === "personalizado"
+                  ? "border-primary bg-primary/5"
+                  : "border-dashed border-border hover:border-muted-foreground/30 hover:bg-muted/30"
+              }`}
+            >
+              {profile === "personalizado" && (
+                <CheckCircle2 className="absolute top-2 right-2 w-4 h-4 text-primary" />
+              )}
+              <div className="w-9 h-9 rounded-lg bg-slate-500 flex items-center justify-center">
+                <SlidersHorizontal className="w-5 h-5 text-white" />
+              </div>
+              <p className={`text-sm font-semibold ${profile === "personalizado" ? "text-primary" : ""}`}>Personalizado</p>
+              <p className="text-xs text-muted-foreground leading-tight">Ajusta cada peso manualmente</p>
+            </button>
           </div>
-          {profile === "personalizado" && (
-            <div className="mt-3">
-              <Badge variant="secondary" className="text-xs">Pesos personalizados activos</Badge>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -202,28 +222,52 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
       <Card className="mb-6">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Pesos del algoritmo</CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base">Pesos del algoritmo</CardTitle>
+              {profile === "personalizado" && (
+                <button
+                  onClick={resetToBase}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  title={`Restablecer a perfil "${baseProfile}"`}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Restablecer
+                </button>
+              )}
+            </div>
             <span className="text-xs text-muted-foreground">0 = ignorar · 100 = máxima prioridad</span>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {(Object.keys(weights) as (keyof AlgorithmWeights)[]).map(key => (
-              <div key={key}>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-medium">{WEIGHT_LABELS[key]}</label>
-                  <span className="text-sm font-bold text-primary w-8 text-right">{weights[key]}</span>
+            {(Object.keys(weights) as (keyof AlgorithmWeights)[]).map(key => {
+              const isModified = profile === "personalizado" && weights[key] !== WEIGHT_PROFILES[baseProfile][key]
+              return (
+                <div key={key} className={isModified ? "rounded-lg bg-blue-50 p-3 -m-3" : ""}>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className={`text-sm font-medium ${isModified ? "text-blue-800" : ""}`}>
+                      {WEIGHT_LABELS[key]}
+                      {isModified && (
+                        <span className="ml-2 text-xs text-blue-500">
+                          (era {WEIGHT_PROFILES[baseProfile][key]})
+                        </span>
+                      )}
+                    </label>
+                    <span className={`text-sm font-bold w-8 text-right ${isModified ? "text-blue-700" : "text-primary"}`}>
+                      {weights[key]}
+                    </span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[weights[key]]}
+                    onValueChange={([v]) => updateWeight(key, v)}
+                    className="cursor-pointer"
+                  />
                 </div>
-                <Slider
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={[weights[key]]}
-                  onValueChange={([v]) => updateWeight(key, v)}
-                  className="cursor-pointer"
-                />
-              </div>
-            ))}
+              )
+            })}
           </div>
         </CardContent>
       </Card>
