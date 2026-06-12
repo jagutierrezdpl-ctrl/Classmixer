@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
-const ALLOWED_DOMAIN = process.env.STUDENT_EMAIL_DOMAIN ?? "leon.anamogas.org"
+const ALLOWED_DOMAIN = process.env.STUDENT_EMAIL_DOMAIN ?? process.env.NEXT_PUBLIC_GOOGLE_HD_DOMAIN ?? null
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)

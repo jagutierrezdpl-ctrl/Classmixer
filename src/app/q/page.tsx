@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+const GOOGLE_HD = process.env.NEXT_PUBLIC_GOOGLE_HD_DOMAIN ?? null
+
 export default function StudentLoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -20,14 +22,13 @@ export default function StudentLoginPage() {
     setLoading(true)
     setError(null)
     const supabase = createClient()
+    const queryParams: Record<string, string> = { prompt: "select_account" }
+    if (GOOGLE_HD) queryParams.hd = GOOGLE_HD
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/api/auth/student-callback`,
-        queryParams: {
-          hd: "leon.anamogas.org",
-          prompt: "select_account",
-        },
+        queryParams,
       },
     })
     if (error) {
@@ -45,7 +46,9 @@ export default function StudentLoginPage() {
   const errorMessages: Record<string, string> = {
     not_registered: "Tu cuenta no está registrada en ningún proceso activo. Habla con tu tutor.",
     no_questionnaire: "No tienes cuestionarios pendientes en este momento.",
-    domain_not_allowed: "Debes acceder con tu cuenta del colegio (@leon.anamogas.org).",
+    domain_not_allowed: GOOGLE_HD
+      ? `Debes acceder con tu cuenta del colegio (@${GOOGLE_HD}).`
+      : "Debes acceder con tu cuenta del colegio.",
     auth_failed: "Error al iniciar sesión. Inténtalo de nuevo.",
   }
 
@@ -89,9 +92,11 @@ export default function StudentLoginPage() {
             )}
             {loading ? "Conectando..." : "Entrar con Google del colegio"}
           </Button>
-          <p className="text-center text-xs text-gray-400 mt-3">
-            Usa tu cuenta <strong>@leon.anamogas.org</strong>
-          </p>
+          {GOOGLE_HD && (
+            <p className="text-center text-xs text-gray-400 mt-3">
+              Usa tu cuenta <strong>@{GOOGLE_HD}</strong>
+            </p>
+          )}
         </div>
 
         {/* Token fallback */}

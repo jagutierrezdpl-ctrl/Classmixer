@@ -24,6 +24,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "No autorizado. Se requiere rol de administrador." }, { status: 403 })
+  }
 
   const { id } = await params
   const url = new URL(request.url)
