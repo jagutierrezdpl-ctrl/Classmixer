@@ -5,6 +5,7 @@ import {
   Brain, ClipboardList, Lock, Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import SociogramIllustration from "@/components/landing/SociogramIllustration"
 
 const FEATURES = [
   {
@@ -160,8 +161,27 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Features grid */}
+      {/* Sociogram illustration */}
       <section className="bg-gray-50 border-y py-24">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="text-center mb-12">
+            <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Sociograma</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              Entiende las relaciones antes de mezclar
+            </h2>
+            <p className="text-gray-500 max-w-xl mx-auto">
+              El sociograma detecta automáticamente líderes, alumnos puente, subgrupos y
+              alumnos en riesgo de aislamiento — antes de tomar ninguna decisión.
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+            <SociogramIllustration />
+          </div>
+        </div>
+      </section>
+
+      {/* Features grid */}
+      <section className="bg-white border-y py-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
             <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Funcionalidades</p>
