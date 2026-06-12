@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { AlertTriangle, Loader2, UserX, UserCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -31,7 +32,6 @@ interface Props {
   studentId: string
   studentName: string
   currentlyExcluded: boolean
-  onChanged: (excluded: boolean) => void
 }
 
 export default function ExcludeStudentDialog({
@@ -39,8 +39,8 @@ export default function ExcludeStudentDialog({
   studentId,
   studentName,
   currentlyExcluded,
-  onChanged,
 }: Props) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -74,8 +74,8 @@ export default function ExcludeStudentDialog({
           ? `${studentName} reincorporado al proceso`
           : `${studentName} excluido del proceso`
       )
-      onChanged(!currentlyExcluded)
       setOpen(false)
+      router.refresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al actualizar")
     } finally {

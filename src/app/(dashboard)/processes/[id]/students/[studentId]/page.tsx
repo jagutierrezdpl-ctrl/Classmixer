@@ -141,7 +141,6 @@ export default async function StudentDetailPage({
               studentName={`${student.first_name} ${student.last_name}`}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               currentlyExcluded={(student as any).excluded_from_mix ?? false}
-              onChanged={() => {}}
             />
           )}
           <EditStudentDialog
