@@ -36,6 +36,66 @@ const NEEDS_STYLES: Record<string, string> = {
 const BEHAVIOR_OPTIONS = ["Positiva", "Normal", "Seguimiento", "Conflictiva"]
 const NEEDS_OPTIONS = ["No", "Sí", "ACNEAE", "NEE", "Refuerzo", "Altas capacidades", "Observación interna"]
 
+// ── Inline editable grade (number) ───────────────────────────────────────────
+
+function inferAcademicLevel(grade: number): string {
+  if (grade >= 8.5) return "Alto"
+  if (grade >= 7)   return "Medio-alto"
+  if (grade >= 5.5) return "Medio"
+  if (grade >= 4)   return "Medio-bajo"
+  return "Bajo"
+}
+
+function EditableGrade({
+  value,
+  onSave,
+}: {
+  value: number | null
+  onSave: (grade: number, level: string) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [input, setInput] = useState(value?.toString() ?? "")
+  const [saving, setSaving] = useState(false)
+
+  async function commit() {
+    const n = parseFloat(input)
+    if (isNaN(n) || n < 0 || n > 10) { setEditing(false); setInput(value?.toString() ?? ""); return }
+    if (n === value) { setEditing(false); return }
+    setSaving(true)
+    await onSave(n, inferAcademicLevel(n))
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="number"
+        min={0}
+        max={10}
+        step={0.1}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setInput(value?.toString() ?? "") } }}
+        className="w-16 text-sm font-medium border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+      />
+    )
+  }
+
+  return (
+    <button
+      onClick={() => { setInput(value?.toString() ?? ""); setEditing(true) }}
+      disabled={saving}
+      className="text-sm font-medium hover:underline decoration-dashed underline-offset-2 cursor-pointer tabular-nums"
+      title="Clic para editar"
+    >
+      {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin inline" /> : (value ?? "—")}
+    </button>
+  )
+}
+
 // ── Inline editable badge ─────────────────────────────────────────────────────
 
 function EditableBadge({
@@ -867,7 +927,21 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
                     </td>
                     <td className="px-4 py-3"><Badge variant="outline">{s.current_class}</Badge></td>
                     <td className="px-4 py-3 text-muted-foreground">{s.gender}</td>
-                    <td className="px-4 py-3 font-medium">{s.average_grade}</td>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <EditableGrade
+                        value={s.average_grade ?? null}
+                        onSave={async (grade, level) => {
+                          const res = await fetch(`/api/processes/${id}/students/${s.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ average_grade: grade, academic_level: level }),
+                          })
+                          if (!res.ok) { toast.error("Error al guardar"); return }
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          setStudents(prev => prev.map(st => st.id === s.id ? { ...st, average_grade: grade, academic_level: level as any } : st))
+                        }}
+                      />
+                    </td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <EditableBadge
                         value={s.academic_level ?? null}

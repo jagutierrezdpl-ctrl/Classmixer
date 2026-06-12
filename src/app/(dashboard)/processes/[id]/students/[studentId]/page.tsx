@@ -9,6 +9,7 @@ import {
   ArrowLeft, Heart, Users, UserCheck, UserX,
   AlertTriangle, BarChart3, Network, BookOpen, FileText,
 } from "lucide-react"
+import EditStudentDialog from "@/components/students/EditStudentDialog"
 
 const RELATION_LABELS: Record<string, { label: string; color: string }> = {
   friendship: { label: "Amistad", color: "bg-pink-100 text-pink-700" },
@@ -125,12 +126,25 @@ export default async function StudentDetailPage({
             {student.current_class} · {student.external_id ?? "Sin ID"}
           </p>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/processes/${processId}/students/${studentId}/report`} target="_blank">
-            <FileText className="w-4 h-4" />
-            Informe PDF
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <EditStudentDialog
+            processId={processId}
+            studentId={studentId}
+            initial={{
+              average_grade: student.average_grade ?? null,
+              academic_level: student.academic_level ?? null,
+              behavior_level: student.behavior_level ?? null,
+              needs_type: student.needs_type ?? null,
+              observations: student.observations ?? null,
+            }}
+          />
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/processes/${processId}/students/${studentId}/report`} target="_blank">
+              <FileText className="w-4 h-4" />
+              Informe PDF
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
