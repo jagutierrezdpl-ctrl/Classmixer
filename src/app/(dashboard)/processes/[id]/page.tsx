@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare } from "lucide-react"
+import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare, FileText } from "lucide-react"
 import ProcessActions from "./ProcessActions"
 import ProcessTeam from "./ProcessTeam"
 import { ProcessStepper } from "@/components/processes/ProcessStepper"
@@ -196,6 +196,24 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
                   <Upload className="w-8 h-8 text-muted-foreground mb-2" />
                   <p className="font-medium text-sm">Importar alumnos</p>
                   <p className="text-xs text-muted-foreground mt-1">Empieza subiendo un Excel</p>
+                </CardContent>
+              </Card>
+            </Link>
+          )}
+
+          {(sociogramCount ?? 0) > 0 && (
+            <Link href={`/processes/${id}/sociogram/report`} target="_blank">
+              <Card className="border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer h-full">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                      <FileText className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <CardTitle className="text-base text-indigo-900">Informe del sociograma</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-indigo-700">Ver el informe analítico con métricas, alertas y recomendaciones</p>
                 </CardContent>
               </Card>
             </Link>

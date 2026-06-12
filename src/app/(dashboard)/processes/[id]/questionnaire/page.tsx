@@ -19,6 +19,7 @@ import {
   CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail, RotateCcw,
 } from "lucide-react"
 import Link from "next/link"
+import ImportResponsesDialog from "@/components/questionnaire/ImportResponsesDialog"
 
 const QRCodeSVG = dynamic<{ value: string; size?: number }>(
   () => import("qrcode.react").then(m => m.QRCodeSVG as React.ComponentType<{ value: string; size?: number }>),
@@ -256,10 +257,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
         <Button variant="ghost" size="icon" asChild>
           <Link href={`/processes/${id}`}><ArrowLeft className="w-4 h-4" /></Link>
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">Cuestionario sociométrico</h1>
           <p className="text-muted-foreground text-sm">Configura y lanza el cuestionario para el alumnado</p>
         </div>
+        <ImportResponsesDialog processId={id} onImported={loadTokens} />
       </div>
 
       {/* Settings */}
