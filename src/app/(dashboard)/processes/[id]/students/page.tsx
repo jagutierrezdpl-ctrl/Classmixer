@@ -180,13 +180,19 @@ function EditableBadge({
 export default function StudentsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
-  const [view, setView] = useState<"list" | "import" | "preview" | "update-grades" | "update-grades-preview">("list")
+  const [view, setView] = useState<"list" | "import" | "preview" | "update-grades" | "update-grades-preview" | "bulk-update" | "bulk-update-preview">("list")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [gradesPreview, setGradesPreview] = useState<{
     total: number; matched: number; unmatched: number; unmatched_list: string[];
     preview: { name: string; grade: number; level: string }[];
     file?: File;
+  } | null>(null)
+  const [bulkPreview, setBulkPreview] = useState<{
+    total_rows: number; with_changes: number; no_changes: number
+    unmatched: number; unmatched_list: string[]
+    preview: { name: string; changes: Record<string, { from: unknown; to: unknown }> }[]
+    file?: File
   } | null>(null)
   const [loadFromProfilesOpen, setLoadFromProfilesOpen] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
@@ -324,6 +330,66 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
       setStudents(Array.isArray(updated) ? updated : [])
       setView("list")
       setGradesPreview(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al actualizar")
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function downloadCurrentData() {
+    const res = await fetch(`/api/processes/${id}/students/export-data`)
+    if (!res.ok) { toast.error("Error al descargar"); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `alumnos_${id}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleBulkFileUpload(file: File) {
+    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+      toast.error("Solo se admiten archivos Excel (.xlsx, .xls)")
+      return
+    }
+    setImporting(true)
+    const formData = new FormData()
+    formData.append("file", file)
+    try {
+      const res = await fetch(`/api/processes/${id}/students/bulk-update?action=preview`, {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error ?? "Error al procesar"); return }
+      setBulkPreview({ ...data, file })
+      setView("bulk-update-preview")
+    } catch {
+      toast.error("Error al procesar el archivo")
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleConfirmBulkUpdate() {
+    if (!bulkPreview?.file) return
+    setImporting(true)
+    const formData = new FormData()
+    formData.append("file", bulkPreview.file)
+    try {
+      const res = await fetch(`/api/processes/${id}/students/bulk-update?action=confirm`, {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`${data.updated} alumnos actualizados`)
+      const updated = await fetch(`/api/processes/${id}/students`).then(r => r.json())
+      setStudents(Array.isArray(updated) ? updated : [])
+      setView("list")
+      setBulkPreview(null)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al actualizar")
     } finally {
@@ -714,6 +780,183 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
     )
   }
 
+  // ── BULK UPDATE UPLOAD VIEW ──────────────────────────────────────────────────
+  if (view === "bulk-update") {
+    return (
+      <div className="p-8 max-w-2xl">
+        <div className="flex items-center gap-3 mb-8">
+          <Button variant="ghost" size="icon" onClick={() => setView("list")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Actualizar desde Excel</h1>
+            <p className="text-muted-foreground text-sm">
+              Sube el Excel que descargaste con los datos modificados
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 mb-6 text-sm text-blue-700">
+          <p className="font-semibold mb-1">¿Cómo funciona?</p>
+          <ol className="list-decimal list-inside space-y-1 text-xs text-blue-600">
+            <li>Descarga los datos actuales usando el botón <strong>Descargar datos</strong></li>
+            <li>Modifica en Excel: nota, conducta, necesidades u observaciones</li>
+            <li>Sube el archivo aquí — se actualizará solo lo que hayas cambiado</li>
+          </ol>
+        </div>
+
+        <div
+          className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors cursor-pointer ${
+            dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+          }`}
+          onDragOver={e => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={e => {
+            e.preventDefault()
+            setDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) handleBulkFileUpload(file)
+          }}
+          onClick={() => document.getElementById("bulk-file-input")?.click()}
+        >
+          {importing ? (
+            <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin text-primary" />
+          ) : (
+            <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+          )}
+          <p className="font-medium mb-1">{importing ? "Procesando..." : "Arrastra tu Excel aquí"}</p>
+          <p className="text-sm text-muted-foreground">o haz clic para seleccionar</p>
+          <p className="text-xs text-muted-foreground mt-2">.xlsx o .xls</p>
+          <input
+            id="bulk-file-input"
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={e => e.target.files?.[0] && handleBulkFileUpload(e.target.files[0])}
+          />
+        </div>
+
+        <Button variant="outline" className="w-full mt-4" onClick={downloadCurrentData}>
+          <Download className="w-4 h-4" />
+          Descargar datos actuales
+        </Button>
+      </div>
+    )
+  }
+
+  // ── BULK UPDATE PREVIEW VIEW ─────────────────────────────────────────────────
+  if (view === "bulk-update-preview" && bulkPreview) {
+    const FIELD_LABELS: Record<string, string> = {
+      nota_media: "Nota", nivel_academico: "Nivel", conducta: "Conducta",
+      necesidades: "Necesidades", observaciones: "Observaciones",
+    }
+    return (
+      <div className="p-8 max-w-3xl">
+        <div className="flex items-center gap-3 mb-8">
+          <Button variant="ghost" size="icon" onClick={() => { setView("bulk-update"); setBulkPreview(null) }}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Confirmar actualización</h1>
+            <p className="text-muted-foreground text-sm">Revisa los cambios antes de guardar</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <Card><CardContent className="pt-4 pb-4">
+            <p className="text-2xl font-bold">{bulkPreview.total_rows}</p>
+            <p className="text-xs text-muted-foreground">Filas en Excel</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4">
+            <p className="text-2xl font-bold text-green-600">{bulkPreview.with_changes}</p>
+            <p className="text-xs text-muted-foreground">Con cambios</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4">
+            <p className="text-2xl font-bold text-gray-400">{bulkPreview.no_changes}</p>
+            <p className="text-xs text-muted-foreground">Sin cambios</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4">
+            <p className="text-2xl font-bold text-yellow-600">{bulkPreview.unmatched}</p>
+            <p className="text-xs text-muted-foreground">Sin coincidencia</p>
+          </CardContent></Card>
+        </div>
+
+        {bulkPreview.unmatched_list.length > 0 && (
+          <Card className="mb-4 border-yellow-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-yellow-700">
+                <AlertTriangle className="w-4 h-4" /> Sin coincidencia ({bulkPreview.unmatched_list.length} mostrados)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {bulkPreview.unmatched_list.map((name, i) => (
+                <p key={i} className="text-xs text-yellow-700">{name}</p>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {bulkPreview.preview.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                Vista previa de cambios (primeros {bulkPreview.preview.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b">
+                  <tr>
+                    <th className="text-left py-2 px-4 font-medium text-muted-foreground">Alumno</th>
+                    <th className="text-left py-2 px-4 font-medium text-muted-foreground">Campo</th>
+                    <th className="text-left py-2 px-4 font-medium text-muted-foreground">Antes</th>
+                    <th className="text-left py-2 px-4 font-medium text-muted-foreground">Después</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkPreview.preview.flatMap((p, i) =>
+                    Object.entries(p.changes).map(([field, { from, to }], j) => (
+                      <tr key={`${i}-${j}`} className="border-b last:border-0">
+                        {j === 0 ? (
+                          <td className="py-2 px-4 font-medium align-top" rowSpan={Object.keys(p.changes).length}>
+                            {p.name}
+                          </td>
+                        ) : null}
+                        <td className="py-2 px-4 text-muted-foreground">{FIELD_LABELS[field] ?? field}</td>
+                        <td className="py-2 px-4 text-red-500 line-through">{String(from ?? "—")}</td>
+                        <td className="py-2 px-4 text-green-600 font-medium">{String(to ?? "—")}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        )}
+
+        {bulkPreview.with_changes === 0 && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 mb-6 text-sm text-gray-500 text-center">
+            No se han detectado cambios respecto a los datos actuales.
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          {bulkPreview.with_changes > 0 && (
+            <Button onClick={handleConfirmBulkUpdate} disabled={importing}>
+              {importing
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Actualizando...</>
+                : <><CheckCircle className="w-4 h-4" /> Guardar {bulkPreview.with_changes} cambios</>
+              }
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => { setView("bulk-update"); setBulkPreview(null) }}>
+            Volver
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   // ── LIST VIEW ────────────────────────────────────────────────────────────────
   return (
     <div className="p-8">
@@ -737,10 +980,16 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
             Desde Alumnado
           </Button>
           {students.length > 0 && (
-            <Button variant="outline" onClick={() => setView("update-grades")}>
-              <RefreshCw className="w-4 h-4" />
-              Actualizar notas
-            </Button>
+            <>
+              <Button variant="outline" onClick={downloadCurrentData}>
+                <Download className="w-4 h-4" />
+                Descargar datos
+              </Button>
+              <Button variant="outline" onClick={() => setView("bulk-update")}>
+                <RefreshCw className="w-4 h-4" />
+                Actualizar desde Excel
+              </Button>
+            </>
           )}
           <Button onClick={() => setView("import")}>
             <Upload className="w-4 h-4" />
