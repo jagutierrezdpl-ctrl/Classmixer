@@ -123,6 +123,7 @@ export async function POST(
     if (newRule && rs?.length) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const newRuleStudents = (rs as any[])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((rs: any) => {
           const newSid = remapStudentId(rs.student_id)
           if (!newSid) return null
