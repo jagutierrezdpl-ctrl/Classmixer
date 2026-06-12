@@ -449,8 +449,8 @@ export interface AlgorithmConstraints {
 }
 
 export const DEFAULT_CONSTRAINTS: AlgorithmConstraints = {
-  enforce_origin_mix: false,
-  max_origin_pct: 60,
+  enforce_origin_mix: true,
+  max_origin_pct: 50,
   enforce_gender_balance: false,
   gender_tolerance: 15,
   enforce_equal_size: false,
@@ -466,7 +466,9 @@ export function generateProposals(
   constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS
 ): ProposalResult[] {
   const separationRules = rules.filter(r => r.rule_type === "must_separate" && r.active)
-  const lockRules = rules.filter(r => r.rule_type === "lock_student_to_class" && r.active)
+  const lockRules = rules.filter(r =>
+    (r.rule_type === "lock_student_to_class" || r.rule_type === "with_tutor") && r.active
+  )
   const excludeRules = rules.filter(r => r.rule_type === "exclude_student" && r.active)
   const mustTogetherRules = rules.filter(r => r.rule_type === "must_keep_together" && r.active)
   const shouldTogetherRules = rules.filter(r => r.rule_type === "should_keep_together" && r.active)

@@ -32,6 +32,7 @@ export type RuleType =
   | "exclude_student"
   | "protect_vulnerable"
   | "avoid_tutor"
+  | "with_tutor"
 
 export type RulePriority = "obligatoria" | "alta" | "media" | "baja"
 

@@ -46,6 +46,7 @@ export const createRuleSchema = z.object({
     "exclude_student",
     "protect_vulnerable",
     "avoid_tutor",
+    "with_tutor",
   ]),
   priority: z.enum(["obligatoria", "alta", "media", "baja"]),
   description: z.string().optional(),

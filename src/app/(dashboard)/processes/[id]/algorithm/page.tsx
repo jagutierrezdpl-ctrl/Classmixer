@@ -242,9 +242,9 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
               <div className="flex items-center gap-2">
                 <Shuffle className="w-4 h-4 text-muted-foreground" />
                 <div>
-                  <Label className="text-sm font-medium">Mezcla obligatoria de clases de origen</Label>
+                  <Label className="text-sm font-medium">Evitar que los alumnos de la misma clase original se agrupen</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Limita cuántos alumnos de la misma clase original pueden coincidir en una nueva clase
+                    Limita cuántos alumnos de la misma clase de origen pueden coincidir en una nueva clase. Porcentaje más bajo = mezcla más intensa.
                   </p>
                 </div>
               </div>
@@ -266,16 +266,16 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
                   className="cursor-pointer"
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>30% — Mezcla estricta</span>
+                  <span>30% — Mezcla máxima</span>
                   <span className="font-medium text-primary">
-                    {constraints.max_origin_pct <= 40 ? "Mezcla muy estricta" :
-                     constraints.max_origin_pct <= 55 ? "Mitad y mitad" :
-                     "Mezcla moderada"}
+                    {constraints.max_origin_pct <= 40 ? "Mezcla muy intensa" :
+                     constraints.max_origin_pct <= 55 ? "Equilibrada" :
+                     "Mezcla suave"}
                   </span>
-                  <span>70% — Mezcla suave</span>
+                  <span>70% — Mezcla mínima</span>
                 </div>
                 <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
-                  Con el {constraints.max_origin_pct}%, en dos clases destino de 25 alumnos, máximo {Math.round(25 * constraints.max_origin_pct / 100)} alumnos de la misma clase original.
+                  Con el {constraints.max_origin_pct}%, como máximo el {constraints.max_origin_pct}% de una clase nueva puede provenir de la misma clase original (p.ej. máx. {Math.round(25 * constraints.max_origin_pct / 100)} de 25 alumnos).
                 </p>
               </div>
             )}

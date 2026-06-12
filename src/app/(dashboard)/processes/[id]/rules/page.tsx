@@ -25,6 +25,7 @@ const RULE_LABELS: Record<string, string> = {
   keep_at_least_one: "Mantener al menos uno",
   max_from_group: "Máximo por clase",
   lock_student_to_class: "Fijar en clase concreta",
+  with_tutor: "Asignar con tutor concreto",
   exclude_student: "Excluir de la mezcla",
   protect_vulnerable: "Proteger alumno vulnerable",
   avoid_tutor: "Evitar tutor (alumno-tutor)",
@@ -343,10 +344,10 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
               )}
             </div>
 
-            {ruleType === "avoid_tutor" && (
+            {(ruleType === "avoid_tutor" || ruleType === "with_tutor") && (
               <div className="space-y-1.5">
-                <Label>Tutor que debe evitarse *</Label>
-                <Select onValueChange={v => setValue("tutor_id", v)}>
+                <Label>{ruleType === "with_tutor" ? "Tutor asignado *" : "Tutor que debe evitarse *"}</Label>
+                <Select value={watch("tutor_id") ?? ""} onValueChange={v => setValue("tutor_id", v)}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar tutor..." /></SelectTrigger>
                   <SelectContent>
                     {centerUsers.map(u => (
@@ -356,7 +357,17 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Los alumnos seleccionados no deberían asignarse a este tutor</p>
+                {ruleType === "with_tutor"
+                  ? <p className="text-xs text-muted-foreground">Los alumnos seleccionados se fijarán en la clase que imparta este tutor</p>
+                  : <p className="text-xs text-muted-foreground">Los alumnos seleccionados no deberían asignarse a este tutor</p>
+                }
+              </div>
+            )}
+            {ruleType === "with_tutor" && (
+              <div className="space-y-1.5">
+                <Label>Clase destino *</Label>
+                <Input placeholder="Ej: 1A" {...register("target_class")} />
+                <p className="text-xs text-muted-foreground">Clase que impartirá el tutor seleccionado</p>
               </div>
             )}
 
