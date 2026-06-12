@@ -17,8 +17,8 @@ import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft, Loader2, Link2, Copy,
   CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail, RotateCcw,
-  Square, CheckSquare, MinusSquare,
 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import ImportResponsesDialog from "@/components/questionnaire/ImportResponsesDialog"
 
@@ -613,28 +613,22 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
               )}
 
               {/* Select all toggle */}
-              {visibleTokens.length > 0 && (() => {
-                const visibleIds = visibleTokens.map(t => t.student_id)
-                const allSelected = visibleIds.length > 0 && visibleIds.every(sid => selectedIds.has(sid))
-                const someSelected = visibleIds.some(sid => selectedIds.has(sid))
-                return (
-                  <button
-                    type="button"
-                    onClick={toggleSelectAll}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-1 mb-1 transition-colors"
-                  >
-                    {allSelected
-                      ? <CheckSquare className="w-3.5 h-3.5 text-primary" />
-                      : someSelected
-                        ? <MinusSquare className="w-3.5 h-3.5 text-primary" />
-                        : <Square className="w-3.5 h-3.5" />}
-                    {allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+              {visibleTokens.length > 0 && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-1 mb-2 cursor-pointer select-none">
+                  <Checkbox
+                    checked={visibleTokens.every(t => selectedIds.has(t.student_id))}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                  <span>
+                    {visibleTokens.every(t => selectedIds.has(t.student_id))
+                      ? "Deseleccionar todos"
+                      : "Seleccionar todos"}
                     {selectedIds.size > 0 && (
-                      <span className="ml-1 text-primary font-medium">{selectedIds.size} seleccionados</span>
+                      <span className="ml-1.5 font-semibold text-primary">{selectedIds.size} seleccionados</span>
                     )}
-                  </button>
-                )
-              })()}
+                  </span>
+                </label>
+              )}
 
               {/* Selection action bar */}
               {selectedIds.size > 0 && (
@@ -681,10 +675,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                       onClick={() => toggleSelect(t.student_id)}
                     >
                       <div className="flex items-center gap-2">
-                        <div className="shrink-0" onClick={e => { e.stopPropagation(); toggleSelect(t.student_id) }}>
-                          {selectedIds.has(t.student_id)
-                            ? <CheckSquare className="w-4 h-4 text-primary" />
-                            : <Square className="w-4 h-4 text-muted-foreground/40" />}
+                        <div className="shrink-0" onClick={e => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(t.student_id)}
+                            onCheckedChange={() => toggleSelect(t.student_id)}
+                          />
                         </div>
                         {t.used ? (
                           <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
