@@ -445,6 +445,7 @@ export interface AlgorithmConstraints {
   max_origin_pct: number        // 0–100: max % of students from same origin class in one target class
   enforce_gender_balance: boolean
   gender_tolerance: number      // 0–50: max % deviation from global gender ratio per class
+  enforce_equal_size: boolean   // all target classes must have equal number of students (diff ≤ 1)
 }
 
 export const DEFAULT_CONSTRAINTS: AlgorithmConstraints = {
@@ -452,6 +453,7 @@ export const DEFAULT_CONSTRAINTS: AlgorithmConstraints = {
   max_origin_pct: 60,
   enforce_gender_balance: false,
   gender_tolerance: 15,
+  enforce_equal_size: false,
 }
 
 export function generateProposals(
@@ -525,6 +527,11 @@ export function generateProposals(
 
   const activeStudents = students.filter(s => !excludedIds.has(s.id))
   const freeStudents = activeStudents.filter(s => !lockedStudents.has(s.id) && !mustTogetherLockedClass.has(s.id))
+
+  // Equal size cap: max students per class when enforce_equal_size is on
+  const maxClassSize = constraints.enforce_equal_size
+    ? Math.ceil(activeStudents.length / targetClasses.length)
+    : Infinity
 
   // Pre-compute global gender ratio for constraint enforcement
   const totalF = activeStudents.filter(s => s.gender === "F").length
@@ -707,6 +714,11 @@ export function generateProposals(
 
         // gender balance constraint
         if (!blocked && isGenderBlocked(assignments, bestClass, unit.ids, studentMapLocal)) {
+          blocked = true
+        }
+
+        // equal size constraint: don't exceed Math.ceil(N/K)
+        if (!blocked && (classCounts.get(bestClass) ?? 0) + unit.ids.length > maxClassSize) {
           blocked = true
         }
 

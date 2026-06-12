@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users } from "lucide-react"
+import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -320,6 +320,32 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
                   Si el grupo tiene 50% de chicas, cada clase debe tener entre {50 - constraints.gender_tolerance}% y {Math.min(100, 50 + constraints.gender_tolerance)}% de chicas.
                 </p>
               </div>
+            )}
+          </div>
+
+          <div className="border-t" />
+
+          {/* Equal class size */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Hash className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm font-medium">Igualar número de alumnos por clase</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Las clases destino deben tener el mismo número de alumnos (diferencia máxima de 1)
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={constraints.enforce_equal_size}
+                onCheckedChange={v => setConstraints(prev => ({ ...prev, enforce_equal_size: v }))}
+              />
+            </div>
+            {constraints.enforce_equal_size && (
+              <p className="pl-6 text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+                Con este ajuste activo, ninguna clase puede tener más de un alumno de diferencia con las demás.
+              </p>
             )}
           </div>
 
