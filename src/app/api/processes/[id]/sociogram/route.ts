@@ -13,20 +13,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = createServiceClient()
 
-  const [{ data: students }, { data: allResponses }] = await Promise.all([
-    supabase.from("students").select("*").eq("process_id", id).eq("active", true),
+  const [{ data: allStudents }, { data: allResponses }] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from("students").select("*").eq("process_id", id).eq("active", true),
     supabase.from("responses").select("*").eq("process_id", id),
   ])
 
-  if (!students) return NextResponse.json({ error: "Error al cargar alumnos" }, { status: 500 })
+  if (!allStudents) return NextResponse.json({ error: "Error al cargar alumnos" }, { status: 500 })
+
+  // Separate excluded students so we can mark them in the graph without including in metrics
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const students = (allStudents as any[]).filter((s: any) => !s.excluded_from_mix)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const excludedStudents = (allStudents as any[]).filter((s: any) => s.excluded_from_mix)
+  const excludedIds = new Set(excludedStudents.map((s: { id: string }) => s.id))
 
   // Tutors cannot see emotional or negative responses
   const canSeeSensitive = SENSITIVE_ROLES.includes(profile.role)
-  const responses = canSeeSensitive
+  const responses = (canSeeSensitive
     ? (allResponses ?? [])
     : (allResponses ?? []).filter((r: { relation_type: string }) =>
         r.relation_type !== "emotional" && r.relation_type !== "negative"
       )
+  // Filter out any response involving an excluded student
+  ).filter((r: { respondent_student_id: string; target_student_id: string }) =>
+    !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id)
+  )
 
   // Log sociogram access for orientadors (sensitive data access tracking)
   if (profile.role === "orientador") {
@@ -43,5 +55,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ...sociogram,
     viewer_role: profile.role,
     can_see_sensitive: canSeeSensitive,
+    excluded_students: excludedStudents.map((s: { id: string; first_name: string; last_name: string; current_class?: string; excluded_reason?: string }) => ({
+      id: s.id,
+      first_name: s.first_name,
+      last_name: s.last_name,
+      current_class: s.current_class,
+      excluded_reason: s.excluded_reason,
+    })),
   })
 }

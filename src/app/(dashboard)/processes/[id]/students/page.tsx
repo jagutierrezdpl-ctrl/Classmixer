@@ -1180,7 +1180,12 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
                       <Link href={`/processes/${id}/students/${s.id}`} className="block hover:underline">
                         <div className="flex items-center gap-1.5">
                           <p className="font-medium">{s.first_name} {s.last_name}</p>
-                          {(() => {
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {(s as any).excluded_from_mix && (
+                            <span title="Dado de baja del proceso" className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">Baja</span>
+                          )}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {!(s as any).excluded_from_mix && (() => {
                             const m = sociogramMap[s.id]
                             if (!m) return null
                             if (m.received === 0 && m.reciprocal === 0)

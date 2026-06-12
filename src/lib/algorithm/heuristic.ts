@@ -416,12 +416,15 @@ export function checkInfeasibility(
     explanation.push("No hay clases destino configuradas para este proceso.")
   }
 
-  const activeStudents = students.filter(s => {
-    const excluded = rules
+  const excludedViaRules = new Set(
+    rules
       .filter(r => r.rule_type === "exclude_student" && r.active)
       .flatMap(r => (r.students ?? []).map(rs => rs.student_id))
-    return !excluded.includes(s.id)
-  })
+  )
+  const activeStudents = students.filter(s =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    !excludedViaRules.has(s.id) && !(s as any).excluded_from_mix
+  )
 
   if (targetClasses.length > 0 && activeStudents.length < targetClasses.length) {
     blocking.push("Pocos alumnos")
@@ -469,9 +472,12 @@ export function generateProposals(
   const maxFromGroupRules = rules.filter(r => r.rule_type === "max_from_group" && r.active)
   const protectVulnerableRules = rules.filter(r => r.rule_type === "protect_vulnerable" && r.active)
 
-  const excludedIds = new Set(
-    excludeRules.flatMap(r => (r.students ?? []).map(rs => rs.student_id))
-  )
+  const excludedIds = new Set([
+    ...excludeRules.flatMap(r => (r.students ?? []).map(rs => rs.student_id)),
+    // Also respect excluded_from_mix field set directly on the student
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...students.filter(s => (s as any).excluded_from_mix).map(s => s.id),
+  ])
 
   const lockedStudents = new Map<string, string>()
   lockRules.forEach(r => {

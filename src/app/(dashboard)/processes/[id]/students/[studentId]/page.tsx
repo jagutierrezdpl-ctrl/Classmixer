@@ -10,6 +10,7 @@ import {
   AlertTriangle, BarChart3, Network, BookOpen, FileText,
 } from "lucide-react"
 import EditStudentDialog from "@/components/students/EditStudentDialog"
+import ExcludeStudentDialog from "@/components/students/ExcludeStudentDialog"
 
 const RELATION_LABELS: Record<string, { label: string; color: string }> = {
   friendship: { label: "Amistad", color: "bg-pink-100 text-pink-700" },
@@ -121,12 +122,28 @@ export default async function StudentDetailPage({
                 <AlertTriangle className="w-3 h-3" /> Vulnerable
               </Badge>
             )}
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(student as any).excluded_from_mix && (
+              <Badge variant="destructive" className="text-xs gap-1">
+                <UserX className="w-3 h-3" /> Baja
+              </Badge>
+            )}
           </div>
           <p className="text-muted-foreground text-sm mt-0.5">
             {student.current_class} · {student.external_id ?? "Sin ID"}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {["admin", "superadmin"].includes(profile.role) && (
+            <ExcludeStudentDialog
+              processId={processId}
+              studentId={studentId}
+              studentName={`${student.first_name} ${student.last_name}`}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              currentlyExcluded={(student as any).excluded_from_mix ?? false}
+              onChanged={() => {}}
+            />
+          )}
           <EditStudentDialog
             processId={processId}
             studentId={studentId}

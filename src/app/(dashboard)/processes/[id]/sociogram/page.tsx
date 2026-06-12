@@ -381,6 +381,26 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
 
               {/* Alertas tab */}
               <TabsContent value="alerts" className="flex-1 overflow-y-auto p-3 mt-0">
+                {/* Excluded students panel */}
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(data as any).excluded_students?.length > 0 && (
+                  <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(data as any).excluded_students.length} alumno{(data as any).excluded_students.length !== 1 ? "s" : ""} dado{(data as any).excluded_students.length !== 1 ? "s" : ""} de baja — excluidos del análisis
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(data as any).excluded_students.map((s: any) => (
+                        <span key={s.id} className="bg-white border border-gray-200 px-1.5 py-0.5 rounded text-xs text-gray-500 line-through">
+                          {s.first_name} {s.last_name}
+                          {s.excluded_reason && <span className="no-underline not-italic ml-1 text-gray-400">({s.excluded_reason})</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {data.alerts.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-30" />
