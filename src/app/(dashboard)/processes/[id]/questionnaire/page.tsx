@@ -30,7 +30,7 @@ interface TokenInfo {
   student_id: string
   used: boolean
   completed_at?: string
-  students?: { first_name: string; last_name: string }
+  students?: { first_name: string; last_name: string; current_class?: string }
   url: string
 }
 
@@ -43,6 +43,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [, setLoadingTokens] = useState(false)
   const [qrToken, setQrToken] = useState<string | null>(null)
   const [showOnlyPending, setShowOnlyPending] = useState(false)
+  const [sortAlpha, setSortAlpha] = useState(false)
+  const [filterClass, setFilterClass] = useState<string | null>(null)
   const [sendingReminder, setSendingReminder] = useState(false)
   const [sendingReminderFor, setSendingReminderFor] = useState<string | null>(null)
   const [resettingId, setResettingId] = useState<string | null>(null)
@@ -124,7 +126,18 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const completed = tokens.filter(t => t.used).length
   const pct = tokens.length > 0 ? Math.round((completed / tokens.length) * 100) : 0
   const pendingTokens = tokens.filter(t => !t.used)
-  const visibleTokens = showOnlyPending ? pendingTokens : tokens
+  const availableClasses = [...new Set(tokens.map(t => t.students?.current_class).filter(Boolean))].sort() as string[]
+
+  const visibleTokens = (() => {
+    let list = showOnlyPending ? pendingTokens : tokens
+    if (filterClass) list = list.filter(t => t.students?.current_class === filterClass)
+    if (sortAlpha) list = [...list].sort((a, b) => {
+      const la = `${a.students?.last_name ?? ""} ${a.students?.first_name ?? ""}`.toLowerCase()
+      const lb = `${b.students?.last_name ?? ""} ${b.students?.first_name ?? ""}`.toLowerCase()
+      return la.localeCompare(lb, "es")
+    })
+    return list
+  })()
 
   function copyAllPending() {
     const text = pendingTokens
@@ -425,6 +438,44 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
               </div>
               <Progress value={pct} className="mb-3" />
 
+              {/* Sort and filter controls */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setSortAlpha(v => !v)}
+                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors flex items-center gap-1 ${
+                    sortAlpha
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "text-muted-foreground border-border hover:bg-muted/50"
+                  }`}
+                >
+                  A→Z Apellidos
+                </button>
+                {availableClasses.map(cls => (
+                  <button
+                    key={cls}
+                    type="button"
+                    onClick={() => setFilterClass(filterClass === cls ? null : cls)}
+                    className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                      filterClass === cls
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "text-muted-foreground border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    {cls}
+                  </button>
+                ))}
+                {filterClass && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterClass(null)}
+                    className="text-xs px-2 py-0.5 rounded-full border border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" /> Quitar filtro
+                  </button>
+                )}
+              </div>
+
               {/* Pending controls */}
               {pendingTokens.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
@@ -482,7 +533,10 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                         ) : (
                           <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                         )}
-                        <span>{t.students?.first_name} {t.students?.last_name}</span>
+                        <span>{t.students?.last_name}, {t.students?.first_name}</span>
+                        {t.students?.current_class && (
+                          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{t.students.current_class}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         {!t.used && (

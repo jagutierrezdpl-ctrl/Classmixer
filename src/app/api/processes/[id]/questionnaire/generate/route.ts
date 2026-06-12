@@ -77,7 +77,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { data } = await supabase
     .from("questionnaire_tokens")
-    .select("*, students(first_name, last_name)")
+    .select("*, students(first_name, last_name, current_class)")
     .eq("process_id", id)
     .order("used")
 
