@@ -31,15 +31,14 @@ export default async function AlertsPanel({ centerId }: Props) {
   const [
     { data: tokens },
     { data: studentsWithoutEmail },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ] = await Promise.all([
     supabase
       .from("questionnaire_tokens")
-      .select("process_id, used")
+      .select("process_id, student_id, used")
       .in("process_id", pIds),
     supabase
       .from("students")
-      .select("process_id")
+      .select("id, process_id")
       .in("process_id", pIds)
       .eq("active", true)
       .is("email", null),
@@ -83,15 +82,19 @@ export default async function AlertsPanel({ centerId }: Props) {
     }
   }
 
-  // Students without email in open questionnaire processes
-  const openIds = new Set(processes.filter(p => p.status === "cuestionario_abierto").map(p => p.id))
-  const noEmailCount = (studentsWithoutEmail ?? []).filter(s => openIds.has(s.process_id)).length
-  if (noEmailCount > 0) {
+  // Students who responded (token used) but have no email — truly unreachable by reminder
+  const respondedWithoutEmail = (() => {
+    const usedStudentIds = new Set(
+      (tokens ?? []).filter(t => t.used).map(t => t.student_id)
+    )
+    return (studentsWithoutEmail ?? []).filter(s => usedStudentIds.has(s.id)).length
+  })()
+  if (respondedWithoutEmail > 0) {
     alerts.push({
-      type: "warning",
-      message: `${noEmailCount} alumno${noEmailCount > 1 ? "s" : ""} sin email registrado`,
-      detail: "No recibirán recordatorios automáticos del cuestionario",
-      href: "/alumnado",
+      type: "info",
+      message: `${respondedWithoutEmail} alumno${respondedWithoutEmail > 1 ? "s" : ""} respondieron sin identificarse`,
+      detail: "Su email no quedó registrado y no podrán recibir comunicaciones",
+      href: undefined,
     })
   }
 
