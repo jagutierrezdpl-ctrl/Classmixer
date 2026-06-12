@@ -10,6 +10,9 @@ function generateToken(): string {
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Solo administradores pueden generar tokens del cuestionario" }, { status: 403 })
+  }
 
   const { id } = await params
   const supabase = createServiceClient()

@@ -62,6 +62,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   if (body.status === "aprobada") {
+    if (!["admin", "superadmin"].includes(profile.role)) {
+      return NextResponse.json({ error: "Solo administradores pueden aprobar propuestas" }, { status: 403 })
+    }
     await supabase
       .from("processes")
       .update({ status: "propuesta_seleccionada", updated_at: new Date().toISOString() })

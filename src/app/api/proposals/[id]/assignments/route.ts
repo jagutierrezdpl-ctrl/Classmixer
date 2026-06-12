@@ -11,6 +11,9 @@ interface AssignmentInput {
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Solo administradores pueden modificar asignaciones" }, { status: 403 })
+  }
 
   const { id } = await params
   const body = await request.json()
