@@ -1,6 +1,11 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { randomBytes } from "crypto"
+
+function generateToken() {
+  return randomBytes(20).toString("hex")
+}
 
 /** GET — returns processes of the same center that have responses */
 export async function GET(
@@ -175,14 +180,55 @@ export async function POST(
     if (!error) inserted += batch.length
   }
 
-  // Mark tokens as used for students who responded
+  // Ensure tokens exist for respondents (create if missing, mark all as used)
   const respondentIds = [...new Set(mapped.map(r => r.respondent_student_id))]
   if (respondentIds.length > 0) {
-    await supabase
+    const now = new Date().toISOString()
+
+    // Load existing tokens for this process
+    const { data: existingTokens } = await supabase
       .from("questionnaire_tokens")
-      .update({ used: true, completed_at: new Date().toISOString() })
+      .select("student_id")
       .eq("process_id", targetProcessId)
       .in("student_id", respondentIds)
+
+    const alreadyHaveToken = new Set((existingTokens ?? []).map(t => t.student_id))
+    const missingIds = respondentIds.filter(sid => !alreadyHaveToken.has(sid))
+
+    // Update existing tokens
+    if (alreadyHaveToken.size > 0) {
+      await supabase
+        .from("questionnaire_tokens")
+        .update({ used: true, completed_at: now })
+        .eq("process_id", targetProcessId)
+        .in("student_id", respondentIds)
+    }
+
+    // Create tokens for students that don't have one yet
+    if (missingIds.length > 0) {
+      await supabase.from("questionnaire_tokens").insert(
+        missingIds.map(sid => ({
+          process_id: targetProcessId,
+          student_id: sid,
+          token: generateToken(),
+          used: true,
+          completed_at: now,
+        }))
+      )
+    }
+  }
+
+  // Advance process status if still in early state
+  const { data: proc } = await supabase
+    .from("processes")
+    .select("status")
+    .eq("id", targetProcessId)
+    .single()
+  if (proc && ["borrador", "cuestionario_abierto"].includes(proc.status)) {
+    await supabase
+      .from("processes")
+      .update({ status: "cuestionario_cerrado" })
+      .eq("id", targetProcessId)
   }
 
   await logAudit(profile.id, profile.center_id, "import_responses_from_process", "process", {
