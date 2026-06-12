@@ -10,6 +10,7 @@ import {
   Heart, Briefcase, UsersRound, XCircle,
 } from "lucide-react"
 import StudentResponseRow from "@/components/responses/StudentResponseRow"
+import ResponseCharts from "@/components/responses/ResponseCharts"
 
 type RelationType = "friendship" | "work" | "emotional" | "negative"
 
@@ -181,6 +182,18 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Charts */}
+      {totalResponses > 0 && (
+        <ResponseCharts
+          byClass={[...byClass.entries()].map(([cls, ss]) => {
+            const total = ss?.length ?? 0
+            const completed = (ss ?? []).filter(s => tokenMap.get(s.id)?.used).length
+            return { class: cls, completed, total }
+          })}
+          typeCount={typeCount}
+        />
       )}
 
       {/* No questionnaire warning */}

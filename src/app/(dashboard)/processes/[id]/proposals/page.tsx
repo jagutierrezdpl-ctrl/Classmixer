@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
+import ProposalCharts from "@/components/proposals/ProposalCharts"
 
 function ScoreBar({ label, value, color = "bg-primary" }: { label: string; value: number; color?: string }) {
   return (
@@ -171,6 +172,24 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
         </div>
       ) : (
         <>
+          {/* Charts */}
+          {proposals.length > 1 && (
+            <ProposalCharts
+              proposals={proposals.map(p => ({
+                id: p.id,
+                name: p.name,
+                score_total:    p.score_total    ?? 0,
+                score_social:   p.score_social   ?? 0,
+                score_academic: p.score_academic ?? 0,
+                score_gender:   p.score_gender   ?? 0,
+                score_behavior: p.score_behavior ?? 0,
+              }))}
+              metricsMap={Object.fromEntries(
+                proposals.map(p => [p.id, buildMetricsMap(p.metrics ?? [])])
+              )}
+            />
+          )}
+
           {/* Comparator table */}
           {proposals.length > 1 && (
             <Card className="mb-6 overflow-x-auto">

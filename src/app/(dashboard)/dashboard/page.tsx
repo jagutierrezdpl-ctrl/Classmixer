@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { getCenterLicense } from "@/lib/license"
 import { OnboardingWizard } from "@/components/layout/OnboardingWizard"
+import DashboardCharts from "@/components/dashboard/DashboardCharts"
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "success" | "warning" | "outline" }> = {
   borrador: { label: "Borrador", variant: "secondary" },
@@ -241,6 +242,17 @@ export default async function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {/* Questionnaire progress chart */}
+      {openProcesses.length > 0 && (
+        <DashboardCharts
+          processProgress={openProcesses.map(p => {
+            const stats = tokenMap[p.id] ?? { total: 0, completed: 0 }
+            const pct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
+            return { name: p.name, completed: stats.completed, total: stats.total, pct }
+          })}
+        />
+      )}
 
       {/* Questionnaire progress */}
       {openProcesses.length > 0 && (
