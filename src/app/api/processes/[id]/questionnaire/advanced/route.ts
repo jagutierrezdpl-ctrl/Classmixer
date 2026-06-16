@@ -87,6 +87,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const questions = Array.isArray(body?.questions) ? body.questions : []
   if (questions.length === 0) return NextResponse.json({ error: "Sin cambios" }, { status: 400 })
 
+  const requestedTypeIds: string[] = [...new Set(questions.map((q: any) => q.question_type_id))] as string[]
+  const { data: allowedTypes } = await supabase
+    .from("question_types")
+    .select("id")
+    .eq("active", true)
+    .or(`center_id.is.null,center_id.eq.${profile.center_id}`)
+    .in("id", requestedTypeIds)
+
+  if ((allowedTypes ?? []).length !== requestedTypeIds.length) {
+    return NextResponse.json({ error: "Tipo de pregunta no válido" }, { status: 400 })
+  }
+
   const rows = questions.map((q: any) => ({
     process_id: id,
     question_type_id: q.question_type_id,

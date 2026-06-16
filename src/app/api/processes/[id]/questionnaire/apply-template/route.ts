@@ -24,6 +24,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const templateId = body?.template_id
   if (!templateId) return NextResponse.json({ error: "Falta template_id" }, { status: 400 })
 
+  const { data: template } = await supabase
+    .from("questionnaire_templates")
+    .select("id, center_id")
+    .eq("id", templateId)
+    .single()
+
+  const tpl = template as { id: string; center_id: string | null } | null
+  if (!tpl || (tpl.center_id !== null && tpl.center_id !== profile.center_id)) {
+    return NextResponse.json({ error: "Plantilla no encontrada" }, { status: 404 })
+  }
+
   const { data: templateQuestions, error } = await supabase
     .from("questionnaire_template_questions")
     .select("question_type_id, default_enabled, default_min, default_max, sort_order")

@@ -13,12 +13,14 @@ export async function POST(
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "IA no disponible: ANTHROPIC_API_KEY no configurada" }, { status: 503 })
-  }
-
   const { id } = await params
   const supabase = createServiceClient()
+
+  const { data: center } = await supabase
+    .from("centers")
+    .select("openrouter_api_key")
+    .eq("id", profile.center_id)
+    .single()
 
   const { data: proposal } = await supabase
     .from("proposals")
@@ -76,7 +78,7 @@ Redacta el resumen con estas tres secciones (máximo 250 palabras):
 Tono: directo, claro, orientado a la toma de decisiones.`
 
   try {
-    const summary = await generateAISummary(prompt)
+    const summary = await generateAISummary(prompt, (center as { openrouter_api_key?: string | null } | null)?.openrouter_api_key)
     return NextResponse.json({ summary })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido"

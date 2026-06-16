@@ -6,13 +6,13 @@ Plataforma web para centros educativos que combina análisis sociométrico, dato
 
 ## Qué hace
 
-1. **Importa alumnos** desde Excel con validación automática de datos
-2. **Lanza un cuestionario sociométrico** accesible por enlace o código individual
+1. **Importa alumnos** desde Excel con validación automática de datos, o los gestiona desde un Alumnado central por grupos/cursos
+2. **Lanza un cuestionario sociométrico configurable** — amistad/trabajo/emocional/negativa por defecto, ampliable con roles sociales, escalas de intensidad, clima de aula y un módulo de convivencia/acoso muy restringido; accesible por enlace, código individual o login Google del centro
 3. **Genera sociogramas interactivos** con detección de alumnos aislados, líderes, subgrupos y alumnos puente
-4. **Ejecuta un algoritmo de mezcla** configurable con pesos por criterio (académico, social, convivencia...)
+4. **Ejecuta un algoritmo de mezcla** configurable con pesos por criterio (académico, social, convivencia...), con heurística propia o un microservicio OR-Tools opcional
 5. **Genera propuestas comparables** con métricas detalladas y sociograma futuro simulado
 6. **Permite edición manual** mediante drag & drop con impacto en tiempo real
-7. **Exporta** a Excel y a informe imprimible (PDF desde el navegador)
+7. **Exporta** a Excel y a informes PDF segmentados por rol (dirección, tutoría, orientación, sociograma, convivencia)
 
 ---
 
@@ -47,7 +47,11 @@ Crea un archivo `.env.local` en la raíz con:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://<tu-proyecto>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<tu-anon-key>
-ANTHROPIC_API_KEY=<tu-api-key>     # Opcional — activa la IA explicativa
+ANTHROPIC_API_KEY=<tu-api-key>                  # Opcional — activa la IA explicativa
+PYTHON_SERVICE_URL=<url-del-microservicio>      # Opcional — usa OR-Tools en vez del heurístico
+NEXT_PUBLIC_GOOGLE_HD_DOMAIN=<dominio-del-centro> # Opcional — hint de dominio en el login Google de alumnos
+STUDENT_EMAIL_DOMAIN=<dominio-del-centro>       # Opcional — verificación de dominio en el callback de alumnos
+GMAIL_USER / GMAIL_APP_PASSWORD                 # Opcional — recordatorios de cuestionario por email
 ```
 
 ### Instalar y ejecutar
@@ -61,15 +65,7 @@ La aplicación estará disponible en `http://localhost:3000`.
 
 ### Base de datos
 
-Las migraciones SQL deben ejecutarse en el editor SQL de Supabase. Las tablas necesarias son (en orden de dependencia):
-
-```
-centers → users → processes → students
-→ questionnaire_settings → questionnaire_tokens
-→ responses → rules → rule_students
-→ proposals → proposal_assignments → proposal_metrics
-→ sociogram_metrics → audit_logs
-```
+Las migraciones SQL viven en `supabase/migrations/` (numeradas, `001` a `022` a fecha de hoy) y deben ejecutarse en orden en el editor SQL de Supabase. Cubren el esquema base (`centers → users → processes → students → questionnaire_settings → questionnaire_tokens → responses → rules → rule_students → proposals → proposal_assignments → proposal_metrics → sociogram_metrics → audit_logs`) más las ampliaciones posteriores: `student_profiles`/`center_groups` (alumnado central), soft-delete y exclusión de la mezcla, notas de orientación, licencias, notas internas de superadmin, RLS de tutores/grupos, y el catálogo de preguntas configurable (`question_types`, `questionnaire_questions`, `climate_responses`, `questionnaire_templates`).
 
 Consulta el archivo `CLAUDE.md` para el esquema completo de cada tabla.
 
@@ -156,20 +152,22 @@ Aprobar → Exportar Excel / Imprimir informe PDF
 
 | Rol | Permisos |
 |---|---|
-| `superadmin` | Gestión de centros y licencias |
-| `admin` | Acceso completo al proceso (crear, importar, generar, aprobar) |
-| `tutor` | Ver alumnos de sus grupos, añadir observaciones y reglas |
-| `orientador` | Acceso a datos sociales sensibles, sociogramas, alertas |
-| `alumno` | Solo accede al cuestionario mediante enlace |
+| `superadmin` | Gestión de centros, licencias e invitación del admin de cada centro |
+| `admin` | Acceso completo al centro (crear, importar, generar, aprobar, configurar) |
+| `tutor` | Solo procesos/grupos donde está asignado; no ve tipos de pregunta sensibles ni muy sensibles |
+| `orientador` | Acceso total al centro igual que admin, incluyendo datos sensibles y el informe de convivencia (con auditoría) |
+| `alumno` | Solo accede a su cuestionario por enlace, código o login Google del centro |
 
 ---
 
 ## Algoritmo de mezcla
 
-El algoritmo no usa solvers externos (OR-Tools queda para fases futuras). Implementa:
+Por defecto usa una heurística propia en TypeScript; si la variable de entorno `PYTHON_SERVICE_URL` está configurada, las propuestas se generan con el microservicio `python-solver/` (FastAPI + Google OR-Tools CP-SAT) en su lugar, con los mismos 10 pesos configurables.
 
-1. **Distribución snake** — ordena por nota media, asigna en zig-zag entre clases para equilibrar
-2. **Respeto de reglas duras** — `must_separate`, `lock_student_to_class`, `exclude_student`, `must_keep_together`, `max_from_group`
+Heurística (`src/lib/algorithm/heuristic.ts`):
+
+1. **Distribución snake** — ordena por nota media, asigna en zig-zag entre clases para equilibrar (con tope opcional `enforce_equal_size` para que ninguna clase reciba más de un alumno de más que el resto)
+2. **Respeto de reglas duras** — `must_separate`, `lock_student_to_class`, `exclude_student`, `must_keep_together`, `max_from_group`, `with_tutor`/`avoid_tutor`
 3. **Búsqueda local para reglas blandas** — `keep_at_least_one`, `protect_vulnerable`, `should_keep_together`
 4. **Búsqueda local por swaps** — hasta 300 iteraciones de intercambio aleatorio, acepta si mejora la puntuación
 5. **Multi-propuesta** — hasta 10 propuestas con seeds distintos, deduplicadas por fingerprint
@@ -243,6 +241,8 @@ Visualización interactiva con Cytoscape.js.
 | `lock_student_to_class` | Asignación fija a una clase destino |
 | `exclude_student` | Excluir del proceso (repite, cambia de centro...) |
 | `protect_vulnerable` | Garantiza que el alumno conserve su única conexión |
+| `with_tutor` | Asigna al alumno a la clase que tendrá un tutor concreto |
+| `avoid_tutor` | El alumno no debe ir a la clase de un tutor concreto |
 
 ---
 
@@ -250,9 +250,15 @@ Visualización interactiva con Cytoscape.js.
 
 | Tipo | Formato | Contenido |
 |---|---|---|
-| Propuesta final | Excel (.xlsx) | Una hoja por clase + hoja resumen |
+| Propuesta final | Excel (.xlsx) | Clases, métricas, reglas, alertas, alumnos sin amistad, sociograma |
 | Sociograma | Excel (.xlsx) | Métricas individuales, comunidades, alertas, resumen |
 | Informe completo | HTML imprimible → PDF | Resumen ejecutivo + distribución por clase |
+| PDF Dirección | PDF | Resumen ejecutivo de la propuesta aprobada |
+| PDF Tutoría | PDF | Una página por clase, solo amistades (sin tipos sensibles) |
+| PDF Sociograma / Orientación | PDF | Grafo, métricas, alertas, recomendaciones — orientación incluye conflictos |
+| PDF Convivencia | PDF | Señales de acoso agregadas por alumno, "a revisar" — nunca acusatorio |
+
+> Las nominaciones de rol y las señales de convivencia/acoso no se mezclan en el grafo del sociograma ni en sus métricas (centralidad, densidad, puentes): quedan solo en el dashboard de respuestas y en el informe de convivencia.
 
 ---
 
@@ -268,6 +274,11 @@ Visualización interactiva con Cytoscape.js.
 | Fase 6 — Seguridad, flujo de trabajo y roles | ✅ Completo |
 | Fase 7 — OAuth y control de acceso por rol | ✅ Completo |
 | Fase 8 — Licencias, históricos e IA explicativa | ✅ Completo |
+| Fase 9 — Alumnado central, grupos y control de acceso por rol | ✅ Completo |
+| Fase 10 — Acceso de alumnos, recordatorios y motor OR-Tools | ✅ Completo |
+| Fase 11 — Panel superadmin, informes y exclusión social | ✅ Completo |
+| Fase 12 — Refinamiento del algoritmo y auditoría de seguridad ampliada | ✅ Completo |
+| Fase 13 — Cuestionario sociométrico configurable y convivencia | ✅ Completo |
 
 Ver `PROGRESS.md` para el detalle técnico completo de cada fase.
 
@@ -275,9 +286,10 @@ Ver `PROGRESS.md` para el detalle técnico completo de cada fase.
 
 ## Privacidad y RGPD
 
-- Los alumnos solo acceden a su cuestionario; no ven datos de otros
-- El sociograma solo es accesible para personal autorizado
-- Toda acción sensible queda registrada en `audit_logs`
+- Los alumnos solo acceden a su cuestionario (por enlace, código o login Google del centro); no ven datos de otros
+- El sociograma solo es accesible para personal autorizado; el tutor nunca ve tipos de pregunta `sensitive` o `very_sensitive` (emocional, negativa, convivencia/acoso)
+- El módulo de convivencia/acoso es `very_sensitive`: visible solo para admin/orientador/superadmin, nunca tutor, y cada exportación queda registrada en `audit_logs`
+- Toda acción sensible (ver sociograma siendo orientador, exportar informes, importar alumnos...) queda registrada en `audit_logs`
 - Los procesos pueden archivarse y borrarse completamente
 - Acceso restringido por `center_id` (Row Level Security en Supabase)
 

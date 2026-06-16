@@ -664,6 +664,255 @@ ANTHROPIC_API_KEY=<tu-api-key>   # Opcional — la IA no estará disponible sin 
 
 ---
 
+## FASE 9 — Alumnado central, grupos y control de acceso por rol ✅
+
+### Sección Alumnado
+
+**Archivos clave:**
+- `src/app/(dashboard)/alumnado/page.tsx` — tabs Alumnos / Grupos, importación Excel, estadísticas, badges editables inline (conducta, necesidades, nivel) con popover de colores
+- `src/app/(dashboard)/alumnado/[id]/page.tsx` — perfil de alumno editable (nota, nivel, conducta, NEE, observaciones), botón eliminar/dar de baja, notas de orientación
+- `src/app/(dashboard)/alumnado/grupos/[name]/page.tsx` — detalle de grupo con stats de género/NEE, historial de tutores asignados, plantilla Excel pre-rellenada por grupo
+- `src/app/(dashboard)/mis-grupos/page.tsx` — vista para tutores/orientadores con solo sus grupos asignados
+- `supabase/migrations/008_student_profiles_groups.sql`, `010_center_groups.sql` — `student_profiles` independiente de `students` (per-proceso), `center_groups` para grupos vacíos antes de importar
+
+**Grupos configurables:**
+- `GET/POST/DELETE /api/groups` — crear/listar/eliminar grupos (bloqueado si tiene alumnos)
+- Diálogo de nuevo grupo con selects de curso (agrupado por etapa: Infantil/Primaria/ESO/Bachillerato/FP) + letra A-E, con preview del nombre resultante (ej. `6PB`)
+- `src/utils/school-year.ts` — `getCurrentSchoolYear()` (septiembre-julio) y `getSchoolYears()` para selects de curso en toda la app
+- Asignación de tutor a grupo por curso escolar (GET/POST/DELETE), historial de tutores por grupo
+- Auto-creación de grupos destino en `center_groups` al crear un proceso
+
+### Soft-delete y IDs automáticos
+
+- `supabase/migrations/012_student_id_and_softdelete.sql` — trigger asigna IDs secuenciales con padding (`0001`, `0002`...) al insertar; `DELETE` pasa a ser soft-delete (`active=false`)
+- Plantilla e importación ya no requieren `id_alumno` (asignado por sistema); alumnos se emparejan por nombre+apellidos
+- Badge "Baja" + toggle "Ver bajas" en listado; botón "Dar de baja"/"Reactivar" en ficha de alumno
+
+### Control de acceso por rol (alumnado y procesos)
+
+**Archivo:** `src/lib/auth.ts` — nuevos helpers `tutorCanAccessProcess()`, `hasFullAccess()`
+
+- Orientador: acceso total al centro, igual que admin (procesos, alumnado, sociogramas, informes)
+- Tutor: solo ve procesos cuyo `source_groups` solapa con sus grupos asignados (`group_tutors`) o donde está en `process_tutors`; solo puede usar sus propios grupos como origen al crear un proceso; se auto-asigna al proceso que crea
+- Tutor y orientador pueden crear procesos (antes solo admin); selección de grupos de origen por checkboxes en vez de texto libre
+
+### Panel de orientación
+
+**Archivo:** `src/app/(dashboard)/orientador/page.tsx`
+
+- 4 pestañas: conducta, necesidades, sin clase, bajas
+- Notas de orientación privadas y con fecha en la ficha de alumno (`supabase/migrations/013_orientation_notes.sql`)
+- Filtros chip: Seguimiento, Conflictiva, Con necesidades, F/M, Ver bajas
+- Edición inline de conducta/necesidades desde las tarjetas del listado
+
+### Usuarios e invitaciones
+
+- Invitación de tutores/orientadores por email desde `/users` (Supabase admin invite)
+- Alternativa sin email: creación con contraseña provisional (`auth.admin.createUser` + `must_change_password` en metadata) — `/change-password` fuerza el cambio en el primer acceso
+- `/forgot-password` y `/set-password` para recuperación de contraseña
+- Registro público deshabilitado: los centros solo se crean desde el panel superadmin, que invita al admin del centro en el mismo formulario
+
+### Reset de cuestionario
+
+`POST /api/processes/[id]/questionnaire/reset` — resetea el token y borra las respuestas de un alumno concreto, o de todo el proceso si no se pasa `student_id`. Botones con confirmación en la lista de tokens y en la cabecera de progreso.
+
+### Auditoría de seguridad inicial (#1-#7)
+
+- Heurístico: guard contra crash NaN cuando hay menos de 2 alumnos intercambiables
+- Alumnos con `exclude_student` filtrados antes de enviar a OR-Tools/heurístico
+- Redirección a `/pending` si el perfil es `null` en dashboard y procesos
+- Rollback de usuario Auth si falla la creación de un centro
+- Limpieza de políticas RLS duplicadas (migración 009)
+
+---
+
+## FASE 10 — Acceso de alumnos, recordatorios y motor OR-Tools ✅
+
+### Login institucional para alumnos
+
+**Archivos clave:**
+- `src/app/q/page.tsx` — botón "Entrar con Google del colegio" + acceso por código como alternativa
+- `src/app/api/auth/student-callback/route.ts` — callback OAuth exclusivo de alumnos: verifica el dominio configurado, busca `student_profile` por email, localiza el token activo del cuestionario abierto y redirige directamente (sin sesión de dashboard)
+- `src/app/q/select/page.tsx` — selector cuando un alumno tiene varios cuestionarios activos
+- Dominio Google configurable vía `NEXT_PUBLIC_GOOGLE_HD_DOMAIN` (cliente) y `STUDENT_EMAIL_DOMAIN` (servidor) — sin estos, el hint de dominio se omite y la app funciona con cualquier centro
+
+**Vínculo alumno↔perfil:**
+- Al completar el cuestionario por token (sin login), el registro `students` se enlaza automáticamente a su `student_profile` por email (con fallback a nombre si hay un único match)
+- `email` añadido a `students` (migración `018_students_email.sql`) y a `student_profiles` (migración `006`), propagado desde Excel y desde el alta manual
+
+### Motor OR-Tools
+
+**Carpeta:** `python-solver/` — microservicio FastAPI + Google OR-Tools (CP-SAT)
+
+- `POST /api/processes/[id]/proposals/generate` llama al servicio si `PYTHON_SERVICE_URL` está configurado; si no, cae al heurístico TypeScript
+- `uvicorn` escucha en `$PORT` (compatibilidad Render)
+
+### Recordatorios por email
+
+**Archivo:** `src/lib/email.ts`
+
+- Envío vía Gmail SMTP (nodemailer) con fallback a Resend SMTP
+- `POST /api/processes/[id]/questionnaire/remind` — envía email individual a cada alumno pendiente con dirección de correo; acepta `student_id` (uno) o `student_ids[]` (selección) para targeting; el admin recibe siempre un resumen
+- Botón de recordatorio por fila en la lista de tokens, y selector múltiple con checkboxes + barra de acciones (copiar enlaces, enviar email, exportar CSV) en la cabecera
+- Orden alfabético y filtro por clase en la lista de tokens
+
+### Importar respuestas de un proceso anterior
+
+**Archivos:** `ImportResponsesDialog.tsx` + endpoint dedicado
+
+- Copia respuestas del cuestionario de otro proceso, emparejando alumnos por `profile_id` → `external_id` → nombre, con paso de previsualización
+- Crea tokens que falten y los marca como usados; avanza el estado del proceso a `cuestionario_cerrado`
+
+### Operaciones masivas sobre alumnos
+
+- `GET /api/processes/[id]/students/export-data` — exporta alumnos actuales con todos los campos editables prellenados + hoja de instrucciones
+- `POST /api/processes/[id]/students/bulk-update` — preview + confirmación de actualización masiva (nota, nivel, conducta, necesidades, observaciones) emparejando por ID o nombre+apellidos, con tabla de diff por campo
+- Edición inline de nota en la tabla (clic → editar → Enter/blur guarda, recalcula `academic_level` automáticamente)
+- `POST /api/processes/[id]/students/[studentId]/exclude` — excluir un alumno de la mezcla preservando sus datos ("dar de baja" del proceso, distinto del soft-delete de alumnado): muestra alumnos afectados (quién lo elegía), motivo opcional; el heurístico/OR-Tools y el sociograma lo excluyen de nodos/aristas/métricas, mostrándolo en un panel aparte con nombre tachado
+
+### Duplicar proceso y alertas
+
+- `POST /api/processes/[id]/duplicate` — clona alumnos, configuración de cuestionario y reglas (remapeando IDs)
+- `AlertsPanel` en el dashboard: avisos proactivos (cuestionario abierto con <40% completado, borrador con >7 días, alumnos sin email)
+- Badges Aislado (rojo) / Vulnerable (ámbar) junto al nombre en la tabla de alumnos cuando ya hay sociograma calculado
+
+### Tests automatizados
+
+**Carpeta:** `src/__tests__/` (Vitest)
+
+- `algorithm/heuristic.test.ts` — infactibilidad, generación de propuestas, respeto de reglas `must_separate`/`lock`, equilibrio de notas, sub-scores
+- `excel/import.test.ts` — columnas obligatorias, filas válidas/error, advertencias, estadísticas de resumen
+- `npm test` / `npm run test:watch` / `npm run test:coverage`
+
+### Notificaciones
+
+`GET /api/notifications` devuelve tokens y propuestas pendientes; badge rojo sobre "Procesos" en el sidebar, refresco automático cada 5 minutos.
+
+---
+
+## FASE 11 — Panel superadmin, informes y exclusión social ✅
+
+### Panel superadmin completo
+
+**Archivos clave:** `src/app/(dashboard)/admin/page.tsx`, `src/app/(dashboard)/admin/centers/[id]/page.tsx`
+
+- Estadísticas globales: centros, usuarios, alumnos, procesos activos, cuestionarios abiertos, respuestas pendientes, propuestas aprobadas
+- Detalle de centro con 4 pestañas: Procesos, Usuarios, Actividad, Notas internas
+- Notas internas/incidencias por centro (`admin_center_notes`, migraciones `015`/`020` con RLS), tipos nota/incidencia/resuelto/aviso con colores
+- Gestión de usuarios: cambio de rol inline, eliminar usuario, reenviar invitación, resetear contraseña
+- Edición de nombre de centro y licencia desde el detalle; búsqueda de centros en el listado
+- Lista de centros con `last_activity` (timeAgo) y exportación de todos los centros a Excel (`/api/admin/export`)
+- Gráfica de actividad (recharts, barras agrupadas por día)
+
+### Informes PDF por rol
+
+**Archivo compartido:** `src/lib/pdf/shared.ts` (estilos, helpers de fecha, severidad de alertas)
+
+| PDF | Endpoint | Audiencia |
+|---|---|---|
+| Dirección | `proposals/[id]/export/pdf/direccion` | admin/superadmin |
+| Tutoría | `proposals/[id]/export/pdf/tutores` | tutor de cada clase (datos limitados a su clase) |
+| Sociograma | `processes/[id]/sociogram/export/pdf` | admin/superadmin/tutor con acceso |
+| Orientación | `processes/[id]/sociogram/export/pdf/orientacion` | admin/superadmin/orientador, sin fallback de tutor |
+
+Excel de propuestas ampliado con hojas: Métricas, Reglas, Alertas, Alumnos sin amistad, Sociograma métricas.
+
+### Página de Respuestas y editor de propuestas
+
+- `/processes/[id]/responses` rediseñada: cards de stats visuales, agrupación por clase, desglose por tipo de relación, filas expandibles con elecciones individuales, gráficas recharts, exportación Excel
+- Editor de propuestas (`/proposals/[proposalId]/edit`): panel de diff antes/después al mover un alumno (nota media, género, amistades)
+- Exportación PDF de propuestas con `@react-pdf/renderer`
+
+### Landing page
+
+Varias iteraciones (`/`): rediseño dark premium → rediseño white premium → ajuste de descripciones de features → ilustración SVG animada del sociograma → paneles recharts de muestra (radar comparador de propuestas, equilibrio académico por clase, participación del cuestionario) → reducción de espaciado vertical entre secciones.
+
+---
+
+## FASE 12 — Refinamiento del algoritmo y auditoría de seguridad ampliada ✅
+
+### Algoritmo — nuevas restricciones y UI
+
+**Archivo:** `src/lib/algorithm/heuristic.ts`, `src/app/(dashboard)/processes/[id]/algorithm/page.tsx`
+
+- Regla `with_tutor` — asigna alumno a la clase que tendrá un tutor concreto (antes solo existía `avoid_tutor`)
+- `enforce_equal_size` — la distribución snake limita cada clase a `ceil(N/K)` alumnos como máximo, evitando que una clase reciba más de un alumno de más que el resto
+- `enforce_origin_mix` activado por defecto al 50%, etiquetas de slider más claras
+- Tarjeta de perfil "Personalizado" explícita (5ª opción en la cuadrícula); se recuerda el último perfil base para poder "Restablecer"; sliders modificados se resaltan en azul con el valor original ("era X")
+
+### Simulación social — satisfacción de amistad
+
+**Archivo:** `src/lib/algorithm/simulation.ts`, `/proposals/[proposalId]/simulation`
+
+Tabla por alumno con sus 3 compañeros elegidos (P1/P2/P3) y si cada uno terminó en su misma clase final.
+
+### Pesos completos en el solver OR-Tools
+
+`python-solver/main.py` — los 10 pesos configurables (antes solo 7 de 10) están cableados en el objetivo CP-SAT.
+
+### Auditoría de seguridad extendida (3 + 6 + 19 vulnerabilidades)
+
+- Import de alumnos restringido a admin/superadmin en todas sus acciones (preview/confirm/template)
+- RLS sin políticas en `admin_center_notes` para bloquear acceso directo vía claves anon/authenticated
+- Dominio Google OAuth movido de hardcoded a `NEXT_PUBLIC_GOOGLE_HD_DOMAIN`/`STUDENT_EMAIL_DOMAIN`
+- `GET /responses`, `PATCH /proposals/[id]`, `PATCH /proposals/[id]/assignments`, `POST /questionnaire/generate`, `POST /questionnaire/settings` — restringidos a admin/superadmin o filtrado de tipos sensibles para tutor
+- Cron `check-deadlines` con fail-closed auth (sin `CRON_SECRET` configurado → 401 en vez de omitir el chequeo)
+- **Auditoría manual completa de `processes/[id]/*`** (19 hallazgos): rutas sin chequeo de `center_id` que permitían leer/escribir datos de procesos de otro centro (`proposals/generate` podía leer un proceso ajeno, borrar sus propuestas e insertar otras falsas; `tutors` filtraba datos de tutores de cualquier proceso y permitía auto-asignarse a un proceso ajeno), y rutas donde el tutor no-admin no se verificaba contra `tutorCanAccessProcess` para el proceso concreto solicitado. Corregidas: `load-from-profiles/search`, `proposals/generate`, `proposals`, `questionnaire/generate`, `questionnaire/remind`, `questionnaire/settings`, `responses/export`, `responses`, `rules`, `sociogram/export`, `sociogram`, `students/[studentId]/exclude`, `students/[studentId]`, `students/bulk-update`, `students/export-data`, `students`, `students/update-grades`, `tutors/[userId]`, `tutors`.
+
+---
+
+## FASE 13 — Cuestionario sociométrico configurable y módulo de convivencia ✅
+
+Subida grande, hecha por fases con verificación en cada una (`tsc --noEmit`/`eslint`/`next build`), **100% aditiva** — los 4 tipos legacy (`friendship`/`work`/`emotional`/`negative`) siguen funcionando exactamente igual por defecto.
+
+### Modelo de datos
+
+**Migración:** `supabase/migrations/022_question_catalog.sql`
+
+- `question_types` — catálogo global y por centro: `code`, `category` (`peer_choice`/`peer_scale`/`role_nomination`/`climate`/`bullying`), `label`, `icon`, `color`, `default_min/max`, `sensitivity` (`normal`/`sensitive`/`very_sensitive`), `scoring_role` (`none`/`friendship_like`/`work_like`/`negative_like`), `input_mode`
+- `questionnaire_questions` — preguntas avanzadas activadas por proceso (los 4 tipos legacy siguen gestionándose desde `questionnaire_settings`, sin tocar)
+- `climate_responses` — preguntas de clima de aula no dirigidas a un compañero concreto
+- `questionnaire_templates` / `questionnaire_template_questions` — plantillas reutilizables (Simple / Convivencia / Completo) como preset de qué tipos activar
+- `responses.metadata` (jsonb) — contexto/frecuencia para el módulo de convivencia
+- Tipos nuevos sembrados: `role_leader`/`role_helper`/`role_humor`/`role_disruptor` (nominación de roles), `perceived_choice` ("¿quién crees que te elegiría a ti?"), `climate_safety`/`climate_belonging`, y `bullying_aggressor`/`bullying_victim`/`bullying_witness` (categoría `bullying`, **`sensitivity: very_sensitive`** — nunca visible para tutor)
+
+### Motor
+
+**Archivos:** `src/lib/questionnaire/catalog.ts`, `src/lib/questionnaire/visibility.ts`, `src/lib/questionnaire/icons.tsx`
+
+- `getQuestionCatalogIndex(centerId)` — devuelve `scoringRoles` (qué codes cuentan para el algoritmo de mezcla), `sensitivity` (qué roles ven qué tipos) y `excludedFromGraph` (qué codes no deben mezclarse en el grafo del sociograma), con `DEFAULT_CATALOG_INDEX` de fallback idéntico al comportamiento pre-catálogo
+- `getQuestionDisplayMap(centerId)` — label/color/icon desde `question_types` para dashboard y exports
+- `canSeeRelationType`/`filterVisibleResponses` — helper único de visibilidad sensible, reemplazando los 4 checks duplicados que existían en distintos archivos
+- `icons.tsx` — mapea nombre de icono (string en DB) a componente Lucide
+
+### UI
+
+- Alumno (`/q/[token]`): nuevos modos de pregunta — nominación de rol (reutiliza el picker de compañeros), escala de intensidad 1-5 sobre un compañero elegido (usa la columna `weight`, ya existente y sin uso previo), clima de aula (bloque final no dirigido a compañeros), y campo opcional de contexto/frecuencia para convivencia
+- Admin (`/processes/[id]/questionnaire`): selector de plantilla + sección "Preguntas avanzadas" agrupada por categoría, con badge rojo "Muy sensible" en convivencia
+
+### Informe de convivencia
+
+`GET /api/processes/[id]/sociogram/export/pdf/convivencia` — agrega señales de acoso por alumno como "a revisar" (explícitamente no acusatorio, no diagnóstico), gateado con `hasFullAccess` (sin fallback tutor) y `logAudit("export_informe_convivencia")`. Botón rojo "Convivencia" en la toolbar de `/processes/[id]/sociogram`.
+
+### Fix: el sociograma no mezclaba los tipos nuevos en su grafo/métricas
+
+`calculateSociogram()` (`src/lib/sociogram/calculate.ts`) metía todas las respuestas como aristas del grafo y en la adyacencia de centralidad/densidad sin filtrar por tipo — solo los nodos (aislamiento/líder/etc.) se filtraban por `friendshipLike`. Esto habría dibujado nominaciones de rol y señales de convivencia como líneas sin estilo y habría distorsionado centralidad/densidad/detección de puentes, en conflicto con el principio de "informe de convivencia nunca acusatorio".
+
+- `QuestionCatalogIndex` ganó `excludedFromGraph: string[]`, poblado por `category` (`role_nomination`/`bullying`) — concepto independiente de `scoring_role`
+- `calculateSociogram()` acepta un 4º parámetro `excludedFromGraph` que filtra esas respuestas antes de construir aristas/adyacencia/densidad
+- Propagado a los endpoints de sociograma general (`sociogram/route.ts`, `sociogram/export/route.ts`, `sociogram/export/pdf/route.ts`, `sociogram/export/pdf/orientacion/route.ts`) y al export Excel de propuestas (filtrado antes de pasar a `exportProposalToExcel`, sin tocar su firma)
+- El PDF de tutores ya pre-filtraba a solo `friendshipLike`, no necesitó cambios; `perceived_choice` se mantiene a propósito dentro del grafo
+
+### Fix de seguridad descubierto en el camino
+
+`responses/page.tsx` y `responses/export/route.ts` no aplicaban `filterVisibleResponses` (a diferencia de `/api/processes/[id]/responses`, que sí lo hacía) — corregido para que el tutor no vea tipos sensibles/muy sensibles ahí tampoco.
+
+### Patrón para añadir un tipo de pregunta nuevo
+
+Insertar fila en `question_types` con `scoring_role`/`sensitivity`/`category`/`input_mode`/`color`/`icon` (nombre Lucide como string) — el catálogo lo recoge automáticamente en alumno, dashboard, sociograma y exports, sin tocar código.
+
+---
+
 ## Decisiones técnicas relevantes
 
 ### Supabase y tipos

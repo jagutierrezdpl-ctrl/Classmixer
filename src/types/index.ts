@@ -60,6 +60,7 @@ export interface Center {
   address?: string
   city?: string
   country?: string
+  openrouter_api_key?: string | null
   created_at: string
 }
 

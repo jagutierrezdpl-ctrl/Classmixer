@@ -10,6 +10,7 @@ export interface Database {
           address: string | null
           city: string | null
           country: string | null
+          openrouter_api_key: string | null
           created_at: string
         }
         Insert: {
@@ -18,6 +19,7 @@ export interface Database {
           address?: string | null
           city?: string | null
           country?: string | null
+          openrouter_api_key?: string | null
           created_at?: string
         }
         Update: {
@@ -26,6 +28,7 @@ export interface Database {
           address?: string | null
           city?: string | null
           country?: string | null
+          openrouter_api_key?: string | null
           created_at?: string
         }
         Relationships: []
