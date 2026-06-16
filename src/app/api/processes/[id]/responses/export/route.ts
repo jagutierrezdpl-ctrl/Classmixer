@@ -2,6 +2,9 @@ import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, hasFullAccess, tutorCanAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import ExcelJS from "exceljs"
+import { getQuestionCatalogIndex, getQuestionDisplayMap } from "@/lib/questionnaire/catalog"
+import { filterVisibleResponses } from "@/lib/questionnaire/visibility"
+import type { UserRole } from "@/types"
 
 export async function GET(
   _request: Request,
@@ -25,15 +28,18 @@ export async function GET(
     return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
   }
 
-  const [{ data: students }, { data: tokens }, { data: responsesRaw }] = await Promise.all([
+  const [{ data: students }, { data: tokens }, { data: responsesRaw }, catalogIndex, displayMap] = await Promise.all([
     supabase.from("students").select("id, first_name, last_name, current_class").eq("process_id", id).eq("active", true).order("last_name"),
     supabase.from("questionnaire_tokens").select("student_id, used, completed_at").eq("process_id", id),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from("responses").select("respondent_student_id, target_student_id, relation_type, selection_order").eq("process_id", id),
+    getQuestionCatalogIndex(profile.center_id),
+    getQuestionDisplayMap(profile.center_id),
   ])
 
+  // Tutor no debe exportar tipos sensibles/muy sensibles (emocional, negativa, convivencia...)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const responses: any[] = (responsesRaw as any[]) ?? []
+  const responses: any[] = filterVisibleResponses((responsesRaw as any[]) ?? [], profile.role as UserRole, catalogIndex.sensitivity)
   const tokenMap = new Map((tokens ?? []).map(t => [t.student_id, t]))
   const studentMap = new Map((students ?? []).map(s => [s.id, s]))
 
@@ -105,7 +111,7 @@ export async function GET(
     respSheet.addRow({
       respondent: respondent ? `${respondent.last_name}, ${respondent.first_name}` : r.respondent_student_id,
       respondent_class: respondent?.current_class ?? "",
-      relation_type: TYPE_LABELS[r.relation_type] ?? r.relation_type,
+      relation_type: TYPE_LABELS[r.relation_type] ?? displayMap[r.relation_type]?.label ?? r.relation_type,
       order: (r.selection_order ?? 0) + 1,
       target: target ? `${target.last_name}, ${target.first_name}` : r.target_student_id,
       target_class: target?.current_class ?? "",

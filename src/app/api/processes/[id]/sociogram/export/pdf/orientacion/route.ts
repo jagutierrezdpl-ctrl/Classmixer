@@ -6,6 +6,7 @@ import React from "react"
 import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY } from "@/lib/pdf/shared"
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 
 function nameOf(s: any): string {
   return s ? `${s.first_name} ${s.last_name}` : "Alumno desconocido"
@@ -125,7 +126,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const studentMap = new Map(activeStudents.map((s: any) => [s.id, s]))
   const excludedIds = new Set((students as any[]).filter(s => s.excluded_from_mix).map(s => s.id))
   const scopedResponses = (responses ?? []).filter((r: any) => !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id))
-  const soc = calculateSociogram(activeStudents as any, scopedResponses as any)
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
+  const soc = calculateSociogram(activeStudents as any, scopedResponses as any, catalogIndex.scoringRoles.friendshipLike)
 
   const conflicts: string[] = []
   for (const r of (rules ?? []) as any[]) {

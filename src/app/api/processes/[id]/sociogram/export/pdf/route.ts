@@ -6,8 +6,9 @@ import React from "react"
 import { Document, Page, Text, View, Svg, Circle, Line, renderToBuffer } from "@react-pdf/renderer"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY } from "@/lib/pdf/shared"
-
-const SENSITIVE_ROLES = ["admin", "superadmin", "orientador"]
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
+import { filterVisibleResponses } from "@/lib/questionnaire/visibility"
+import type { UserRole } from "@/types"
 
 const COMMUNITY_COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4338ca"]
 
@@ -206,14 +207,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const students = (allStudents as any[]).filter(s => !s.excluded_from_mix)
   const excludedIds = new Set((allStudents as any[]).filter(s => s.excluded_from_mix).map(s => s.id))
 
-  const canSeeSensitive = SENSITIVE_ROLES.includes(profile.role)
-  const responses = ((canSeeSensitive
-    ? (allResponses ?? [])
-    : (allResponses ?? []).filter((r: any) => r.relation_type !== "emotional" && r.relation_type !== "negative")
-  ) as any[]).filter(r => !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id))
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
+  const responses = (filterVisibleResponses(allResponses ?? [], profile.role as UserRole, catalogIndex.sensitivity) as any[])
+    .filter(r => !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id))
 
   const studentMap = new Map(students.map((s: any) => [s.id, s]))
-  const soc = calculateSociogram(students as any, responses as any)
+  const soc = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike)
   const positions = layout(soc.nodes)
 
   const buffer = await renderToBuffer(React.createElement(SociogramaPDF, { process, soc, positions, studentMap }) as any)

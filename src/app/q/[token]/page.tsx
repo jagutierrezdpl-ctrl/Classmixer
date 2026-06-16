@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { GraduationCap, Search, X, CheckCircle, Loader2, Heart, Briefcase, Users } from "lucide-react"
 import { toast } from "sonner"
+import AdvancedQuestionCard, { type AdvancedQuestionConfig } from "@/components/questionnaire/AdvancedQuestionCard"
 
 interface Student {
   id: string
@@ -44,6 +45,15 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
   const [selections, setSelections] = useState<Record<string, string[]>>({})
   const [searches, setSearches] = useState<Record<string, string>>({})
 
+  // Preguntas avanzadas (capa adicional sobre las 4 de siempre) — estado en paralelo,
+  // el de arriba no se toca para no arriesgar el comportamiento ya existente.
+  const [advancedQuestions, setAdvancedQuestions] = useState<AdvancedQuestionConfig[]>([])
+  const [advancedChoices, setAdvancedChoices] = useState<Record<string, string[]>>({})
+  const [advancedScaleValues, setAdvancedScaleValues] = useState<Record<string, Record<string, number>>>({})
+  const [climateValues, setClimateValues] = useState<Record<string, number>>({})
+  const [bullyingMeta, setBullyingMeta] = useState<Record<string, { frequency?: string; context?: string }>>({})
+  const [advancedSearches, setAdvancedSearches] = useState<Record<string, string>>({})
+
   useEffect(() => {
     fetch(`/api/q/${token}`)
       .then(r => r.json())
@@ -71,6 +81,12 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
         qs.forEach(q => { initial[q.type] = [] })
         setSelections(initial)
         setSearches(Object.fromEntries(qs.map(q => [q.type, ""])))
+
+        const advanced: AdvancedQuestionConfig[] = Array.isArray(data.advanced_questions) ? data.advanced_questions : []
+        setAdvancedQuestions(advanced)
+        setAdvancedChoices(Object.fromEntries(advanced.filter(q => q.input_mode === "choice").map(q => [q.code, []])))
+        setAdvancedScaleValues(Object.fromEntries(advanced.filter(q => q.input_mode === "scale").map(q => [q.code, {}])))
+        setAdvancedSearches(Object.fromEntries(advanced.filter(q => q.input_mode !== "climate").map(q => [q.code, ""])))
       })
       .catch(() => setError("Error al cargar el cuestionario"))
       .finally(() => setLoading(false))
@@ -95,9 +111,41 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     }))
   }
 
+  function addAdvancedChoice(code: string, studentId: string, max: number) {
+    setAdvancedChoices(prev => {
+      const current = prev[code] ?? []
+      if (current.includes(studentId)) return prev
+      if (current.length >= max) {
+        toast.error(`Puedes elegir hasta ${max} compañeros en esta pregunta`)
+        return prev
+      }
+      return { ...prev, [code]: [...current, studentId] }
+    })
+  }
+
+  function removeAdvancedChoice(code: string, studentId: string) {
+    setAdvancedChoices(prev => ({
+      ...prev,
+      [code]: (prev[code] ?? []).filter(id => id !== studentId),
+    }))
+    setAdvancedScaleValues(prev => {
+      if (!prev[code] || !(studentId in prev[code])) return prev
+      const next = { ...prev[code] }
+      delete next[studentId]
+      return { ...prev, [code]: next }
+    })
+  }
+
   async function handleSubmit() {
     for (const q of questions) {
       if (q.min > 0 && (selections[q.type]?.length ?? 0) < q.min) {
+        toast.error(`Debes elegir al menos ${q.min} compañero(s) para "${q.label}"`)
+        return
+      }
+    }
+
+    for (const q of advancedQuestions) {
+      if (q.input_mode === "choice" && q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min) {
         toast.error(`Debes elegir al menos ${q.min} compañero(s) para "${q.label}"`)
         return
       }
@@ -109,7 +157,15 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
       const res = await fetch(`/api/q/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selections }),
+        body: JSON.stringify({
+          selections,
+          advanced: {
+            choices: advancedChoices,
+            scales: advancedScaleValues,
+            climate: climateValues,
+            metadata: bullyingMeta,
+          },
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -159,8 +215,10 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     )
   }
 
-  const totalRequired = questions.filter(q => q.min > 0).reduce((s, q) => s + q.min, 0)
-  const totalSelected = questions.filter(q => q.min > 0).reduce((s, q) => s + Math.min(selections[q.type]?.length ?? 0, q.min), 0)
+  const advancedRequired = advancedQuestions.filter(q => q.input_mode === "choice" && q.min > 0).reduce((s, q) => s + q.min, 0)
+  const advancedSelected = advancedQuestions.filter(q => q.input_mode === "choice" && q.min > 0).reduce((s, q) => s + Math.min(advancedChoices[q.code]?.length ?? 0, q.min), 0)
+  const totalRequired = questions.filter(q => q.min > 0).reduce((s, q) => s + q.min, 0) + advancedRequired
+  const totalSelected = questions.filter(q => q.min > 0).reduce((s, q) => s + Math.min(selections[q.type]?.length ?? 0, q.min), 0) + advancedSelected
   const progressPct = totalRequired > 0 ? Math.round((totalSelected / totalRequired) * 100) : 100
 
   return (
@@ -297,6 +355,25 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
             </Card>
           )
         })}
+
+        {advancedQuestions.map(q => (
+          <AdvancedQuestionCard
+            key={q.code}
+            question={q}
+            availableStudents={availableStudents}
+            selected={advancedChoices[q.code] ?? []}
+            scaleValues={advancedScaleValues[q.code] ?? {}}
+            climateValue={climateValues[q.code]}
+            metadata={bullyingMeta[q.code]}
+            search={advancedSearches[q.code] ?? ""}
+            onSearchChange={value => setAdvancedSearches(prev => ({ ...prev, [q.code]: value }))}
+            onAdd={studentId => addAdvancedChoice(q.code, studentId, q.max)}
+            onRemove={studentId => removeAdvancedChoice(q.code, studentId)}
+            onScaleChange={(studentId, value) => setAdvancedScaleValues(prev => ({ ...prev, [q.code]: { ...prev[q.code], [studentId]: value } }))}
+            onClimateChange={value => setClimateValues(prev => ({ ...prev, [q.code]: value }))}
+            onMetadataChange={meta => setBullyingMeta(prev => ({ ...prev, [q.code]: meta }))}
+          />
+        ))}
 
         <div className="sticky bottom-4">
           <Button

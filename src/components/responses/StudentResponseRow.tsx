@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 import { CheckCircle2, Clock, AlertCircle, ChevronDown, Heart, Briefcase, UsersRound, XCircle } from "lucide-react"
+import { getQuestionIcon } from "@/lib/questionnaire/icons"
+import type { QuestionDisplayInfo } from "@/lib/questionnaire/catalog"
 
 type RelationType = "friendship" | "work" | "emotional" | "negative"
 
@@ -17,11 +19,24 @@ interface Props {
   token: { student_id: string; used: boolean; completed_at?: string | null } | null
   responses: { relation_type: string; target_student_id: string }[]
   studentMap: Record<string, string>
+  // Tipos de pregunta del catálogo avanzado (roles, clima, convivencia...) que no
+  // están en RELATION_META — permite mostrar label/color/icono reales en vez del code.
+  displayMap?: Record<string, QuestionDisplayInfo>
 }
 
-export default function StudentResponseRow({ student, token, responses, studentMap }: Props) {
-  const relationMeta = RELATION_META
+export default function StudentResponseRow({ student, token, responses, studentMap, displayMap }: Props) {
   const [open, setOpen] = useState(false)
+
+  function getMeta(type: string): { label: string; color?: string; icon: React.ElementType; style?: React.CSSProperties } {
+    const legacy = RELATION_META[type as RelationType]
+    if (legacy) return legacy
+    const display = displayMap?.[type]
+    return {
+      label: display?.label ?? type,
+      icon: getQuestionIcon(display?.icon),
+      style: { backgroundColor: `${display?.color ?? "#94a3b8"}1A`, color: display?.color ?? "#64748b" },
+    }
+  }
 
   const byType = responses.reduce<Record<string, string[]>>((acc, r) => {
     if (!acc[r.relation_type]) acc[r.relation_type] = []
@@ -61,10 +76,14 @@ export default function StudentResponseRow({ student, token, responses, studentM
 
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {Object.entries(byType).map(([type, targets]) => {
-            const meta = relationMeta[type as RelationType]
+            const meta = getMeta(type)
             return (
-              <span key={type} className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${meta?.color ?? "bg-muted text-muted-foreground"}`}>
-                {meta?.label ?? type} {targets.length}
+              <span
+                key={type}
+                className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${meta.color ?? ""}`}
+                style={meta.style}
+              >
+                {meta.label} {targets.length}
               </span>
             )
           })}
@@ -83,13 +102,13 @@ export default function StudentResponseRow({ student, token, responses, studentM
       {open && hasResponses && (
         <div className="px-4 pb-3 pt-1 bg-muted/20 space-y-2">
           {Object.entries(byType).map(([type, targetIds]) => {
-            const meta = relationMeta[type as RelationType]
-            const Icon = meta?.icon
+            const meta = getMeta(type)
+            const Icon = meta.icon
             return (
               <div key={type}>
-                <p className={`text-xs font-semibold mb-1 flex items-center gap-1 ${meta?.color ?? ""}`}>
+                <p className={`text-xs font-semibold mb-1 flex items-center gap-1 ${meta.color ?? ""}`} style={meta.style}>
                   {Icon && <Icon className="w-3 h-3" />}
-                  {meta?.label ?? type}
+                  {meta.label}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {targetIds.map(tid => (

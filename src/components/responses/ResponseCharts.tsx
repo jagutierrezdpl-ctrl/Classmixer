@@ -4,10 +4,13 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts"
+import type { QuestionDisplayInfo } from "@/lib/questionnaire/catalog"
 
 interface Props {
   byClass: { class: string; completed: number; total: number }[]
   typeCount: Record<string, number>
+  // Tipos del catálogo avanzado no cubiertos por TYPE_LABELS/TYPE_COLORS de abajo.
+  displayMap?: Record<string, QuestionDisplayInfo>
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -23,7 +26,7 @@ const TYPE_LABELS: Record<string, string> = {
   negative:   "Conflicto",
 }
 
-export default function ResponseCharts({ byClass, typeCount }: Props) {
+export default function ResponseCharts({ byClass, typeCount, displayMap }: Props) {
   const barData = byClass.map(c => ({
     name: c.class,
     Completados: c.completed,
@@ -34,9 +37,9 @@ export default function ResponseCharts({ byClass, typeCount }: Props) {
   const pieData = Object.entries(typeCount)
     .filter(([, v]) => v > 0)
     .map(([key, value]) => ({
-      name: TYPE_LABELS[key] ?? key,
+      name: TYPE_LABELS[key] ?? displayMap?.[key]?.label ?? key,
       value,
-      color: TYPE_COLORS[key] ?? "#94a3b8",
+      color: TYPE_COLORS[key] ?? displayMap?.[key]?.color ?? "#94a3b8",
     }))
 
   if (barData.length === 0 && pieData.length === 0) return null

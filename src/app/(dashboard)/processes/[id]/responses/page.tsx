@@ -11,6 +11,10 @@ import {
 } from "lucide-react"
 import StudentResponseRow from "@/components/responses/StudentResponseRow"
 import ResponseCharts from "@/components/responses/ResponseCharts"
+import { getQuestionCatalogIndex, getQuestionDisplayMap } from "@/lib/questionnaire/catalog"
+import { filterVisibleResponses } from "@/lib/questionnaire/visibility"
+import { getQuestionIcon } from "@/lib/questionnaire/icons"
+import type { UserRole } from "@/types"
 
 type RelationType = "friendship" | "work" | "emotional" | "negative"
 
@@ -40,12 +44,20 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
   const [
     { data: students },
     { data: tokens },
-    { data: responses },
+    { data: responsesRaw },
+    catalogIndex,
+    displayMap,
   ] = await Promise.all([
     supabase.from("students").select("id, first_name, last_name, current_class").eq("process_id", id).eq("active", true).order("last_name"),
     supabase.from("questionnaire_tokens").select("student_id, used, completed_at").eq("process_id", id),
     supabase.from("responses").select("respondent_student_id, target_student_id, relation_type").eq("process_id", id),
+    getQuestionCatalogIndex(profile.center_id),
+    getQuestionDisplayMap(profile.center_id),
   ])
+
+  // Tutor no debe ver tipos sensibles/muy sensibles (emocional, negativa, convivencia...) —
+  // antes este filtro no se aplicaba aquí, solo en /api/processes/[id]/responses.
+  const responses = filterVisibleResponses(responsesRaw ?? [], profile.role as UserRole, catalogIndex.sensitivity)
 
   const tokenMap = new Map((tokens ?? []).map(t => [t.student_id, t]))
   const responsesByStudent = new Map<string, { relation_type: string; target_student_id: string }[]>()
@@ -169,12 +181,27 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
               <div className="flex gap-2 flex-wrap mt-3 pt-3 border-t">
                 {Object.entries(typeCount).map(([type, count]) => {
                   const meta = RELATION_META[type as RelationType]
-                  if (!meta) return null
-                  const Icon = meta.icon
+                  if (meta) {
+                    const Icon = meta.icon
+                    return (
+                      <span key={type} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${meta.color}`}>
+                        <Icon className="w-3 h-3" />
+                        {meta.label}: {count}
+                      </span>
+                    )
+                  }
+                  // Tipos del catálogo avanzado (roles, clima, convivencia...): mismo
+                  // formato visual, color e icono leídos del catálogo en vez de gris genérico.
+                  const display = displayMap[type]
+                  const Icon = getQuestionIcon(display?.icon)
                   return (
-                    <span key={type} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${meta.color}`}>
+                    <span
+                      key={type}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{ backgroundColor: `${display?.color ?? "#94a3b8"}1A`, color: display?.color ?? "#64748b" }}
+                    >
                       <Icon className="w-3 h-3" />
-                      {meta.label}: {count}
+                      {display?.label ?? type}: {count}
                     </span>
                   )
                 })}
@@ -193,6 +220,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
             return { class: cls, completed, total }
           })}
           typeCount={typeCount}
+          displayMap={displayMap}
         />
       )}
 
@@ -245,6 +273,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
                         token={token ?? null}
                         responses={studentResponses}
                         studentMap={studentMap}
+                        displayMap={displayMap}
                       />
                     )
                   })}

@@ -36,7 +36,7 @@ class StudentInput(BaseModel):
 class ResponseInput(BaseModel):
     respondent_student_id: str
     target_student_id: str
-    relation_type: str  # friendship | work | emotional | negative
+    relation_type: str  # catalog-driven code; legacy defaults: friendship | work | emotional | negative
     weight: float = 1.0
 
 class RuleInput(BaseModel):
@@ -79,6 +79,13 @@ class SolveRequest(BaseModel):
     num_proposals: int = 3
     time_limit_seconds: int = 30
     seed: int = 42
+    # Which response.relation_type codes count as each scoring role. Defaults
+    # reproduce the original hardcoded "friendship"/"work"/"negative" behavior;
+    # callers with a question catalog can pass wider lists (e.g. role_nomination
+    # codes alongside "friendship").
+    friendship_types: list[str] = ["friendship"]
+    work_types: list[str] = ["work"]
+    negative_types: list[str] = ["negative"]
 
 class Assignment(BaseModel):
     student_id: str
@@ -112,14 +119,15 @@ class SolveResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def build_relation_set(responses: list[ResponseInput], relation_type: str) -> set[tuple[str, str]]:
-    return {(r.respondent_student_id, r.target_student_id) for r in responses if r.relation_type == relation_type}
+def build_relation_set(responses: list[ResponseInput], relation_types: list[str]) -> set[tuple[str, str]]:
+    types = set(relation_types)
+    return {(r.respondent_student_id, r.target_student_id) for r in responses if r.relation_type in types}
 
-def build_friendship_set(responses: list[ResponseInput]) -> set[tuple[str, str]]:
-    return build_relation_set(responses, "friendship")
+def build_friendship_set(responses: list[ResponseInput], friendship_types: list[str] = ["friendship"]) -> set[tuple[str, str]]:
+    return build_relation_set(responses, friendship_types)
 
-def build_reciprocal_set(responses: list[ResponseInput]) -> set[tuple[str, str]]:
-    friendships = build_friendship_set(responses)
+def build_reciprocal_set(responses: list[ResponseInput], friendship_types: list[str] = ["friendship"]) -> set[tuple[str, str]]:
+    friendships = build_friendship_set(responses, friendship_types)
     return {(a, b) for (a, b) in friendships if (b, a) in friendships and a < b}
 
 def priority_multiplier(priority: str) -> float:
@@ -140,11 +148,12 @@ def compute_metrics(
     students: list[StudentInput],
     responses: list[ResponseInput],
     target_classes: list[str],
+    friendship_types: list[str] = ["friendship"],
 ) -> dict[str, ClassMetrics]:
     student_map = {s.id: s for s in students}
     assign_map = {a.student_id: a.target_class for a in assignments}
-    friendships = build_friendship_set(responses)
-    reciprocals = build_reciprocal_set(responses)
+    friendships = build_friendship_set(responses, friendship_types)
+    reciprocals = build_reciprocal_set(responses, friendship_types)
 
     metrics: dict[str, ClassMetrics] = {}
     for cls in target_classes:
@@ -182,11 +191,12 @@ def score_proposal(
     rules: list[RuleInput],
     target_classes: list[str],
     weights: Weights,
+    friendship_types: list[str] = ["friendship"],
 ) -> tuple[float, float, float, float, float]:
-    metrics = compute_metrics(assignments, students, responses, target_classes)
+    metrics = compute_metrics(assignments, students, responses, target_classes, friendship_types)
     assign_map = {a.student_id: a.target_class for a in assignments}
-    friendships = build_friendship_set(responses)
-    reciprocals = build_reciprocal_set(responses)
+    friendships = build_friendship_set(responses, friendship_types)
+    reciprocals = build_reciprocal_set(responses, friendship_types)
     n = len(students)
     nc = len(target_classes)
 
@@ -351,8 +361,8 @@ def solve_with_ortools(
                 model.add(sum(x[student_idx[sid]][c] for sid in valid_sids if sid in student_idx) <= rule.max_count)
 
     # Objective: maximize soft constraints
-    friendships = build_friendship_set(req.responses)
-    reciprocals = build_reciprocal_set(req.responses)
+    friendships = build_friendship_set(req.responses, req.friendship_types)
+    reciprocals = build_reciprocal_set(req.responses, req.friendship_types)
     student_map = {s.id: s for s in students}
 
     obj_terms = []
@@ -422,7 +432,7 @@ def solve_with_ortools(
                 obj_terms.append(same * w_friend)
 
     # Reward work relations placed in the same class
-    work_pairs = build_relation_set(req.responses, "work")
+    work_pairs = build_relation_set(req.responses, req.work_types)
     w_work = int(req.weights.work_relations // 2)
     for a, b in work_pairs:
         if a in student_idx and b in student_idx:
@@ -437,7 +447,7 @@ def solve_with_ortools(
     # Penalize placing students with mutual friction ("negative" responses) together.
     # must_separate rules above stay hard; this softly extends the same idea to
     # self-reported friction that isn't backed by an explicit admin rule.
-    negative_pairs = build_relation_set(req.responses, "negative")
+    negative_pairs = build_relation_set(req.responses, req.negative_types)
     w_conflict = int(req.weights.conflicts // 2)
     for a, b in negative_pairs:
         if a in student_idx and b in student_idx:
@@ -567,9 +577,9 @@ def solve(req: SolveRequest):
         seen_assignments.append(assign_sig)
 
         total, social, academic, gender, behavior = score_proposal(
-            assignments, req.students, req.responses, req.rules, req.target_classes, req.weights
+            assignments, req.students, req.responses, req.rules, req.target_classes, req.weights, req.friendship_types
         )
-        metrics = compute_metrics(assignments, req.students, req.responses, req.target_classes)
+        metrics = compute_metrics(assignments, req.students, req.responses, req.target_classes, req.friendship_types)
 
         proposals.append(ProposalResult(
             assignments=assignments,

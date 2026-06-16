@@ -6,6 +6,7 @@ import React from "react"
 import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { pdfStyles, formatDate } from "@/lib/pdf/shared"
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 
 const GENDER_LABEL: Record<string, string> = { F: "F", M: "M", Otro: "O", "No especificado": "?" }
 
@@ -102,6 +103,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const { data: responses } = await supabase.from("responses").select("*").eq("process_id", process.id)
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
+  const friendshipLike = catalogIndex.scoringRoles.friendshipLike
 
   const classMap = new Map<string, any[]>()
   for (const a of (proposal.proposal_assignments ?? [])) {
@@ -120,9 +123,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const students = classMap.get(cls) ?? []
     const ids = new Set(students.map((s: any) => s.id))
     const clsResponses = (responses ?? []).filter((r: any) =>
-      r.relation_type === "friendship" && ids.has(r.respondent_student_id) && ids.has(r.target_student_id)
+      friendshipLike.includes(r.relation_type) && ids.has(r.respondent_student_id) && ids.has(r.target_student_id)
     )
-    const soc = calculateSociogram(students as any, clsResponses as any)
+    const soc = calculateSociogram(students as any, clsResponses as any, friendshipLike)
     const friendSummary = new Map<string, string>()
     for (const node of soc.nodes) {
       const parts: string[] = []

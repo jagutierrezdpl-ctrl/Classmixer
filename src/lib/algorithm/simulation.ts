@@ -12,9 +12,10 @@ export interface ClassFutureMetrics {
 
 export function simulateFutureSociogram(
   assignments: AssignmentResult[],
-  responses: Response[]
+  responses: Response[],
+  friendshipLike: string[] = ["friendship"]
 ): ClassFutureMetrics[] {
-  const friendships = responses.filter(r => r.relation_type === "friendship")
+  const friendships = responses.filter(r => friendshipLike.includes(r.relation_type))
 
   const reciprocalPairs = new Set<string>()
   friendships.forEach(r => {

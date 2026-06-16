@@ -2,6 +2,9 @@ import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
+import { filterVisibleResponses } from "@/lib/questionnaire/visibility"
+import type { UserRole } from "@/types"
 
 // Roles that can see emotional and negative response data
 const SENSITIVE_ROLES = ["admin", "superadmin", "orientador"]
@@ -43,15 +46,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   // Tutors cannot see emotional or negative responses
   const canSeeSensitive = SENSITIVE_ROLES.includes(profile.role)
-  const responses = (canSeeSensitive
-    ? (allResponses ?? [])
-    : (allResponses ?? []).filter((r: { relation_type: string }) =>
-        r.relation_type !== "emotional" && r.relation_type !== "negative"
-      )
-  // Filter out any response involving an excluded student
-  ).filter((r: { respondent_student_id: string; target_student_id: string }) =>
-    !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id)
-  )
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
+  const responses = filterVisibleResponses(allResponses ?? [], profile.role as UserRole, catalogIndex.sensitivity)
+    // Filter out any response involving an excluded student
+    .filter((r: { respondent_student_id: string; target_student_id: string }) =>
+      !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id)
+    )
 
   // Log sociogram access for orientadors (sensitive data access tracking)
   if (profile.role === "orientador") {
@@ -62,7 +62,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sociogram = calculateSociogram(students as any, responses as any)
+  const sociogram = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike)
 
   return NextResponse.json({
     ...sociogram,

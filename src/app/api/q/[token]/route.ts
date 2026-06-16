@@ -1,5 +1,19 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { LEGACY_QUESTION_CODES } from "@/lib/questionnaire/catalog"
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getActiveAdvancedQuestions(supabase: any, processId: string) {
+  const { data } = await supabase
+    .from("questionnaire_questions")
+    .select("question_type_id, min, max, sort_order, question_types(code, category, label, description, icon, input_mode, sensitivity)")
+    .eq("process_id", processId)
+    .eq("enabled", true)
+    .order("sort_order")
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).filter((r: any) => r.question_types && !LEGACY_QUESTION_CODES.includes(r.question_types.code)) as any[]
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -35,6 +49,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     .neq("id", tokenData.student_id)
     .order("last_name")
 
+  const activeAdvanced = await getActiveAdvancedQuestions(supabase, tokenData.process_id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const advanced_questions = activeAdvanced.map((r: any) => ({
+    code: r.question_types.code,
+    category: r.question_types.category,
+    label: r.question_types.label,
+    description: r.question_types.description,
+    icon: r.question_types.icon,
+    input_mode: r.question_types.input_mode,
+    sensitivity: r.question_types.sensitivity,
+    min: r.min ?? 0,
+    max: r.max ?? 5,
+  }))
+
   return NextResponse.json({
     student_name: `${student.first_name} ${student.last_name}`,
     process_name: process.name,
@@ -52,6 +80,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       negative_max: 2,
     },
     students: allStudents ?? [],
+    advanced_questions,
   })
 }
 
@@ -76,7 +105,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "Ya completado" }, { status: 410 })
   }
 
-  const { selections } = await request.json()
+  const body = await request.json()
+  const { selections, advanced } = body ?? {}
 
   if (!selections || typeof selections !== "object") {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
@@ -129,6 +159,73 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     }
   }
 
+  // Preguntas avanzadas (roles sociales, autopercepción, intensidad, convivencia) —
+  // capa adicional sobre las 4 de arriba, validada contra el catálogo activo del proceso.
+  const activeAdvanced = await getActiveAdvancedQuestions(supabase, tokenData.process_id)
+  const advancedByCode = new Map(activeAdvanced.map((r) => [r.question_types.code, r]))
+
+  const advancedInput = advanced && typeof advanced === "object" ? advanced : {}
+  const choices = advancedInput.choices && typeof advancedInput.choices === "object" ? advancedInput.choices : {}
+  const scales = advancedInput.scales && typeof advancedInput.scales === "object" ? advancedInput.scales : {}
+  const climateInput = advancedInput.climate && typeof advancedInput.climate === "object" ? advancedInput.climate : {}
+  const metadataByCode = advancedInput.metadata && typeof advancedInput.metadata === "object" ? advancedInput.metadata : {}
+
+  for (const [code, rawIds] of Object.entries(choices as Record<string, unknown>)) {
+    const def = advancedByCode.get(code)
+    if (!def || def.question_types.input_mode !== "choice" || !Array.isArray(rawIds)) continue
+    const max = def.max ?? 5
+    const studentIds = (rawIds as unknown[])
+      .filter((sid): sid is string => typeof sid === "string" && validIds.has(sid))
+      .slice(0, max)
+
+    let meta: Record<string, string> | undefined
+    if (def.question_types.category === "bullying") {
+      const rawMeta = (metadataByCode as Record<string, unknown>)[code]
+      if (rawMeta && typeof rawMeta === "object") {
+        const r = rawMeta as Record<string, unknown>
+        meta = {}
+        if (typeof r.frequency === "string") meta.frequency = r.frequency
+        if (typeof r.context === "string") meta.context = r.context
+        if (Object.keys(meta).length === 0) meta = undefined
+      }
+    }
+
+    for (let i = 0; i < studentIds.length; i++) {
+      const targetId = studentIds[i]
+      if (targetId === tokenData.student_id) continue
+      responseRows.push({
+        process_id: tokenData.process_id,
+        respondent_student_id: tokenData.student_id,
+        target_student_id: targetId,
+        relation_type: code,
+        selection_order: i + 1,
+        weight: Math.max(1, max - i),
+        ...(meta ? { metadata: meta } : {}),
+      })
+    }
+  }
+
+  for (const [code, valuesRaw] of Object.entries(scales as Record<string, unknown>)) {
+    const def = advancedByCode.get(code)
+    if (!def || def.question_types.input_mode !== "scale" || !valuesRaw || typeof valuesRaw !== "object") continue
+    const max = def.max ?? 5
+    const entries = Object.entries(valuesRaw as Record<string, unknown>)
+      .filter((entry): entry is [string, number] => validIds.has(entry[0]) && typeof entry[1] === "number" && entry[1] >= 1 && entry[1] <= 5)
+      .slice(0, max)
+    for (let i = 0; i < entries.length; i++) {
+      const [targetId, value] = entries[i]
+      if (targetId === tokenData.student_id) continue
+      responseRows.push({
+        process_id: tokenData.process_id,
+        respondent_student_id: tokenData.student_id,
+        target_student_id: targetId,
+        relation_type: code,
+        selection_order: i + 1,
+        weight: value,
+      })
+    }
+  }
+
   if (responseRows.length > 0) {
     const { error: insertError } = await supabase
       .from("responses")
@@ -136,6 +233,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
+    }
+  }
+
+  // Clima de aula: no dirigido a un compañero, va a su propia tabla
+  const climateRows: { process_id: string; respondent_student_id: string; question_type_id: string; value: number }[] = []
+  for (const [code, rawValue] of Object.entries(climateInput as Record<string, unknown>)) {
+    const def = advancedByCode.get(code)
+    if (!def || def.question_types.input_mode !== "climate") continue
+    const value = Number(rawValue)
+    if (!Number.isInteger(value) || value < 1 || value > 5) continue
+    climateRows.push({
+      process_id: tokenData.process_id,
+      respondent_student_id: tokenData.student_id,
+      question_type_id: def.question_type_id,
+      value,
+    })
+  }
+
+  if (climateRows.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: climateError } = await (supabase as any)
+      .from("climate_responses")
+      .upsert(climateRows, { onConflict: "process_id,respondent_student_id,question_type_id" })
+
+    if (climateError) {
+      return NextResponse.json({ error: climateError.message }, { status: 500 })
     }
   }
 

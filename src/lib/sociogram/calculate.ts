@@ -69,14 +69,19 @@ function computeBetweenness(nodeIds: string[], adj: Map<string, Set<string>>): M
   return cb
 }
 
-export function calculateSociogram(students: Student[], responses: Response[]): SociogramData {
+export function calculateSociogram(
+  students: Student[],
+  responses: Response[],
+  friendshipLike: string[] = ["friendship"]
+): SociogramData {
   const nodeIds = students.map(s => s.id)
+  const isFriendshipLike = (relationType: string) => friendshipLike.includes(relationType)
 
   const received = new Map<string, number>(nodeIds.map(n => [n, 0]))
   const given = new Map<string, number>(nodeIds.map(n => [n, 0]))
   const reciprocal = new Map<string, number>(nodeIds.map(n => [n, 0]))
 
-  const friendshipResponses = responses.filter(r => r.relation_type === "friendship")
+  const friendshipResponses = responses.filter(r => isFriendshipLike(r.relation_type))
   const friendshipSet = new Set(friendshipResponses.map(r => `${r.respondent_student_id}→${r.target_student_id}`))
 
   for (const r of friendshipResponses) {
@@ -88,7 +93,7 @@ export function calculateSociogram(students: Student[], responses: Response[]): 
   const edges: SociogramEdge[] = []
   const addedEdges = new Set<string>()
   for (const r of responses) {
-    const isReciprocal = r.relation_type === "friendship" && friendshipSet.has(`${r.target_student_id}→${r.respondent_student_id}`)
+    const isReciprocal = isFriendshipLike(r.relation_type) && friendshipSet.has(`${r.target_student_id}→${r.respondent_student_id}`)
     const key = [r.respondent_student_id, r.target_student_id].sort().join("—") + r.relation_type
     if (!addedEdges.has(key)) {
       addedEdges.add(key)
@@ -98,7 +103,7 @@ export function calculateSociogram(students: Student[], responses: Response[]): 
 
   // Count reciprocal per student
   for (const e of edges) {
-    if (e.is_reciprocal && e.relation_type === "friendship") {
+    if (e.is_reciprocal && isFriendshipLike(e.relation_type)) {
       reciprocal.set(e.source, (reciprocal.get(e.source) ?? 0) + 1)
       reciprocal.set(e.target, (reciprocal.get(e.target) ?? 0) + 1)
     }
@@ -117,7 +122,7 @@ export function calculateSociogram(students: Student[], responses: Response[]): 
 
   // Communities via Union-Find on reciprocal friendship edges
   const reciprocalEdgePairs = edges
-    .filter(e => e.is_reciprocal && e.relation_type === "friendship")
+    .filter(e => e.is_reciprocal && isFriendshipLike(e.relation_type))
     .map(e => ({ a: e.source, b: e.target }))
   const communityMap = buildCommunities(nodeIds, reciprocalEdgePairs)
 
@@ -214,7 +219,7 @@ export function calculateSociogram(students: Student[], responses: Response[]): 
   // Global metrics
   const n = students.length
   const density = n > 1 ? responses.length / (n * (n - 1)) : 0
-  const reciprocalEdges = edges.filter(e => e.is_reciprocal && e.relation_type === "friendship")
+  const reciprocalEdges = edges.filter(e => e.is_reciprocal && isFriendshipLike(e.relation_type))
   const cohesion = friendshipResponses.length > 0 ? reciprocalEdges.length / friendshipResponses.length : 0
 
   return {

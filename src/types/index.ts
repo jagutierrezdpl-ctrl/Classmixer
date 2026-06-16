@@ -20,7 +20,19 @@ export type BehaviorLevel = "Positiva" | "Normal" | "Seguimiento" | "Conflictiva
 
 export type NeedsType = "No" | "Sí" | "ACNEAE" | "NEE" | "Refuerzo" | "Altas capacidades" | "Observación interna"
 
-export type RelationType = "friendship" | "work" | "emotional" | "negative"
+// Ensanchado de unión literal a string: los 4 tipos legacy ("friendship" | "work"
+// | "emotional" | "negative") siguen siendo valores válidos y todo `=== "friendship"`
+// existente sigue compilando igual, pero ahora el catálogo (question_types) puede
+// añadir nuevos códigos sin tocar este tipo.
+export type RelationType = string
+
+export type QuestionCategory = "peer_choice" | "peer_scale" | "role_nomination" | "climate" | "bullying"
+
+export type QuestionSensitivity = "normal" | "sensitive" | "very_sensitive"
+
+export type QuestionScoringRole = "none" | "friendship_like" | "work_like" | "negative_like"
+
+export type QuestionInputMode = "choice" | "scale" | "climate"
 
 export type RuleType =
   | "must_separate"
@@ -145,7 +157,72 @@ export interface Response {
   target_student_id: string
   relation_type: RelationType
   weight: number
+  selection_order?: number
+  metadata?: Record<string, unknown>
   created_at: string
+}
+
+export interface QuestionType {
+  id: string
+  code: string
+  category: QuestionCategory
+  label: string
+  description?: string
+  icon?: string
+  color?: string
+  default_min: number
+  default_max: number
+  sensitivity: QuestionSensitivity
+  scoring_role: QuestionScoringRole
+  input_mode: QuestionInputMode
+  is_system: boolean
+  center_id?: string
+  active: boolean
+  created_at: string
+}
+
+export interface QuestionnaireQuestion {
+  id: string
+  process_id: string
+  question_type_id: string
+  enabled: boolean
+  min?: number
+  max?: number
+  sort_order: number
+  label_override?: string
+  description_override?: string
+  created_at: string
+  question_type?: QuestionType
+}
+
+export interface ClimateResponse {
+  id: string
+  process_id: string
+  respondent_student_id: string
+  question_type_id: string
+  value: number
+  created_at: string
+}
+
+export interface QuestionnaireTemplate {
+  id: string
+  center_id?: string
+  name: string
+  description?: string
+  is_system: boolean
+  created_at: string
+  questions?: QuestionnaireTemplateQuestion[]
+}
+
+export interface QuestionnaireTemplateQuestion {
+  id: string
+  template_id: string
+  question_type_id: string
+  default_enabled: boolean
+  default_min?: number
+  default_max?: number
+  sort_order: number
+  question_type?: QuestionType
 }
 
 export interface Rule {

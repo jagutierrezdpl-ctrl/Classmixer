@@ -3,6 +3,7 @@ import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "
 import { NextResponse } from "next/server"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { exportSociogramToExcel } from "@/lib/excel/export"
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
@@ -31,8 +32,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   if (!students) return NextResponse.json({ error: "Error al cargar alumnos" }, { status: 500 })
 
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sociogramData = calculateSociogram(students as any, (responses ?? []) as any)
+  const sociogramData = calculateSociogram(students as any, (responses ?? []) as any, catalogIndex.scoringRoles.friendshipLike)
   const buffer = exportSociogramToExcel(sociogramData)
 
   await logAudit(profile.id, profile.center_id, "export_sociogram_excel", "process", {

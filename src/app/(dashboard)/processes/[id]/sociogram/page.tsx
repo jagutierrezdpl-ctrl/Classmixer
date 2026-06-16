@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
-  Download, ImageDown, Filter, X, Sparkles, FileText
+  Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert
 } from "lucide-react"
 import Link from "next/link"
 import type { SociogramData, SociogramNode } from "@/types"
@@ -234,6 +234,13 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild title="Informe para orientación (PDF, datos sensibles)">
               <a href={`/api/processes/${id}/sociogram/export/pdf/orientacion`} download>
                 <Download className="w-3.5 h-3.5" /> Orientación
+              </a>
+            </Button>
+          )}
+          {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50" asChild title="Informe de convivencia (PDF, muy sensible)">
+              <a href={`/api/processes/${id}/sociogram/export/pdf/convivencia`} download>
+                <ShieldAlert className="w-3.5 h-3.5" /> Convivencia
               </a>
             </Button>
           )}

@@ -2,6 +2,16 @@ import type { Student, Response, Rule, AlgorithmWeights } from "@/types"
 import { DEFAULT_WEIGHTS } from "./weights"
 import { simulateFutureSociogram } from "./simulation"
 
+export interface RelationTypeGroups {
+  friendshipLike: string[]
+  workLike: string[]
+}
+
+export const DEFAULT_RELATION_TYPES: RelationTypeGroups = {
+  friendshipLike: ["friendship"],
+  workLike: ["work"],
+}
+
 export interface AssignmentResult {
   student_id: string
   target_class: string
@@ -53,13 +63,14 @@ function computeSubScores(
   students: Student[],
   responses: Response[],
   rules: Rule[],
-  targetClasses: string[]
+  targetClasses: string[],
+  relationTypes: RelationTypeGroups = DEFAULT_RELATION_TYPES
 ): SubScores {
   const studentMap = new Map(students.map(s => [s.id, s]))
   const assignMap = new Map(assignments.map(a => [a.student_id, a.target_class]))
 
-  const friendships = responses.filter(r => r.relation_type === "friendship")
-  const workRelations = responses.filter(r => r.relation_type === "work")
+  const friendships = responses.filter(r => relationTypes.friendshipLike.includes(r.relation_type))
+  const workRelations = responses.filter(r => relationTypes.workLike.includes(r.relation_type))
 
   const reciprocalPairs = new Set<string>()
   friendships.forEach(r => {
@@ -245,9 +256,10 @@ function computeScore(
   responses: Response[],
   rules: Rule[],
   targetClasses: string[],
-  weights: AlgorithmWeights
+  weights: AlgorithmWeights,
+  relationTypes: RelationTypeGroups = DEFAULT_RELATION_TYPES
 ): number {
-  const sub = computeSubScores(assignments, students, responses, rules, targetClasses)
+  const sub = computeSubScores(assignments, students, responses, rules, targetClasses, relationTypes)
   return weightedTotal(sub, weights)
 }
 
@@ -259,10 +271,11 @@ function buildResult(
   rules: Rule[],
   targetClasses: string[],
   weights: AlgorithmWeights,
-  infeasibleRules?: string[]
+  infeasibleRules?: string[],
+  relationTypes: RelationTypeGroups = DEFAULT_RELATION_TYPES
 ): Omit<ProposalResult, "assignments"> {
   const studentMap = new Map(students.map(s => [s.id, s]))
-  const sub = computeSubScores(assignments, students, responses, rules, targetClasses)
+  const sub = computeSubScores(assignments, students, responses, rules, targetClasses, relationTypes)
 
   const total = weightedTotal(sub, weights)
 
@@ -283,10 +296,10 @@ function buildResult(
       : 50
 
   // Per-class metrics using future sociogram simulation
-  const futureMetrics = simulateFutureSociogram(assignments, responses.filter(r => r.relation_type === "friendship"))
+  const futureMetrics = simulateFutureSociogram(assignments, responses, relationTypes.friendshipLike)
   const futureMap = new Map(futureMetrics.map(fm => [fm.target_class, fm]))
 
-  const friendships = responses.filter(r => r.relation_type === "friendship")
+  const friendships = responses.filter(r => relationTypes.friendshipLike.includes(r.relation_type))
   const assignMap = new Map(assignments.map(a => [a.student_id, a.target_class]))
 
   const metrics: Record<string, Record<string, number>> = {}
@@ -463,7 +476,8 @@ export function generateProposals(
   targetClasses: string[],
   numProposals = 3,
   weights: AlgorithmWeights = DEFAULT_WEIGHTS,
-  constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS
+  constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS,
+  relationTypes: RelationTypeGroups = DEFAULT_RELATION_TYPES
 ): ProposalResult[] {
   const separationRules = rules.filter(r => r.rule_type === "must_separate" && r.active)
   const lockRules = rules.filter(r =>
@@ -811,7 +825,7 @@ export function generateProposals(
 
     // 6. General swap local search
     const maxIter = Math.min(300, activeStudents.length * 3)
-    let bestScore = computeScore(assignments, activeStudents, responses, rules, targetClasses, weights)
+    let bestScore = computeScore(assignments, activeStudents, responses, rules, targetClasses, weights, relationTypes)
 
     const swappable = assignments.filter(
       a => !lockedStudents.has(a.student_id) && !mustTogetherLockedClass.has(a.student_id)
@@ -853,7 +867,7 @@ export function generateProposals(
 
       a1.target_class = orig2
       a2.target_class = orig1
-      const newScore = computeScore(assignments, activeStudents, responses, rules, targetClasses, weights)
+      const newScore = computeScore(assignments, activeStudents, responses, rules, targetClasses, weights, relationTypes)
 
       if (newScore > bestScore) {
         bestScore = newScore
@@ -875,7 +889,8 @@ export function generateProposals(
       rules,
       targetClasses,
       weights,
-      infeasibleRules
+      infeasibleRules,
+      relationTypes
     )
     proposals.push({ assignments: [...assignments], ...result })
   }

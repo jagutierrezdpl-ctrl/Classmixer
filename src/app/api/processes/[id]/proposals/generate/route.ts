@@ -4,6 +4,8 @@ import { NextResponse } from "next/server"
 import { generateProposals, checkInfeasibility, DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
 import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
 import { DEFAULT_WEIGHTS } from "@/lib/algorithm/weights"
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
+import type { ScoringRoleMap } from "@/lib/questionnaire/catalog"
 import type { AlgorithmWeights } from "@/types"
 
 type ClassProposal = {
@@ -29,6 +31,7 @@ async function callPythonSolver(
   constraints: AlgorithmConstraints,
   minPerClass: number,
   maxPerClass: number,
+  scoringRoles: ScoringRoleMap,
 ): Promise<ClassProposal[] | null> {
   const serviceUrl = process.env.PYTHON_SERVICE_URL
   if (!serviceUrl) return null
@@ -84,6 +87,9 @@ async function callPythonSolver(
       num_proposals: numProposals,
       time_limit_seconds: 30,
       seed: 42,
+      friendship_types: scoringRoles.friendshipLike,
+      work_types: scoringRoles.workLike,
+      negative_types: scoringRoles.negativeLike,
     }
 
     const res = await fetch(`${serviceUrl}/solve`, {
@@ -213,6 +219,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const assignableStudents = (students as any[]).filter(s => !excludedIds.has(s.id))
 
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
+
   // Try Python OR-Tools solver first; fall back to heuristic
   let proposals: ClassProposal[] | null = await callPythonSolver(
     assignableStudents,
@@ -224,6 +232,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     constraints,
     minPerClass,
     maxPerClass,
+    catalogIndex.scoringRoles,
   )
 
   const usedSolver = proposals !== null ? "ortools" : "heuristic"
@@ -239,7 +248,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       targetClasses,
       numProposals,
       weights,
-      constraints
+      constraints,
+      {
+        friendshipLike: catalogIndex.scoringRoles.friendshipLike,
+        workLike: catalogIndex.scoringRoles.workLike,
+      }
     ) as ClassProposal[]
   }
 

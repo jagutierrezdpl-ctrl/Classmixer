@@ -3,6 +3,7 @@ import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { generateProposals, DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
 import { DEFAULT_WEIGHTS } from "@/lib/algorithm/weights"
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
@@ -72,6 +73,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const allRules = [...rulesWithStudents, ...syntheticLockRules]
 
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
+
   const proposals = generateProposals(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     students as any,
@@ -82,7 +85,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     targetClasses,
     1,
     DEFAULT_WEIGHTS,
-    DEFAULT_CONSTRAINTS
+    DEFAULT_CONSTRAINTS,
+    {
+      friendshipLike: catalogIndex.scoringRoles.friendshipLike,
+      workLike: catalogIndex.scoringRoles.workLike,
+    }
   )
 
   if (proposals.length === 0) {

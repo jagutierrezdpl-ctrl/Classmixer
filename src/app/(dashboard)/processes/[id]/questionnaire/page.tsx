@@ -21,6 +21,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import ImportResponsesDialog from "@/components/questionnaire/ImportResponsesDialog"
+import AdvancedQuestionsCard from "@/components/questionnaire/AdvancedQuestionsCard"
 
 const QRCodeSVG = dynamic<{ value: string; size?: number }>(
   () => import("qrcode.react").then(m => m.QRCodeSVG as React.ComponentType<{ value: string; size?: number }>),
@@ -488,6 +489,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
           )}
         </Button>
       </form>
+
+      <AdvancedQuestionsCard processId={id} />
 
       {/* Generate tokens */}
       <Card className="mb-6">
