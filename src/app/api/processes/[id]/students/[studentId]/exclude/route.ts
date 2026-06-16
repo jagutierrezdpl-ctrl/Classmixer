@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 /** GET — returns students who chose this student (affected connections) */
@@ -24,6 +24,9 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!student || (student as any).processes?.center_id !== profile.center_id) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+  if (!hasFullAccess(profile.role) && !(await tutorCanAccessProcess(profile.center_id, profile.id, processId))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
   }
 
   // Find students who chose this student in any relation type

@@ -14,6 +14,16 @@ export async function DELETE(
   const { id, userId } = await params
   const supabase = createServiceClient()
 
+  const { data: process } = await supabase
+    .from("processes")
+    .select("center_id")
+    .eq("id", id)
+    .single()
+
+  if (!process || process.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
     .from("process_tutors")

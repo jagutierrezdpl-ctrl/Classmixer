@@ -1,6 +1,17 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
+
+async function getOwnedProcess(processId: string, centerId: string) {
+  const supabase = createServiceClient()
+  const { data: process } = await supabase
+    .from("processes")
+    .select("center_id")
+    .eq("id", processId)
+    .single()
+  if (!process || process.center_id !== centerId) return null
+  return process
+}
 
 export async function GET(
   _request: Request,
@@ -10,6 +21,14 @@ export async function GET(
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  if (!(await getOwnedProcess(id, profile.center_id))) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+  if (!hasFullAccess(profile.role) && !(await tutorCanAccessProcess(profile.center_id, profile.id, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
+
   const supabase = createServiceClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,6 +51,11 @@ export async function POST(
   }
 
   const { id } = await params
+
+  if (!(await getOwnedProcess(id, profile.center_id))) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+
   const body = await request.json()
   const { user_id } = body
 

@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const supabase = createServiceClient()
 
   const [{ data: process }, { data: tokens }, { data: settings }] = await Promise.all([
-    supabase.from("processes").select("name").eq("id", id).single(),
+    supabase.from("processes").select("name, center_id").eq("id", id).single(),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("questionnaire_tokens")
@@ -32,7 +32,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .maybeSingle(),
   ])
 
-  if (!process) return NextResponse.json({ error: "Proceso no encontrado" }, { status: 404 })
+  if (!process || process.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "Proceso no encontrado" }, { status: 404 })
+  }
 
   type TokenRow = {
     student_id: string

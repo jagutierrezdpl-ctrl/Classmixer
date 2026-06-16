@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 
@@ -21,6 +21,9 @@ export async function GET(
     .single()
 
   if (!process) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  if (!hasFullAccess(profile.role) && !(await tutorCanAccessProcess(profile.center_id, profile.id, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
 
   const { data: students } = await supabase
     .from("students")

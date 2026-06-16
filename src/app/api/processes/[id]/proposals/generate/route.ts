@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { generateProposals, checkInfeasibility, DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
 import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
@@ -26,7 +26,7 @@ async function callPythonSolver(
   targetClasses: string[],
   numProposals: number,
   weights: AlgorithmWeights,
-  _constraints: AlgorithmConstraints,
+  constraints: AlgorithmConstraints,
   minPerClass: number,
   maxPerClass: number,
 ): Promise<ClassProposal[] | null> {
@@ -73,6 +73,13 @@ async function callPythonSolver(
         group_mix: weights.group_mix,
         behavior: weights.behavior,
         needs_distribution: weights.special_needs,
+      },
+      constraints: {
+        enforce_origin_mix: constraints.enforce_origin_mix,
+        max_origin_pct: constraints.max_origin_pct,
+        enforce_gender_balance: constraints.enforce_gender_balance,
+        gender_tolerance: constraints.gender_tolerance,
+        enforce_equal_size: constraints.enforce_equal_size,
       },
       num_proposals: numProposals,
       time_limit_seconds: 30,
@@ -127,6 +134,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { id } = await params
   const supabase = createServiceClient()
+
+  const { data: ownerCheck } = await supabase
+    .from("processes")
+    .select("center_id")
+    .eq("id", id)
+    .single()
+
+  if (!ownerCheck || ownerCheck.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+  if (!hasFullAccess(profile.role) && !(await tutorCanAccessProcess(profile.center_id, profile.id, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
 
   let weights: AlgorithmWeights = DEFAULT_WEIGHTS
   let constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS

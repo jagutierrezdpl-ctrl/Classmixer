@@ -5,6 +5,9 @@ import { NextResponse } from "next/server"
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Solo administradores pueden cargar alumnos" }, { status: 403 })
+  }
 
   const { id: processId } = await params
   const { searchParams } = new URL(request.url)
@@ -13,6 +16,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (q.length < 2) return NextResponse.json([])
 
   const supabase = createServiceClient()
+
+  const { data: process } = await supabase
+    .from("processes")
+    .select("id")
+    .eq("id", processId)
+    .eq("center_id", profile.center_id)
+    .single()
+
+  if (!process) return NextResponse.json({ error: "Proceso no encontrado" }, { status: 404 })
 
   // Get student_profile_ids already in this process
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

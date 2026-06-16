@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 
@@ -27,6 +27,21 @@ export async function POST(
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  const ownerSupabase = createServiceClient()
+  const { data: process } = await ownerSupabase
+    .from("processes")
+    .select("center_id")
+    .eq("id", id)
+    .single()
+
+  if (!process || process.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+  if (!hasFullAccess(profile.role) && !(await tutorCanAccessProcess(profile.center_id, profile.id, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
+
   const url = new URL(request.url)
   const action = url.searchParams.get("action") ?? "preview"
 

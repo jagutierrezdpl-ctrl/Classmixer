@@ -1,13 +1,30 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { parseExcelImport, generateTemplateExcel } from "@/lib/excel/import"
+
+async function checkProcessOwnership(profile: { id: string; center_id: string; role: string }, processId: string) {
+  const supabase = createServiceClient()
+  const { data: process } = await supabase
+    .from("processes")
+    .select("center_id")
+    .eq("id", processId)
+    .single()
+
+  if (!process || process.center_id !== profile.center_id) return false
+  return hasFullAccess(profile.role) || tutorCanAccessProcess(profile.center_id, profile.id, processId)
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  if (!(await checkProcessOwnership(profile, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
+
   const supabase = createServiceClient()
 
   const { data, error } = await supabase
@@ -31,6 +48,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   const url = new URL(request.url)
   const action = url.searchParams.get("action")
+
+  if (!(await checkProcessOwnership(profile, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
 
   // Download template
   if (action === "template") {
@@ -206,6 +227,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   const { id } = await params
+
+  if (!(await checkProcessOwnership(profile, id))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
+  }
+
   const { student_ids } = await request.json()
   if (!Array.isArray(student_ids) || student_ids.length === 0) {
     return NextResponse.json({ error: "Sin IDs" }, { status: 400 })

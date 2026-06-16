@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 const ALLOWED_FIELDS = ["behavior_level", "needs_type", "academic_level", "observations", "average_grade"] as const
@@ -39,6 +39,9 @@ export async function PATCH(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!student || (student as any).processes?.center_id !== profile.center_id) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+  if (!hasFullAccess(profile.role) && !(await tutorCanAccessProcess(profile.center_id, profile.id, processId))) {
+    return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
