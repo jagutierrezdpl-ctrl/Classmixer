@@ -212,7 +212,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .filter(r => !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id))
 
   const studentMap = new Map(students.map((s: any) => [s.id, s]))
-  const soc = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike)
+  const soc = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
   const positions = layout(soc.nodes)
 
   const buffer = await renderToBuffer(React.createElement(SociogramaPDF, { process, soc, positions, studentMap }) as any)

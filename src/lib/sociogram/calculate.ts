@@ -71,9 +71,17 @@ function computeBetweenness(nodeIds: string[], adj: Map<string, Set<string>>): M
 
 export function calculateSociogram(
   students: Student[],
-  responses: Response[],
-  friendshipLike: string[] = ["friendship"]
+  rawResponses: Response[],
+  friendshipLike: string[] = ["friendship"],
+  excludedFromGraph: string[] = []
 ): SociogramData {
+  // Tipos como nominación de roles o convivencia/acoso se recogen para sus propios
+  // informes (dashboard de respuestas, informe de convivencia) pero no deben mezclarse
+  // visualmente con las relaciones del sociograma ni alterar centralidad/densidad.
+  const responses = excludedFromGraph.length > 0
+    ? rawResponses.filter(r => !excludedFromGraph.includes(r.relation_type))
+    : rawResponses
+
   const nodeIds = students.map(s => s.id)
   const isFriendshipLike = (relationType: string) => friendshipLike.includes(relationType)
 

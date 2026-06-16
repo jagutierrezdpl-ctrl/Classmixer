@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { exportProposalToExcel } from "@/lib/excel/export"
+import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
@@ -44,8 +45,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     })),
   }))
 
+  const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buffer = exportProposalToExcel(proposal, students, rulesWithStudents, (responses ?? []) as any, proposal.proposal_metrics ?? [])
+  const scopedResponses = ((responses ?? []) as any[]).filter(r => !catalogIndex.excludedFromGraph.includes(r.relation_type))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buffer = exportProposalToExcel(proposal, students, rulesWithStudents, scopedResponses as any, proposal.proposal_metrics ?? [])
 
   await logAudit(profile.id, profile.center_id, "export_proposal_excel", "proposal", {
     processId: proposal.process_id,

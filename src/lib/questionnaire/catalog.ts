@@ -16,7 +16,16 @@ export interface ScoringRoleMap {
 export interface QuestionCatalogIndex {
   scoringRoles: ScoringRoleMap
   sensitivity: Record<string, QuestionSensitivity>
+  // Codes que no deben dibujarse como aristas del sociograma ni contar en sus
+  // métricas (centralidad, densidad, puentes) — p.ej. nominación de roles o
+  // convivencia/acoso. Tienen su propio informe en vez de mezclarse en el grafo.
+  excludedFromGraph: string[]
 }
+
+// Categorías cuyas respuestas, aunque se guarden en `responses` igual que las
+// elecciones de compañeros, no representan una relación social a dibujar en el
+// sociograma.
+const GRAPH_EXCLUDED_CATEGORIES = ["role_nomination", "bullying"]
 
 // Reproduce el comportamiento de hoy si el catálogo no está disponible por
 // cualquier motivo (lectura fallida, tabla vacía): los 4 tipos legacy con
@@ -33,6 +42,7 @@ const DEFAULT_CATALOG_INDEX: QuestionCatalogIndex = {
     emotional: "sensitive",
     negative: "sensitive",
   },
+  excludedFromGraph: [],
 }
 
 export interface QuestionDisplayInfo {
@@ -64,7 +74,7 @@ export async function getQuestionDisplayMap(centerId?: string): Promise<Record<s
 
 export async function getQuestionCatalogIndex(centerId?: string): Promise<QuestionCatalogIndex> {
   const supabase = createServiceClient()
-  const query = supabase.from("question_types").select("code, scoring_role, sensitivity").eq("active", true)
+  const query = supabase.from("question_types").select("code, scoring_role, sensitivity, category").eq("active", true)
   const { data, error } = centerId
     ? await query.or(`center_id.is.null,center_id.eq.${centerId}`)
     : await query.is("center_id", null)
@@ -73,13 +83,15 @@ export async function getQuestionCatalogIndex(centerId?: string): Promise<Questi
 
   const scoringRoles: ScoringRoleMap = { friendshipLike: [], workLike: [], negativeLike: [] }
   const sensitivity: Record<string, QuestionSensitivity> = {}
+  const excludedFromGraph: string[] = []
 
-  for (const row of data as { code: string; scoring_role: QuestionScoringRole; sensitivity: QuestionSensitivity }[]) {
+  for (const row of data as { code: string; scoring_role: QuestionScoringRole; sensitivity: QuestionSensitivity; category: string }[]) {
     sensitivity[row.code] = row.sensitivity
     if (row.scoring_role === "friendship_like") scoringRoles.friendshipLike.push(row.code)
     else if (row.scoring_role === "work_like") scoringRoles.workLike.push(row.code)
     else if (row.scoring_role === "negative_like") scoringRoles.negativeLike.push(row.code)
+    if (GRAPH_EXCLUDED_CATEGORIES.includes(row.category)) excludedFromGraph.push(row.code)
   }
 
-  return { scoringRoles, sensitivity }
+  return { scoringRoles, sensitivity, excludedFromGraph }
 }

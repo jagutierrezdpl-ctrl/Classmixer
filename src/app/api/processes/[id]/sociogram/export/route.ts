@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sociogramData = calculateSociogram(students as any, (responses ?? []) as any, catalogIndex.scoringRoles.friendshipLike)
+  const sociogramData = calculateSociogram(students as any, (responses ?? []) as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
   const buffer = exportSociogramToExcel(sociogramData)
 
   await logAudit(profile.id, profile.center_id, "export_sociogram_excel", "process", {

@@ -127,7 +127,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const excludedIds = new Set((students as any[]).filter(s => s.excluded_from_mix).map(s => s.id))
   const scopedResponses = (responses ?? []).filter((r: any) => !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id))
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
-  const soc = calculateSociogram(activeStudents as any, scopedResponses as any, catalogIndex.scoringRoles.friendshipLike)
+  const soc = calculateSociogram(activeStudents as any, scopedResponses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
 
   const conflicts: string[] = []
   for (const r of (rules ?? []) as any[]) {

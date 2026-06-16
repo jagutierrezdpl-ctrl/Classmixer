@@ -62,7 +62,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sociogram = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike)
+  const sociogram = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
 
   return NextResponse.json({
     ...sociogram,
