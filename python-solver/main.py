@@ -60,6 +60,13 @@ class Weights(BaseModel):
     gender_balance: float = 60.0
     group_mix: float = 50.0
 
+class ConstraintsInput(BaseModel):
+    enforce_origin_mix: bool = True
+    max_origin_pct: int = 50       # 0-100: max % of one origin class per target class
+    enforce_gender_balance: bool = False
+    gender_tolerance: int = 15     # 0-50: max % deviation from global gender ratio
+    enforce_equal_size: bool = False  # all target classes within 1 student of each other
+
 class SolveRequest(BaseModel):
     students: list[StudentInput]
     responses: list[ResponseInput]
@@ -68,6 +75,7 @@ class SolveRequest(BaseModel):
     min_per_class: int = 20
     max_per_class: int = 30
     weights: Weights = Weights()
+    constraints: ConstraintsInput = ConstraintsInput()
     num_proposals: int = 3
     time_limit_seconds: int = 30
     seed: int = 42
@@ -104,12 +112,18 @@ class SolveResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def build_relation_set(responses: list[ResponseInput], relation_type: str) -> set[tuple[str, str]]:
+    return {(r.respondent_student_id, r.target_student_id) for r in responses if r.relation_type == relation_type}
+
 def build_friendship_set(responses: list[ResponseInput]) -> set[tuple[str, str]]:
-    return {(r.respondent_student_id, r.target_student_id) for r in responses if r.relation_type == "friendship"}
+    return build_relation_set(responses, "friendship")
 
 def build_reciprocal_set(responses: list[ResponseInput]) -> set[tuple[str, str]]:
     friendships = build_friendship_set(responses)
     return {(a, b) for (a, b) in friendships if (b, a) in friendships and a < b}
+
+def priority_multiplier(priority: str) -> float:
+    return {"obligatoria": 2.0, "alta": 1.5, "media": 1.0, "baja": 0.5}.get(priority, 1.0)
 
 def build_conflict_pairs(responses: list[ResponseInput], rules: list[RuleInput]) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
@@ -258,9 +272,45 @@ def solve_with_ortools(
         model.add_exactly_one(x[s])
 
     # Class size constraints
-    for c in range(nc):
-        model.add(sum(x[s][c] for s in range(n)) >= req.min_per_class)
-        model.add(sum(x[s][c] for s in range(n)) <= req.max_per_class)
+    constraints = req.constraints
+    if constraints.enforce_equal_size:
+        min_size = n // nc
+        max_size = math.ceil(n / nc)
+        for c in range(nc):
+            model.add(sum(x[s][c] for s in range(n)) >= min_size)
+            model.add(sum(x[s][c] for s in range(n)) <= max_size)
+    else:
+        for c in range(nc):
+            model.add(sum(x[s][c] for s in range(n)) >= req.min_per_class)
+            model.add(sum(x[s][c] for s in range(n)) <= req.max_per_class)
+
+    # Origin mix constraint: no more than max_origin_pct% of a class from the same origin class
+    if constraints.enforce_origin_mix:
+        origins = {s.current_class for s in students if s.current_class}
+        for origin in origins:
+            origin_sids = [i for i, s in enumerate(students) if s.current_class == origin]
+            if not origin_sids:
+                continue
+            for c in range(nc):
+                class_size = sum(x[s][c] for s in range(n))
+                origin_in_class = sum(x[s][c] for s in origin_sids)
+                # 100 * origin_in_class <= max_origin_pct * class_size
+                model.add(100 * origin_in_class <= constraints.max_origin_pct * class_size)
+
+    # Gender balance constraint: each class within `gender_tolerance`% of the global F ratio
+    if constraints.enforce_gender_balance:
+        total_f = sum(1 for s in students if s.gender == "F")
+        total_known = sum(1 for s in students if s.gender in ("F", "M"))
+        if total_known > 0:
+            ratio_scaled = round((total_f / total_known) * 1000)
+            tolerance_scaled = round(constraints.gender_tolerance * 10)
+            female_idx = [i for i, s in enumerate(students) if s.gender == "F"]
+            known_idx = [i for i, s in enumerate(students) if s.gender in ("F", "M")]
+            for c in range(nc):
+                f_in_class = sum(x[s][c] for s in female_idx)
+                known_in_class = sum(x[s][c] for s in known_idx)
+                model.add(1000 * f_in_class - ratio_scaled * known_in_class + tolerance_scaled * known_in_class >= 0)
+                model.add(1000 * f_in_class - ratio_scaled * known_in_class - tolerance_scaled * known_in_class <= 0)
 
     infeasible_rules: list[str] = []
 
@@ -285,7 +335,7 @@ def solve_with_ortools(
                     for c in range(nc):
                         model.add(x[s0][c] == x[si][c])
 
-        elif rule.rule_type == "lock_student_to_class" and rule.target_class and valid_sids:
+        elif rule.rule_type in ("lock_student_to_class", "with_tutor") and rule.target_class and valid_sids:
             c_idx = class_idx.get(rule.target_class)
             if c_idx is not None:
                 for sid in valid_sids:
@@ -306,6 +356,46 @@ def solve_with_ortools(
     student_map = {s.id: s for s in students}
 
     obj_terms = []
+
+    def class_match_tokens(si: int, sj: int, tag: str) -> list:
+        tokens = []
+        for c in range(nc):
+            tok = model.new_bool_var(f"{tag}_{si}_{sj}_{c}")
+            model.add(x[si][c] + x[sj][c] - 1 <= tok)
+            model.add(tok <= x[si][c])
+            model.add(tok <= x[sj][c])
+            tokens.append(tok)
+        return tokens
+
+    # should_keep_together / keep_at_least_one / protect_vulnerable:
+    # soft by default, escalated to hard constraints when rule.priority == "obligatoria"
+    for rule in rules:
+        valid_sids = [sid for sid in rule.student_ids if sid in student_idx]
+        mult = priority_multiplier(rule.priority)
+
+        if rule.rule_type == "should_keep_together" and len(valid_sids) >= 2:
+            s0 = student_idx[valid_sids[0]]
+            w = int(req.weights.chosen_friendships * mult)
+            for sid in valid_sids[1:]:
+                si = student_idx[sid]
+                tokens = class_match_tokens(s0, si, "should")
+                obj_terms.append(sum(tokens) * w)
+                if rule.priority == "obligatoria":
+                    for c in range(nc):
+                        model.add(x[s0][c] == x[si][c])
+
+        elif rule.rule_type in ("keep_at_least_one", "protect_vulnerable") and len(valid_sids) >= 2:
+            main_i = student_idx[valid_sids[0]]
+            friend_idxs = [student_idx[sid] for sid in valid_sids[1:]]
+            all_tokens = []
+            for fi in friend_idxs:
+                all_tokens.extend(class_match_tokens(main_i, fi, rule.rule_type))
+            satisfied = model.new_bool_var(f"{rule.rule_type}_{rule.id}")
+            model.add(satisfied <= sum(all_tokens))
+            w = int(req.weights.avoid_isolation * mult)
+            obj_terms.append(satisfied * w)
+            if rule.priority == "obligatoria":
+                model.add(sum(all_tokens) >= 1)
 
     # Reward reciprocal friendships in same class
     w_recip = int(req.weights.reciprocal_friendships)
@@ -331,6 +421,34 @@ def solve_with_ortools(
                 model.add(same <= x[sb][c])
                 obj_terms.append(same * w_friend)
 
+    # Reward work relations placed in the same class
+    work_pairs = build_relation_set(req.responses, "work")
+    w_work = int(req.weights.work_relations // 2)
+    for a, b in work_pairs:
+        if a in student_idx and b in student_idx:
+            sa, sb = student_idx[a], student_idx[b]
+            for c in range(nc):
+                same = model.new_bool_var(f"work_{a}_{b}_{c}")
+                model.add(x[sa][c] + x[sb][c] - 1 <= same)
+                model.add(same <= x[sa][c])
+                model.add(same <= x[sb][c])
+                obj_terms.append(same * w_work)
+
+    # Penalize placing students with mutual friction ("negative" responses) together.
+    # must_separate rules above stay hard; this softly extends the same idea to
+    # self-reported friction that isn't backed by an explicit admin rule.
+    negative_pairs = build_relation_set(req.responses, "negative")
+    w_conflict = int(req.weights.conflicts // 2)
+    for a, b in negative_pairs:
+        if a in student_idx and b in student_idx:
+            sa, sb = student_idx[a], student_idx[b]
+            for c in range(nc):
+                same = model.new_bool_var(f"negative_{a}_{b}_{c}")
+                model.add(x[sa][c] + x[sb][c] - 1 <= same)
+                model.add(same <= x[sa][c])
+                model.add(same <= x[sb][c])
+                obj_terms.append(-same * w_conflict)
+
     # Grade balance: minimize max-min average grade across classes (approximated)
     # We'll use a linear approximation by penalizing grade concentration
     # Group students by grade quartile
@@ -347,6 +465,41 @@ def solve_with_ortools(
             deviation = model.new_int_var(0, len(q_students), f"q_dev_{q_start}_{c}")
             model.add_abs_equality(deviation, count_in_class - ideal)
             obj_terms.append(-deviation * w_academic)
+
+    def add_distribution_balance(flags: list[int], weight: int, tag: str) -> None:
+        """Soft-penalize uneven distribution of flagged students across classes."""
+        total = sum(flags)
+        if total == 0 or weight <= 0:
+            return
+        ideal = total // nc
+        flagged_idx = [i for i, f in enumerate(flags) if f]
+        for c in range(nc):
+            count_in_class = sum(x[i][c] for i in flagged_idx)
+            deviation = model.new_int_var(0, total, f"{tag}_dev_{c}")
+            model.add_abs_equality(deviation, count_in_class - ideal)
+            obj_terms.append(-deviation * weight)
+
+    # Needs distribution: spread students with special needs across classes
+    needs_flags = [1 if s.needs_type and s.needs_type not in ("No", None) else 0 for s in students]
+    add_distribution_balance(needs_flags, int(req.weights.needs_distribution // 4), "needs")
+
+    # Behavior: spread students with behavior issues across classes
+    behavior_flags = [1 if s.behavior_level in ("Seguimiento", "Conflictiva") else 0 for s in students]
+    add_distribution_balance(behavior_flags, int(req.weights.behavior // 4), "behavior")
+
+    # Gender balance: soft nudge toward an even split, independent of the hard
+    # `enforce_gender_balance` toggle (which only kicks in when explicitly enabled)
+    female_flags = [1 if s.gender == "F" else 0 for s in students]
+    add_distribution_balance(female_flags, int(req.weights.gender_balance // 4), "gender")
+
+    # Group mix: soft nudge to spread each origin class across all target classes,
+    # independent of the hard `enforce_origin_mix` toggle
+    w_group_mix = int(req.weights.group_mix // 4)
+    if w_group_mix > 0:
+        origins = {s.current_class for s in students if s.current_class}
+        for origin in origins:
+            origin_flags = [1 if s.current_class == origin else 0 for s in students]
+            add_distribution_balance(origin_flags, w_group_mix, f"origin_{origin}")
 
     if obj_terms:
         model.maximize(sum(obj_terms))

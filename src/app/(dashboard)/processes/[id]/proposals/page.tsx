@@ -346,6 +346,18 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                             PDF
                           </a>
                         </Button>
+                        <Button variant="outline" size="sm" asChild title="Informe para dirección (PDF)">
+                          <a href={`/api/proposals/${proposal.id}/export/pdf/direccion`} download>
+                            <Download className="w-4 h-4" />
+                            Dirección
+                          </a>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild title="Informe de tutoría (PDF)">
+                          <a href={`/api/proposals/${proposal.id}/export/pdf/tutores`} download>
+                            <Download className="w-4 h-4" />
+                            Tutoría
+                          </a>
+                        </Button>
                         {!isApproved && (
                           <Button size="sm" onClick={() => handleApprove(proposal.id)}>
                             <CheckCircle className="w-4 h-4" />

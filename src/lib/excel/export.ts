@@ -1,7 +1,27 @@
 import * as XLSX from "xlsx"
-import type { Proposal, Student, SociogramData } from "@/types"
+import type { Proposal, Student, SociogramData, Response, Rule, ProposalMetric } from "@/types"
+import { calculateSociogram } from "@/lib/sociogram/calculate"
 
-export function exportProposalToExcel(proposal: Proposal, students: Student[]): Buffer {
+const RULE_TYPE_LABELS: Record<string, string> = {
+  must_separate: "Separar obligatoriamente",
+  should_keep_together: "Mantener juntos (recomendado)",
+  must_keep_together: "Mantener juntos (obligatorio)",
+  keep_at_least_one: "Mantener al menos uno",
+  max_from_group: "Máximo por clase",
+  lock_student_to_class: "Fijar en clase concreta",
+  with_tutor: "Asignar con tutor concreto",
+  exclude_student: "Excluir de la mezcla",
+  protect_vulnerable: "Proteger alumno vulnerable",
+  avoid_tutor: "Evitar tutor (alumno-tutor)",
+}
+
+export function exportProposalToExcel(
+  proposal: Proposal,
+  students: Student[],
+  rules: Rule[] = [],
+  responses: Response[] = [],
+  proposalMetrics: ProposalMetric[] = [],
+): Buffer {
   const studentMap = new Map(students.map(s => [s.id, s]))
 
   const assignments = proposal.assignments ?? []
@@ -53,6 +73,100 @@ export function exportProposalToExcel(proposal: Proposal, students: Student[]): 
 
   const wsSummary = XLSX.utils.json_to_sheet(summaryRows)
   XLSX.utils.book_append_sheet(wb, wsSummary, "Resumen")
+
+  // Métricas sheet (stored per-class balance metrics from the solver)
+  const metricRows = proposalMetrics
+    .filter(m => m.target_class)
+    .sort((a, b) => (a.target_class ?? "").localeCompare(b.target_class ?? "") || a.metric_key.localeCompare(b.metric_key))
+    .map(m => ({ Clase: m.target_class, Métrica: m.metric_key, Valor: m.metric_value }))
+  const wsClassMetrics = XLSX.utils.json_to_sheet(
+    metricRows.length > 0 ? metricRows : [{ Mensaje: "Sin métricas calculadas para esta propuesta" }]
+  )
+  XLSX.utils.book_append_sheet(wb, wsClassMetrics, "Métricas")
+
+  // Reglas sheet
+  const ruleRows = rules.map(r => ({
+    Tipo: RULE_TYPE_LABELS[r.rule_type] ?? r.rule_type,
+    Prioridad: r.priority,
+    Descripción: r.description ?? "",
+    Clase_Destino: r.target_class ?? "",
+    Alumnos: (r.students ?? [])
+      .map(rs => (rs.student ? `${rs.student.first_name} ${rs.student.last_name}` : rs.student_id))
+      .join(", "),
+    Activa: r.active ? "Sí" : "No",
+  }))
+  const wsRules = XLSX.utils.json_to_sheet(
+    ruleRows.length > 0 ? ruleRows : [{ Mensaje: "Sin reglas configuradas para este proceso" }]
+  )
+  XLSX.utils.book_append_sheet(wb, wsRules, "Reglas")
+
+  // Future per-class sociogram (reusing calculateSociogram restricted to each new class):
+  // feeds Alertas, Alumnos sin amistad and Sociograma métricas sheets
+  const alertRows: Record<string, string | number>[] = []
+  const friendlessRows: Record<string, string | number>[] = []
+  const socMetricRows: Record<string, string | number>[] = []
+
+  for (const cls of targetClasses) {
+    const clsStudentIds = new Set(assignments.filter(a => a.target_class === cls).map(a => a.student_id))
+    const clsStudents = students.filter(s => clsStudentIds.has(s.id))
+    if (clsStudents.length === 0) continue
+    const clsResponses = responses.filter(
+      r => clsStudentIds.has(r.respondent_student_id) && clsStudentIds.has(r.target_student_id)
+    )
+
+    const soc: SociogramData = calculateSociogram(clsStudents, clsResponses)
+
+    for (const alert of soc.alerts) {
+      alertRows.push({
+        Clase: cls,
+        Tipo: alert.type,
+        Severidad: alert.severity,
+        Mensaje: alert.message,
+        Alumnos: alert.student_ids
+          .map(sid => { const s = studentMap.get(sid); return s ? `${s.first_name} ${s.last_name}` : sid })
+          .join(", "),
+      })
+    }
+
+    for (const node of soc.nodes) {
+      if (node.is_isolated) {
+        friendlessRows.push({
+          Clase: cls,
+          Nombre: node.first_name,
+          Apellidos: node.last_name,
+          Elecciones_Dadas_En_Clase: node.given_count,
+          Elecciones_Recibidas_En_Clase: node.received_count,
+        })
+      }
+      socMetricRows.push({
+        Clase: cls,
+        Nombre: node.first_name,
+        Apellidos: node.last_name,
+        Elecciones_Recibidas: node.received_count,
+        Elecciones_Dadas: node.given_count,
+        Relaciones_Recíprocas: node.reciprocal_count,
+        Centralidad: node.centrality,
+        Intermediación: node.betweenness,
+        Aislado: node.is_isolated ? "Sí" : "No",
+        Vulnerable: node.is_vulnerable ? "Sí" : "No",
+      })
+    }
+  }
+
+  const wsAlerts = XLSX.utils.json_to_sheet(
+    alertRows.length > 0 ? alertRows : [{ Mensaje: "Sin alertas detectadas en las clases propuestas" }]
+  )
+  XLSX.utils.book_append_sheet(wb, wsAlerts, "Alertas")
+
+  const wsFriendless = XLSX.utils.json_to_sheet(
+    friendlessRows.length > 0
+      ? friendlessRows
+      : [{ Mensaje: "Todos los alumnos tienen al menos una amistad en su clase final" }]
+  )
+  XLSX.utils.book_append_sheet(wb, wsFriendless, "Alumnos sin amistad")
+
+  const wsSocMetrics = XLSX.utils.json_to_sheet(socMetricRows)
+  XLSX.utils.book_append_sheet(wb, wsSocMetrics, "Sociograma métricas")
 
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer
 }

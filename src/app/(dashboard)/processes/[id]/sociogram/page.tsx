@@ -225,6 +225,18 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleExportExcel} disabled={exportingExcel}>
             {exportingExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Excel
           </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild title="Informe de sociograma (PDF)">
+            <a href={`/api/processes/${id}/sociogram/export/pdf`} download>
+              <Download className="w-3.5 h-3.5" /> PDF
+            </a>
+          </Button>
+          {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild title="Informe para orientación (PDF, datos sensibles)">
+              <a href={`/api/processes/${id}/sociogram/export/pdf/orientacion`} download>
+                <Download className="w-3.5 h-3.5" /> Orientación
+              </a>
+            </Button>
+          )}
           {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleAISummary} disabled={aiLoading}>
               {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Análisis IA
