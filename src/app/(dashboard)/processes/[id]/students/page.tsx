@@ -112,6 +112,7 @@ function EditableBadge({
   onSave: (v: string) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
+  const [openUp, setOpenUp] = useState(false)
   const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -123,6 +124,14 @@ function EditableBadge({
     document.addEventListener("mousedown", handle)
     return () => document.removeEventListener("mousedown", handle)
   }, [open])
+
+  function handleToggle() {
+    if (!open && ref.current) {
+      const rect = ref.current.getBoundingClientRect()
+      setOpenUp(window.innerHeight - rect.bottom < 160)
+    }
+    setOpen(o => !o)
+  }
 
   async function handleSelect(v: string) {
     setSaving(true)
@@ -136,7 +145,7 @@ function EditableBadge({
   return (
     <div ref={ref} className="relative inline-block">
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={handleToggle}
         disabled={saving}
         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border cursor-pointer transition-colors select-none ${displayStyle}`}
         title="Clic para cambiar"
@@ -147,7 +156,7 @@ function EditableBadge({
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 py-1 bg-white rounded-lg shadow-lg border min-w-[140px]">
+        <div className={`absolute z-50 ${openUp ? "bottom-full mb-1" : "top-full mt-1"} left-0 py-1 bg-white rounded-lg shadow-lg border min-w-[140px]`}>
           {options.map(opt => (
             <button
               key={opt}
@@ -1144,7 +1153,7 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
             )}
           </div>
 
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-lg border overflow-visible">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
