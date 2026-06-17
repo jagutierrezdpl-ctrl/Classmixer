@@ -221,6 +221,15 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
   const totalSelected = questions.filter(q => q.min > 0).reduce((s, q) => s + Math.min(selections[q.type]?.length ?? 0, q.min), 0) + advancedSelected
   const progressPct = totalRequired > 0 ? Math.round((totalSelected / totalRequired) * 100) : 100
 
+  const canSubmit =
+    questions.every(q => q.min === 0 || (selections[q.type]?.length ?? 0) >= q.min) &&
+    advancedQuestions.every(q => q.input_mode !== "choice" || q.min === 0 || (advancedChoices[q.code]?.length ?? 0) >= q.min)
+
+  const pendingLabels = [
+    ...questions.filter(q => q.min > 0 && (selections[q.type]?.length ?? 0) < q.min).map(q => q.label),
+    ...advancedQuestions.filter(q => q.input_mode === "choice" && q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min).map(q => q.label),
+  ]
+
   return (
     <div className="min-h-screen bg-background">
       {/* Sticky header */}
@@ -272,8 +281,12 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
                 <div className="flex items-center gap-2">
                   <span className={q.color}>{q.icon}</span>
                   <CardTitle className="text-base">{q.label}</CardTitle>
-                  {q.type === "negative" && (
+                  {q.type === "negative" ? (
                     <Badge variant="outline" className="text-xs ml-auto">Opcional</Badge>
+                  ) : q.min > 0 && selected.length >= q.min ? (
+                    <CheckCircle className="w-4 h-4 text-green-500 ml-auto shrink-0" />
+                  ) : (
+                    <Badge variant="outline" className="text-xs ml-auto text-destructive border-destructive/40">Obligatoria</Badge>
                   )}
                 </div>
                 <CardDescription>{q.description}</CardDescription>
@@ -375,12 +388,12 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
           />
         ))}
 
-        <div className="sticky bottom-4">
+        <div className="sticky bottom-4 space-y-2">
           <Button
             size="lg"
             className="w-full h-12 text-base shadow-lg"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !canSubmit}
           >
             {submitting ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
@@ -388,6 +401,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
               "Enviar respuestas"
             )}
           </Button>
+          {!canSubmit && pendingLabels.length > 0 && (
+            <p className="text-center text-xs text-muted-foreground">
+              Faltan por completar: <span className="font-medium text-foreground">{pendingLabels.join(", ")}</span>
+            </p>
+          )}
         </div>
 
         <p className="text-xs text-center text-muted-foreground pb-8">
