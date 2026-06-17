@@ -6,6 +6,7 @@ import { z } from "zod"
 const UpdateSchema = z.object({
   role: z.enum(["admin", "tutor", "orientador"]).optional(),
   name: z.string().min(1).optional(),
+  active: z.boolean().optional(),
 })
 
 export async function PATCH(

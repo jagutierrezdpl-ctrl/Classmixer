@@ -8,11 +8,12 @@ import UserActions from "./UserActions"
 import InviteDialog from "./InviteDialog"
 import RescueDialog from "./RescueDialog"
 
-const ROLE_BADGES: Record<string, "default" | "secondary" | "outline" | "warning"> = {
-  superadmin: "default",
-  admin: "default",
-  tutor: "secondary",
-  orientador: "secondary",
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: "Superadmin",
+  admin: "Admin",
+  tutor: "Tutor",
+  orientador: "Orientador",
+  pending: "Sin configurar",
 }
 
 function formatDate(dateStr: string) {
@@ -27,12 +28,16 @@ export default async function UsersPage() {
 
   const { data: users } = await supabase
     .from("users")
-    .select("id, name, email, role, created_at")
+    .select("id, name, email, role, active, created_at")
     .eq("center_id", profile.center_id)
+    .order("active", { ascending: false })
     .order("created_at", { ascending: true })
 
+  const activeCount = (users ?? []).filter(u => u.active !== false).length
+  const inactiveCount = (users ?? []).filter(u => u.active === false).length
+
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-3xl">
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -41,7 +46,8 @@ export default async function UsersPage() {
           <div>
             <h1 className="text-2xl font-bold">Usuarios</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {(users ?? []).length} usuario{(users ?? []).length !== 1 ? "s" : ""} en el centro
+              {activeCount} activo{activeCount !== 1 ? "s" : ""}
+              {inactiveCount > 0 && ` · ${inactiveCount} desactivado${inactiveCount !== 1 ? "s" : ""}`}
             </p>
           </div>
         </div>
@@ -62,43 +68,62 @@ export default async function UsersPage() {
             </p>
           ) : (
             <div className="divide-y">
-              {(users ?? []).map(u => (
-                <div key={u.id} className="flex items-center gap-4 px-4 py-3">
-                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-semibold text-primary">
-                      {(u.name ?? u.email ?? "?").charAt(0).toUpperCase()}
+              {(users ?? []).map(u => {
+                const isMe = u.id === profile.id
+                const isActive = u.active !== false
+                return (
+                  <div key={u.id} className={`flex items-center gap-3 px-4 py-3 ${!isActive ? "opacity-60" : ""}`}>
+                    {/* Avatar */}
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isActive ? "bg-primary/10" : "bg-muted"}`}>
+                      <span className={`text-sm font-semibold ${isActive ? "text-primary" : "text-muted-foreground"}`}>
+                        {(u.name ?? u.email ?? "?").charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Name + email */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{u.name ?? "—"}</p>
+                      <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                    </div>
+
+                    {/* Role badge */}
+                    <span className="text-xs text-muted-foreground hidden sm:block shrink-0">
+                      {ROLE_LABELS[u.role] ?? u.role}
                     </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{u.name ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs text-muted-foreground hidden sm:block">
+
+                    {/* Status badge */}
+                    {isMe ? (
+                      <Badge variant="secondary" className="text-xs shrink-0">Tú</Badge>
+                    ) : isActive ? (
+                      <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50 shrink-0">Activo</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-gray-500 border-gray-300 shrink-0">Desactivado</Badge>
+                    )}
+
+                    {/* Date */}
+                    <span className="text-xs text-muted-foreground hidden md:block shrink-0">
                       {formatDate(u.created_at)}
                     </span>
-                    {u.id === profile.id ? (
-                      <Badge variant={ROLE_BADGES[u.role] ?? "secondary"} className="text-xs">
-                        {u.role} (tú)
-                      </Badge>
-                    ) : (
+
+                    {/* Actions */}
+                    {!isMe && (
                       <UserActions
                         userId={u.id}
                         currentRole={u.role}
+                        isActive={isActive}
                         currentUserRole={profile.role}
                       />
                     )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
       <p className="text-xs text-muted-foreground mt-4">
-        Invita a tutores y orientadores con el botón de arriba. También pueden acceder con su cuenta
-        institucional (Google / Microsoft) si el centro lo tiene configurado.
+        Si un usuario entró con Google antes de ser dado de alta, usa &ldquo;Activar cuenta pendiente&rdquo;.
       </p>
     </div>
   )

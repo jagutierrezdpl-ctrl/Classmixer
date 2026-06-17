@@ -7,6 +7,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const profile = await getUserProfile()
 
   if (!profile) redirect("/login")
+  if (!profile.center_id) redirect("/pending")
+  if (profile.active === false) redirect("/inactive")
 
   const supabase = await createClient()
 

@@ -40,6 +40,7 @@ export interface Database {
           name: string
           role: string
           center_id: string
+          active: boolean
           created_at: string
           updated_at: string
         }
@@ -48,7 +49,8 @@ export interface Database {
           email: string
           name: string
           role?: string
-          center_id: string
+          center_id?: string | null
+          active?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -57,7 +59,8 @@ export interface Database {
           email?: string
           name?: string
           role?: string
-          center_id?: string
+          center_id?: string | null
+          active?: boolean
           updated_at?: string
         }
         Relationships: []

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(CLAUDE_CODE_TMPDIR=/tmp grep -n \"question_types\\\\|questionnaire_questions\" /Users/jose/Documents/Code/ClassMixer/src/app/api/q/\\\\[token\\\\]/route.ts)"
+    ]
+  }
+}
