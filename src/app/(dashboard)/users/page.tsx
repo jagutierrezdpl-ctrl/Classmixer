@@ -6,6 +6,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import UserActions from "./UserActions"
 import InviteDialog from "./InviteDialog"
+import RescueDialog from "./RescueDialog"
 
 const ROLE_BADGES: Record<string, "default" | "secondary" | "outline" | "warning"> = {
   superadmin: "default",
@@ -44,7 +45,10 @@ export default async function UsersPage() {
             </p>
           </div>
         </div>
-        <InviteDialog />
+        <div className="flex items-center gap-2">
+          <RescueDialog />
+          <InviteDialog />
+        </div>
       </div>
 
       <Card>

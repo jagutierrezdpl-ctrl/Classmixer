@@ -50,6 +50,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Este email ya está registrado en el centro" }, { status: 409 })
   }
 
+  // Check if a pending user exists (logged in via Google before clicking invite).
+  // If so, rescue them directly instead of sending another invite.
+  const { data: pendingUser } = await supabase
+    .from("users")
+    .select("id")
+    .ilike("email", email)
+    .is("center_id", null)
+    .maybeSingle()
+
+  if (pendingUser) {
+    const { error: rescueError } = await supabase
+      .from("users")
+      .update({ center_id: profile.center_id, role, name })
+      .eq("id", pendingUser.id)
+
+    if (rescueError) return NextResponse.json({ error: rescueError.message }, { status: 500 })
+    return NextResponse.json({ success: true, email, rescued: true })
+  }
+
   const origin = request.headers.get("origin") ?? "https://classmixer-lovat.vercel.app"
 
   // Invite via Supabase admin
