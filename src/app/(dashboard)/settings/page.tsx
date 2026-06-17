@@ -8,6 +8,18 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { ArrowLeft, Check, Loader2, Sparkles, Trash2 } from "lucide-react"
 
+const OPENROUTER_MODELS = [
+  { id: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — rápido, económico (por defecto)" },
+  { id: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6 — equilibrado, alta calidad" },
+  { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8 — máxima calidad" },
+  { id: "openai/gpt-4o-mini", label: "GPT-4o Mini — rápido, económico" },
+  { id: "openai/gpt-4o", label: "GPT-4o — alta calidad" },
+  { id: "google/gemini-flash-1.5", label: "Gemini Flash 1.5 — muy rápido" },
+  { id: "google/gemini-pro-1.5", label: "Gemini Pro 1.5 — alta calidad" },
+  { id: "meta-llama/llama-3.3-70b-instruct", label: "LLaMA 3.3 70B — open source" },
+  { id: "__custom__", label: "Otro modelo (escribe el ID manualmente)..." },
+]
+
 interface Center {
   id: string
   name: string
@@ -15,6 +27,7 @@ interface Center {
   city?: string | null
   country?: string | null
   openrouter_key_set?: boolean
+  openrouter_model?: string | null
 }
 
 export default function SettingsPage() {
@@ -29,6 +42,13 @@ export default function SettingsPage() {
   const [savedAi, setSavedAi] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
+  // Model selector state
+  const [selectedModel, setSelectedModel] = useState("")
+  const [customModel, setCustomModel] = useState("")
+  const [savingModel, setSavingModel] = useState(false)
+  const [savedModel, setSavedModel] = useState(false)
+  const [modelError, setModelError] = useState<string | null>(null)
+
   useEffect(() => {
     fetch("/api/settings/center")
       .then(r => r.json())
@@ -41,6 +61,18 @@ export default function SettingsPage() {
             city: data.city ?? "",
             country: data.country ?? "",
           })
+          // Initialise model selector from saved value
+          if (data.openrouter_model) {
+            const knownModel = OPENROUTER_MODELS.find(m => m.id === data.openrouter_model && m.id !== "__custom__")
+            if (knownModel) {
+              setSelectedModel(data.openrouter_model)
+            } else {
+              setSelectedModel("__custom__")
+              setCustomModel(data.openrouter_model)
+            }
+          } else {
+            setSelectedModel("")
+          }
         }
       })
   }, [])
@@ -81,7 +113,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings/center", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, openrouterApiKey: newKey }),
+        body: JSON.stringify({ openrouterApiKey: newKey }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -96,6 +128,31 @@ export default function SettingsPage() {
       setAiError("Error de red al guardar")
     } finally {
       setSavingAi(false)
+    }
+  }
+
+  async function handleSaveModel() {
+    const modelValue = selectedModel === "__custom__" ? customModel.trim() : selectedModel
+    setModelError(null)
+    setSavingModel(true)
+    try {
+      const res = await fetch("/api/settings/center", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ openrouterModel: modelValue || null }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setModelError(data.error ?? "Error al guardar")
+      } else {
+        setCenter(data)
+        setSavedModel(true)
+        setTimeout(() => setSavedModel(false), 2500)
+      }
+    } catch {
+      setModelError("Error de red al guardar")
+    } finally {
+      setSavingModel(false)
     }
   }
 
@@ -226,6 +283,54 @@ export default function SettingsPage() {
               <Check className="w-4 h-4" /> Guardado
             </span>
           )}
+
+          <div className="border-t pt-3 space-y-2">
+            <Label htmlFor="ai-model">Modelo de IA</Label>
+            <p className="text-xs text-muted-foreground">
+              Selecciona el modelo que usará OpenRouter para generar los análisis. Si no seleccionas ninguno se usa <code>claude-haiku-4-5</code> por defecto.
+            </p>
+            <select
+              id="ai-model"
+              value={selectedModel}
+              onChange={e => setSelectedModel(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">— Usar modelo por defecto —</option>
+              {OPENROUTER_MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+
+            {selectedModel === "__custom__" && (
+              <Input
+                placeholder="ej. mistralai/mistral-7b-instruct"
+                value={customModel}
+                onChange={e => setCustomModel(e.target.value)}
+              />
+            )}
+
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                type="button"
+                size="sm"
+                disabled={savingModel || !center || (selectedModel === "__custom__" && !customModel.trim())}
+                onClick={handleSaveModel}
+              >
+                {savingModel ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar modelo"}
+              </Button>
+              {savedModel && (
+                <span className="text-sm text-green-600 flex items-center gap-1">
+                  <Check className="w-4 h-4" /> Guardado
+                </span>
+              )}
+              {center?.openrouter_model && (
+                <span className="text-xs text-muted-foreground">
+                  Actual: <code>{center.openrouter_model}</code>
+                </span>
+              )}
+            </div>
+            {modelError && <p className="text-sm text-destructive">{modelError}</p>}
+          </div>
         </CardContent>
       </Card>
     </div>

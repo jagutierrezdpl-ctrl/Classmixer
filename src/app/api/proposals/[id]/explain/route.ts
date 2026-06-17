@@ -18,7 +18,7 @@ export async function POST(
 
   const { data: center } = await supabase
     .from("centers")
-    .select("openrouter_api_key")
+    .select("openrouter_api_key, openrouter_model")
     .eq("id", profile.center_id)
     .single()
 
@@ -78,7 +78,8 @@ Redacta el resumen con estas tres secciones (máximo 250 palabras):
 Tono: directo, claro, orientado a la toma de decisiones.`
 
   try {
-    const summary = await generateAISummary(prompt, (center as { openrouter_api_key?: string | null } | null)?.openrouter_api_key)
+    const c = center as { openrouter_api_key?: string | null; openrouter_model?: string | null } | null
+    const summary = await generateAISummary(prompt, c?.openrouter_api_key, undefined, c?.openrouter_model)
     return NextResponse.json({ summary })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido"

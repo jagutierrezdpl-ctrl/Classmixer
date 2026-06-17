@@ -193,7 +193,7 @@ export async function POST(
 
   const [{ data: proc }, { data: center }, { data: allStudents }, { data: allResponses }, { data: docRows }] = await Promise.all([
     supabase.from("processes").select("name, school_year, center_id").eq("id", id).single(),
-    supabase.from("centers").select("openrouter_api_key").eq("id", profile.center_id).single(),
+    supabase.from("centers").select("openrouter_api_key, openrouter_model").eq("id", profile.center_id).single(),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from("students").select("*").eq("process_id", id).eq("active", true),
     supabase.from("responses").select("*").eq("process_id", id),
@@ -242,7 +242,9 @@ export async function POST(
     : ""
 
   // Optional: LLM writes a qualitative contextualisation paragraph grounded in CDC/CIVSOC
-  const apiKey = (center as { openrouter_api_key?: string | null } | null)?.openrouter_api_key
+  const centerData = center as { openrouter_api_key?: string | null; openrouter_model?: string | null } | null
+  const apiKey = centerData?.openrouter_api_key
+  const aiModel = centerData?.openrouter_model
   if (apiKey) {
     try {
       const cohPct   = (sg.metrics.group_cohesion * 100).toFixed(1)
@@ -276,7 +278,7 @@ export async function POST(
         `No repitas los datos numéricos literalmente; interprétalos. No hagas recomendaciones de mezcla (eso va en el informe). En español.` +
         docNote + docContext
 
-      const narrative = await generateAISummary(narrativePrompt, apiKey)
+      const narrative = await generateAISummary(narrativePrompt, apiKey, undefined, aiModel)
       return NextResponse.json({ summary: `CONTEXTO SOCIOMÉTRICO\n${narrative.trim()}\n\n${report}` })
     } catch {
       // Fall through to return just the programmatic report

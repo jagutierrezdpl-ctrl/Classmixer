@@ -14,7 +14,7 @@ export async function GET() {
   const supabase = createServiceClient()
   const { data, error } = await supabase
     .from("centers")
-    .select("id, name, address, city, country, openrouter_api_key")
+    .select("id, name, address, city, country, openrouter_api_key, openrouter_model")
     .eq("id", profile.center_id)
     .single()
 
@@ -30,20 +30,24 @@ export async function PATCH(request: Request) {
   }
 
   const body = await request.json()
-  const { name, address, city, country, openrouterApiKey } = body
+  const { name, address, city, country, openrouterApiKey, openrouterModel } = body
 
-  if (!name?.trim() || name.trim().length < 2) {
+  if (name !== undefined && (!name?.trim() || name.trim().length < 2)) {
     return NextResponse.json({ error: "El nombre debe tener al menos 2 caracteres" }, { status: 400 })
   }
 
-  const updateData: CenterUpdate = {
-    name: name.trim(),
-    address: address?.trim() || null,
-    city: city?.trim() || null,
-    country: country?.trim() || null,
+  const updateData: CenterUpdate = {}
+  if (name !== undefined) {
+    updateData.name = name.trim()
+    updateData.address = address?.trim() || null
+    updateData.city = city?.trim() || null
+    updateData.country = country?.trim() || null
   }
   if (openrouterApiKey !== undefined) {
     updateData.openrouter_api_key = typeof openrouterApiKey === "string" && openrouterApiKey.trim() ? openrouterApiKey.trim() : null
+  }
+  if (openrouterModel !== undefined) {
+    updateData.openrouter_model = typeof openrouterModel === "string" && openrouterModel.trim() ? openrouterModel.trim() : null
   }
 
   const supabase = createServiceClient()
@@ -51,7 +55,7 @@ export async function PATCH(request: Request) {
     .from("centers")
     .update(updateData)
     .eq("id", profile.center_id)
-    .select("id, name, address, city, country, openrouter_api_key")
+    .select("id, name, address, city, country, openrouter_api_key, openrouter_model")
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -59,6 +63,11 @@ export async function PATCH(request: Request) {
   if (openrouterApiKey !== undefined) {
     await logAudit(profile.id, profile.center_id, "update_openrouter_key", "center", {
       metadata: { action: updateData.openrouter_api_key ? "set" : "removed" },
+    })
+  }
+  if (openrouterModel !== undefined) {
+    await logAudit(profile.id, profile.center_id, "update_ai_model", "center", {
+      metadata: { model: updateData.openrouter_model ?? "default" },
     })
   }
 

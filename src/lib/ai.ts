@@ -43,10 +43,11 @@ IMPORTANTE: Un alumno ignorado NO es lo mismo que uno rechazado. El ignorado req
 export async function generateAISummary(
   prompt: string,
   openrouterApiKey?: string | null,
-  systemPrompt?: string
+  systemPrompt?: string,
+  model?: string | null
 ): Promise<string> {
   const system = systemPrompt ?? SOCIOMETRY_SYSTEM_PROMPT
-  if (openrouterApiKey) return generateWithOpenRouter(prompt, openrouterApiKey, system)
+  if (openrouterApiKey) return generateWithOpenRouter(prompt, openrouterApiKey, system, model)
   return generateWithAnthropic(prompt, system)
 }
 
@@ -80,7 +81,7 @@ async function generateWithAnthropic(prompt: string, system: string): Promise<st
   return json.content?.[0]?.text ?? ""
 }
 
-async function generateWithOpenRouter(prompt: string, apiKey: string, system: string): Promise<string> {
+async function generateWithOpenRouter(prompt: string, apiKey: string, system: string, model?: string | null): Promise<string> {
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
     headers: {
@@ -88,7 +89,7 @@ async function generateWithOpenRouter(prompt: string, apiKey: string, system: st
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: model ?? OPENROUTER_MODEL,
       max_tokens: 800,
       messages: [
         { role: "system", content: system },
