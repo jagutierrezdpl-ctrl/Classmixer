@@ -89,6 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     {
       friendshipLike: catalogIndex.scoringRoles.friendshipLike,
       workLike: catalogIndex.scoringRoles.workLike,
+      negativeLike: catalogIndex.scoringRoles.negativeLike,
     }
   )
 

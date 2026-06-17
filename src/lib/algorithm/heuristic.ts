@@ -5,11 +5,13 @@ import { simulateFutureSociogram } from "./simulation"
 export interface RelationTypeGroups {
   friendshipLike: string[]
   workLike: string[]
+  negativeLike: string[]
 }
 
 export const DEFAULT_RELATION_TYPES: RelationTypeGroups = {
   friendshipLike: ["friendship"],
   workLike: ["work"],
+  negativeLike: ["negative"],
 }
 
 export interface AssignmentResult {
@@ -210,7 +212,8 @@ function computeSubScores(
     (needsCounts.length || 1)
   const specialNeedsScore = Math.max(0, 100 - needsVariance * 10)
 
-  // conflicts: violations of must_separate rules
+  // conflicts: violations of must_separate rules + negative nomination pairs in same class
+  // Hard separation rules count 4× more than soft negative nominations.
   const separationRules = rules.filter(r => r.rule_type === "must_separate" && r.active)
   let violatedSeparations = 0
   separationRules.forEach(r => {
@@ -223,10 +226,23 @@ function computeSubScores(
       }
     }
   })
-  const conflictsScore =
-    separationRules.length > 0
-      ? Math.max(0, 100 - (violatedSeparations / separationRules.length) * 100)
-      : 100
+
+  const negativeNoms = responses.filter(r => relationTypes.negativeLike.includes(r.relation_type))
+  let rejectionViolations = 0
+  negativeNoms.forEach(r => {
+    if (
+      assignMap.get(r.respondent_student_id) !== undefined &&
+      assignMap.get(r.respondent_student_id) === assignMap.get(r.target_student_id)
+    ) {
+      rejectionViolations++
+    }
+  })
+
+  const totalViolations = violatedSeparations * 4 + rejectionViolations
+  const totalDenom = separationRules.length * 4 + negativeNoms.length
+  const conflictsScore = totalDenom > 0
+    ? Math.max(0, 100 - (totalViolations / totalDenom) * 100)
+    : 100
 
   return {
     avoid_isolation: avoidIsolation,
@@ -534,6 +550,36 @@ export function generateProposals(
     if (ids.length >= 2) protectMap.set(ids[0], ids.slice(1))
   })
 
+  // Auto-detect fragile anchor pairs from response data without requiring explicit admin rules.
+  // A student with exactly 1 reciprocal friendship partner and ≤3 received nominations
+  // becomes isolated if separated from their only anchor — the algorithm must preserve that bond.
+  // Explicit rules (protectMap / atLeastOneMap) always take precedence.
+  const friendshipResps = responses.filter(r => relationTypes.friendshipLike.includes(r.relation_type))
+  const receivedNomCount = new Map<string, number>()
+  friendshipResps.forEach(r => {
+    receivedNomCount.set(r.target_student_id, (receivedNomCount.get(r.target_student_id) ?? 0) + 1)
+  })
+  const reciprocalPartnerMap = new Map<string, string[]>()
+  friendshipResps.forEach(r => {
+    const hasReverse = friendshipResps.some(
+      f => f.respondent_student_id === r.target_student_id && f.target_student_id === r.respondent_student_id
+    )
+    if (hasReverse) {
+      const list = reciprocalPartnerMap.get(r.respondent_student_id) ?? []
+      if (!list.includes(r.target_student_id)) list.push(r.target_student_id)
+      reciprocalPartnerMap.set(r.respondent_student_id, list)
+    }
+  })
+  const autoProtectMap = new Map<string, string[]>()
+  students.forEach(s => {
+    if (protectMap.has(s.id) || atLeastOneMap.has(s.id)) return
+    const recv = receivedNomCount.get(s.id) ?? 0
+    const partners = reciprocalPartnerMap.get(s.id) ?? []
+    if (partners.length === 1 && recv <= 3) {
+      autoProtectMap.set(s.id, partners)
+    }
+  })
+
   // max_from_group: group key (sorted ids) → max per class
   const maxFromGroupMap = new Map<string, number>()
   maxFromGroupRules.forEach(r => {
@@ -764,9 +810,13 @@ export function generateProposals(
       }
     }
 
-    // 5. Local search: satisfy keep_at_least_one and protect_vulnerable
+    // 5. Local search: satisfy keep_at_least_one, protect_vulnerable, and auto-detected fragile pairs
     const assignMut = new Map(assignments.map(a => [a.student_id, a]))
-    const combinedNeeds = [...atLeastOneMap.entries(), ...protectMap.entries()]
+    const combinedNeeds = [
+      ...atLeastOneMap.entries(),
+      ...protectMap.entries(),
+      ...autoProtectMap.entries(),
+    ]
 
     for (const [mainId, friendIds] of combinedNeeds) {
       const mainAssign = assignMut.get(mainId)
