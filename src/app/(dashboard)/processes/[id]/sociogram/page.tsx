@@ -714,13 +714,13 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                     </div>
                     <div>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-muted-foreground">Cohesión del grupo</span>
-                        <span className="font-medium">{(data.metrics.cohesion * 100).toFixed(1)}%</span>
+                        <span className="text-muted-foreground">Cohesión grupal (IAg)</span>
+                        <span className="font-medium">{(data.metrics.group_cohesion * 100).toFixed(1)}%</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${data.metrics.cohesion >= 0.5 ? "bg-green-500" : data.metrics.cohesion >= 0.3 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${data.metrics.cohesion * 100}%` }} />
+                        <div className={`h-full rounded-full ${data.metrics.group_cohesion >= 0.15 ? "bg-green-500" : data.metrics.group_cohesion >= 0.08 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min(data.metrics.group_cohesion * 100 * 4, 100)}%` }} />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">Amistades recíprocas sobre el total</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Pares recíprocos / pares posibles (Fernández-Ballesteros, 1995)</p>
                     </div>
                   </CardContent>
                 </Card>

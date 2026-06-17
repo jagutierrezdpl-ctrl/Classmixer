@@ -245,7 +245,7 @@ export async function POST(
   const apiKey = (center as { openrouter_api_key?: string | null } | null)?.openrouter_api_key
   if (apiKey) {
     try {
-      const cohPct = (sg.metrics.cohesion * 100).toFixed(0)
+      const cohPct = (sg.metrics.group_cohesion * 100).toFixed(1)
       const isolated = sg.nodes.filter(n => n.is_isolated)
       const docNote = docs.length > 0
         ? ` Ten en cuenta el contexto adicional del centro aportado al final del mensaje.`

@@ -247,7 +247,7 @@ export function exportSociogramToExcel(data: SociogramData): Buffer {
     { Métrica: "Comunidades detectadas", Valor: data.metrics.communities_count },
     { Métrica: "Pares recíprocos", Valor: data.metrics.reciprocal_pairs },
     { Métrica: "Densidad de red", Valor: `${(data.metrics.density * 100).toFixed(2)}%` },
-    { Métrica: "Cohesión del grupo", Valor: `${(data.metrics.cohesion * 100).toFixed(2)}%` },
+    { Métrica: "Cohesión grupal (IAg)", Valor: `${(data.metrics.group_cohesion * 100).toFixed(2)}%` },
   ]
   const wsMetrics = XLSX.utils.json_to_sheet(metricsRows)
   wsMetrics["!cols"] = [{ wch: 28 }, { wch: 12 }]

@@ -27,7 +27,11 @@ function buildCommunities(nodeIds: string[], reciprocalEdges: { a: string; b: st
   return result
 }
 
-// ── Brandes algorithm — normalised betweenness centrality ─────────────────────
+// ── Brandes algorithm — normalised DIRECTED betweenness centrality ────────────
+// adj must be a DIRECTED adjacency (outgoing edges only).
+// Normalization uses (n-1)*(n-2) for directed graphs (not /2).
+// Consequence: students with in-degree=0 automatically get betweenness=0,
+// since no shortest path s→v→t can pass through them.
 function computeBetweenness(nodeIds: string[], adj: Map<string, Set<string>>): Map<string, number> {
   const cb = new Map<string, number>(nodeIds.map(n => [n, 0]))
 
@@ -63,7 +67,9 @@ function computeBetweenness(nodeIds: string[], adj: Map<string, Set<string>>): M
   }
 
   const n = nodeIds.length
-  const norm = n > 2 ? (n - 1) * (n - 2) / 2 : 1
+  // Directed normalization: (n-1)*(n-2) — twice the undirected value because
+  // directed graphs have ordered pairs (s,t) and (t,s) as distinct paths.
+  const norm = n > 2 ? (n - 1) * (n - 2) : 1
   for (const [k, v] of cb) cb.set(k, v / norm)
   return cb
 }
@@ -170,7 +176,16 @@ export function calculateSociogram(
     }
   }
 
-  // ── Undirected adjacency for betweenness ──────────────────────────────────
+  // ── Directed adjacency (outgoing only) — for betweenness ─────────────────
+  // Must be directed so students with in-degree=0 get betweenness=0.
+  // Using undirected adjacency causes Bug A: isolated students get false
+  // betweenness because their outgoing edges are treated as bidirectional.
+  const adjOut = new Map<string, Set<string>>(nodeIds.map(n => [n, new Set()]))
+  for (const r of responses) {
+    adjOut.get(r.respondent_student_id)?.add(r.target_student_id)
+  }
+
+  // ── Undirected adjacency (both directions) — for bridge/community detection
   const adjAll = new Map<string, Set<string>>(nodeIds.map(n => [n, new Set()]))
   for (const r of responses) {
     adjAll.get(r.respondent_student_id)?.add(r.target_student_id)
@@ -178,7 +193,7 @@ export function calculateSociogram(
   }
 
   const betweenness = nodeIds.length > 2
-    ? computeBetweenness(nodeIds, adjAll)
+    ? computeBetweenness(nodeIds, adjOut)
     : new Map(nodeIds.map(n => [n, 0]))
 
   // ── Communities (Union-Find on reciprocal friendship edges) ───────────────
@@ -336,8 +351,11 @@ export function calculateSociogram(
     ? (friendshipResponses.length + negativeResponses.length) / N
     : 0
 
-  // Legacy density & cohesion (kept for backward compat)
-  const density = N > 1 ? responses.length / (N * (N - 1)) : 0
+  // Legacy density: friendship nominations / all possible directed pairs
+  // (only friendship, not work/negative, to measure the social choice network)
+  const density = N > 1 ? friendshipResponses.length / (N * (N - 1)) : 0
+  // Legacy cohesion (CoG — coherence): what proportion of given choices are reciprocated
+  // Note: group_cohesion (IAg) is the scientifically correct "Cohesión Grupal" metric
   const cohesion = friendshipResponses.length > 0 ? reciprocalEdges.length / friendshipResponses.length : 0
 
   // CDC status counts

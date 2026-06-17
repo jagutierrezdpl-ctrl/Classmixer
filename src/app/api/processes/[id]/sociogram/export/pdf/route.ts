@@ -104,8 +104,8 @@ function SociogramaPDF({ process, soc, positions, studentMap }: {
           React.createElement(Text, { style: pdfStyles.summaryValue }, soc.metrics.density.toFixed(2)),
           React.createElement(Text, { style: pdfStyles.summaryLabel }, "Densidad de red")),
         React.createElement(View, { style: pdfStyles.summaryCard },
-          React.createElement(Text, { style: pdfStyles.summaryValue }, soc.metrics.cohesion.toFixed(2)),
-          React.createElement(Text, { style: pdfStyles.summaryLabel }, "Cohesión grupal")),
+          React.createElement(Text, { style: pdfStyles.summaryValue }, (soc.metrics.group_cohesion * 100).toFixed(1) + "%"),
+          React.createElement(Text, { style: pdfStyles.summaryLabel }, "Cohesión grupal (IAg)")),
       ),
 
       React.createElement(Text, { style: pdfStyles.sectionTitle }, "Grafo de relaciones de amistad"),

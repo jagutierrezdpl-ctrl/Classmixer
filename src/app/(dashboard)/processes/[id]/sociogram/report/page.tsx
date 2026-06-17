@@ -14,9 +14,10 @@ function densityLabel(d: number) {
   return { text: "Baja", color: "text-red-600" }
 }
 
+// Thresholds for IAg (group_cohesion = reciprocal pairs / possible pairs)
 function cohesionLabel(c: number) {
-  if (c >= 0.5) return { text: "Alta", color: "text-green-700" }
-  if (c >= 0.25) return { text: "Media", color: "text-amber-600" }
+  if (c >= 0.15) return { text: "Alta", color: "text-green-700" }
+  if (c >= 0.08) return { text: "Media", color: "text-amber-600" }
   return { text: "Baja", color: "text-red-600" }
 }
 
@@ -59,7 +60,7 @@ function buildRecommendations(data: SociogramData): string[] {
     const names = roles.bridges.slice(0, 3).map(n => n.first_name).join(", ")
     recs.push(`Los alumnos puente (${names}) conectan grupos distintos. Distribuirlos en clases diferentes maximizará la integración social del conjunto.`)
   }
-  if (m.cohesion < 0.2) {
+  if (m.group_cohesion < 0.08) {
     recs.push("La cohesión del grupo es muy baja. Priorizar las relaciones recíprocas en el algoritmo de mezcla para que cada alumno mantenga al menos un vínculo mutuo en la nueva clase.")
   }
   if (recs.length === 0) {
@@ -101,7 +102,7 @@ export default function SociogramReportPage({ params }: { params: Promise<{ id: 
   const roles = nodesByRole(data.nodes)
   const risk = riskLevel(m)
   const density = densityLabel(m.density)
-  const cohesion = cohesionLabel(m.cohesion)
+  const cohesion = cohesionLabel(m.group_cohesion)
   const recs = buildRecommendations(data)
 
   return (
@@ -167,9 +168,9 @@ export default function SociogramReportPage({ params }: { params: Promise<{ id: 
                 <td className={`py-2 pl-6 ${density.color}`}>{density.text} — relaciones existentes sobre el total posible</td>
               </tr>
               <tr>
-                <td className="py-2">Cohesión del grupo</td>
-                <td className="py-2 text-right font-mono">{(m.cohesion * 100).toFixed(1)}%</td>
-                <td className={`py-2 pl-6 ${cohesion.color}`}>{cohesion.text} — amistades recíprocas sobre el total</td>
+                <td className="py-2">Cohesión grupal (IAg)</td>
+                <td className="py-2 text-right font-mono">{(m.group_cohesion * 100).toFixed(1)}%</td>
+                <td className={`py-2 pl-6 ${cohesion.color}`}>{cohesion.text} — pares recíprocos / pares posibles</td>
               </tr>
               <tr>
                 <td className="py-2">Alumnos aislados</td>
