@@ -45,6 +45,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Plantilla vacía o no encontrada" }, { status: 404 })
   }
 
+  // Disable all current advanced questions for this process before applying the template
+  await (supabase as any)
+    .from("questionnaire_questions")
+    .update({ enabled: false })
+    .eq("process_id", id)
+
   const rows = (templateQuestions as any[]).map(tq => ({
     process_id: id,
     question_type_id: tq.question_type_id,
