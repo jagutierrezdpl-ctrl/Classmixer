@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash, SlidersHorizontal, RotateCcw } from "lucide-react"
+import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash, SlidersHorizontal, RotateCcw, Network } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -56,6 +56,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   const [weights, setWeights] = useState<AlgorithmWeights>(DEFAULT_WEIGHTS)
   const [constraints, setConstraints] = useState<AlgorithmConstraints>(DEFAULT_CONSTRAINTS)
   const [numProposals, setNumProposals] = useState(3)
+  const [useSociogram, setUseSociogram] = useState(true)
   const [running, setRunning] = useState(false)
   const [infeasibility, setInfeasibility] = useState<{ blocking_rules: string[]; explanation: string[] } | null>(null)
   const [responseCount, setResponseCount] = useState<number | null>(null)
@@ -86,11 +87,18 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   async function handleRun() {
     setRunning(true)
     setInfeasibility(null)
+    const effectiveWeights = useSociogram ? weights : {
+      ...weights,
+      avoid_isolation: 0,
+      reciprocal_friendships: 0,
+      chosen_friendships: 0,
+      work_relations: 0,
+    }
     try {
       const res = await fetch(`/api/processes/${id}/proposals/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weights, constraints, num_proposals: numProposals }),
+        body: JSON.stringify({ weights: effectiveWeights, constraints, num_proposals: numProposals, use_sociogram: useSociogram }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -127,23 +135,44 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      {/* No responses warning */}
-      {responseCount === 0 && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-amber-800 mb-1">Sin respuestas del cuestionario</p>
-              <p className="text-sm text-amber-700">
-                No hay respuestas sociométricas registradas. El algoritmo puede ejecutarse, pero ignorará las relaciones de amistad y los datos sociales. Solo usará los datos académicos y de género para la distribución.
-              </p>
-              <Link href={`/processes/${id}/questionnaire`} className="text-sm text-amber-800 underline font-medium mt-1 inline-block">
-                Ir al cuestionario →
-              </Link>
+      {/* Sociogram toggle */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Network className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-base">Considerar sociograma</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Usa las respuestas del cuestionario sociométrico al generar la mezcla
+                </p>
+              </div>
             </div>
+            <Switch checked={useSociogram} onCheckedChange={setUseSociogram} />
           </div>
-        </div>
-      )}
+        </CardHeader>
+        <CardContent className="pt-0">
+          {useSociogram && (responseCount ?? 0) > 0 && (
+            <p className="text-xs text-green-700 bg-green-50 rounded px-2 py-1.5">
+              {responseCount} respuestas disponibles. El algoritmo intentará preservar amistades y evitar aislamientos.
+            </p>
+          )}
+          {useSociogram && responseCount === 0 && (
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700">
+                Sin respuestas del cuestionario. El factor social no aportará nada aunque esté activado.{" "}
+                <Link href={`/processes/${id}/questionnaire`} className="underline font-medium">Ir al cuestionario →</Link>
+              </p>
+            </div>
+          )}
+          {!useSociogram && (
+            <p className="text-xs text-muted-foreground">
+              Solo se usarán datos académicos y demográficos. Los pesos de amistad y aislamiento se ignorarán.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Infeasibility alert */}
       {infeasibility && (

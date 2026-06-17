@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   ArrowLeft, Zap, Download, Users, Loader2,
   ChevronDown, ChevronUp, CheckCircle, Settings2,
-  UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap,
+  UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap, GitBranch,
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
@@ -280,6 +280,10 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
               const totalStudents = classNames.reduce((sum, cls) => sum + (metricsMap[cls]?.count ?? 0), 0)
               const totalWithFriend = classNames.reduce((sum, cls) => sum + (metricsMap[cls]?.students_with_friend ?? 0), 0)
               const totalIsolated = totalStudents - totalWithFriend
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const globalMetrics = (proposal.metrics ?? []).filter((m: any) => m.target_class == null)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const usedSociogram = globalMetrics.find((m: any) => m.metric_key === "use_sociogram")?.metric_value !== 0
 
               return (
                 <Card key={proposal.id} className={isApproved ? "border-green-400" : idx === 0 ? "border-primary/40" : ""}>
@@ -292,7 +296,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                           {String.fromCharCode(65 + idx)}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <CardTitle className="text-base">{proposal.name}</CardTitle>
                             {isApproved && (
                               <Badge variant="success" className="text-xs">
@@ -302,6 +306,9 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                             {idx === 0 && !isApproved && (
                               <Badge variant="default" className="text-xs">Mejor puntuación</Badge>
                             )}
+                            <Badge variant="outline" className={`text-xs ${usedSociogram ? "text-pink-700 border-pink-300 bg-pink-50" : "text-muted-foreground"}`}>
+                              {usedSociogram ? <><Heart className="w-2.5 h-2.5 mr-1" />Con sociograma</> : "Sin sociograma"}
+                            </Badge>
                           </div>
                           <div className="flex items-center gap-1 mt-0.5">
                             <span className={`text-2xl font-bold ${getScoreColor(proposal.score_total)}`}>
@@ -312,6 +319,12 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/processes/${id}/proposals/${proposal.id}/friends`}>
+                            <GitBranch className="w-4 h-4" />
+                            Vínculos
+                          </Link>
+                        </Button>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/processes/${id}/proposals/${proposal.id}/simulation`}>
                             <Network className="w-4 h-4" />

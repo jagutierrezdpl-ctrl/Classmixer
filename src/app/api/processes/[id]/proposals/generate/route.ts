@@ -157,12 +157,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let weights: AlgorithmWeights = DEFAULT_WEIGHTS
   let constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS
   let numProposals = 3
+  let useSociogram = true
 
   try {
     const body = await request.json()
     if (body.weights) weights = { ...DEFAULT_WEIGHTS, ...body.weights }
     if (body.constraints) constraints = { ...DEFAULT_CONSTRAINTS, ...body.constraints }
     if (body.num_proposals) numProposals = Math.min(10, Math.max(1, Number(body.num_proposals)))
+    if (body.use_sociogram === false) useSociogram = false
   } catch {
     // No body — use defaults
   }
@@ -221,10 +223,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
 
+  const responsesForAlgorithm = useSociogram ? (responses ?? []) : []
+
   // Try Python OR-Tools solver first; fall back to heuristic
   let proposals: ClassProposal[] | null = await callPythonSolver(
     assignableStudents,
-    responses ?? [],
+    responsesForAlgorithm,
     rulesWithStudents,
     targetClasses,
     numProposals,
@@ -242,7 +246,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       assignableStudents as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (responses ?? []) as any,
+      responsesForAlgorithm as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rulesWithStudents as any,
       targetClasses,
@@ -303,7 +307,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }))
     )
 
-    const metricRows: { proposal_id: string; metric_key: string; metric_value: number; target_class: string }[] = []
+    const metricRows: { proposal_id: string; metric_key: string; metric_value: number; target_class: string | null }[] = [
+      { proposal_id: saved.id, metric_key: "use_sociogram", metric_value: useSociogram ? 1 : 0, target_class: null },
+    ]
     for (const [cls, metrics] of Object.entries(p.metrics)) {
       for (const [key, value] of Object.entries(metrics)) {
         metricRows.push({ proposal_id: saved.id, metric_key: key, metric_value: value, target_class: cls })
