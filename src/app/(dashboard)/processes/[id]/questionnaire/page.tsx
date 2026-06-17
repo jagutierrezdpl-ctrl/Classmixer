@@ -84,7 +84,12 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     fetch(`/api/processes/${id}/questionnaire/settings`)
       .then(r => r.json())
-      .then(data => { if (data) reset(data) })
+      .then(data => {
+        if (data) {
+          if (data.deadline) data.deadline = data.deadline.slice(0, 16)
+          reset(data)
+        }
+      })
     loadTokens()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
