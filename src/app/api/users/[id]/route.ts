@@ -94,6 +94,10 @@ export async function DELETE(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Also delete from Supabase Auth so that if the user logs in again
+  // the trigger fires and creates a fresh pending row (rescuable)
+  await supabase.auth.admin.deleteUser(id)
+
   await logAudit(profile.id, profile.center_id, "delete_user", "user", { entityId: id })
 
   return NextResponse.json({ ok: true })
