@@ -239,6 +239,9 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               <DropdownMenuItem className="gap-2 text-xs" onClick={() => graphRef.current?.exportPNG()}>
                 <ImageDown className="w-3.5 h-3.5" /> Imagen PNG
               </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => graphRef.current?.exportSVG()}>
+                <ImageDown className="w-3.5 h-3.5" /> Imagen SVG
+              </DropdownMenuItem>
               <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportExcel} disabled={exportingExcel}>
                 {exportingExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Excel (métricas)
               </DropdownMenuItem>
@@ -323,6 +326,113 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               Vista filtrada — mostrando subconjunto de nodos
             </div>
           )}
+
+          {/* Selected node detail panel */}
+          {selectedNode && (
+            <div className="absolute bottom-4 left-4 w-72 bg-background border rounded-xl shadow-lg text-xs overflow-hidden">
+              <div className="flex items-start justify-between gap-2 px-3 pt-3 pb-2 border-b">
+                <div>
+                  <p className="font-bold text-sm">{selectedNode.first_name} {selectedNode.last_name}</p>
+                  <p className="text-muted-foreground">{selectedNode.current_class} · {selectedNode.gender}</p>
+                </div>
+                <button onClick={() => setSelectedNode(null)} className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="px-3 py-2 space-y-2">
+                {/* Role badges */}
+                <div className="flex flex-wrap gap-1">
+                  {selectedNode.is_isolated && <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Aislado</span>}
+                  {selectedNode.is_vulnerable && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold">Vulnerable</span>}
+                  {selectedNode.is_leader && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">Líder</span>}
+                  {selectedNode.is_bridge && <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold">Puente</span>}
+                  {!selectedNode.is_isolated && !selectedNode.is_vulnerable && !selectedNode.is_leader && !selectedNode.is_bridge && (
+                    <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">Integrado</span>
+                  )}
+                </div>
+                {/* Stats row */}
+                <div className="grid grid-cols-3 gap-1 text-center">
+                  <div className="bg-muted rounded p-1.5">
+                    <p className="text-base font-bold">{selectedNode.received_count}</p>
+                    <p className="text-muted-foreground">Recibidas</p>
+                  </div>
+                  <div className="bg-muted rounded p-1.5">
+                    <p className="text-base font-bold">{selectedNode.given_count}</p>
+                    <p className="text-muted-foreground">Dadas</p>
+                  </div>
+                  <div className="bg-muted rounded p-1.5">
+                    <p className="text-base font-bold">{selectedNode.reciprocal_count}</p>
+                    <p className="text-muted-foreground">Recíprocas</p>
+                  </div>
+                </div>
+                {/* Academic info */}
+                {(selectedNode.academic_level || selectedNode.average_grade) && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    {selectedNode.average_grade != null && <span>Nota: <span className="font-medium text-foreground">{selectedNode.average_grade}</span></span>}
+                    {selectedNode.academic_level && <span>·</span>}
+                    {selectedNode.academic_level && <span>{selectedNode.academic_level}</span>}
+                  </div>
+                )}
+                {/* Who chose this student */}
+                {(() => {
+                  const choosers = (data?.edges ?? [])
+                    .filter(e => e.target === selectedNode.id && e.relation_type === "friendship")
+                    .map(e => nodeMap.get(e.source))
+                    .filter(Boolean) as SociogramNode[]
+                  if (choosers.length === 0) return null
+                  return (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Le eligieron:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {choosers.slice(0, 8).map(n => {
+                          const isReciprocal = (data?.edges ?? []).some(e => e.source === selectedNode.id && e.target === n.id && e.relation_type === "friendship")
+                          return (
+                            <button
+                              key={n.id}
+                              onClick={() => setSelectedNode(n)}
+                              className={`px-1.5 py-0.5 rounded transition-colors ${isReciprocal ? "bg-pink-100 text-pink-800 font-medium" : "bg-muted hover:bg-muted/70"}`}
+                            >
+                              {n.first_name}
+                              {isReciprocal && " ⇄"}
+                            </button>
+                          )
+                        })}
+                        {choosers.length > 8 && <span className="text-muted-foreground px-1">+{choosers.length - 8}</span>}
+                      </div>
+                    </div>
+                  )
+                })()}
+                {/* Who this student chose */}
+                {(() => {
+                  const chosen = (data?.edges ?? [])
+                    .filter(e => e.source === selectedNode.id && e.relation_type === "friendship")
+                    .map(e => nodeMap.get(e.target))
+                    .filter(Boolean) as SociogramNode[]
+                  if (chosen.length === 0) return null
+                  return (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Eligió a:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {chosen.slice(0, 8).map(n => {
+                          const isReciprocal = (data?.edges ?? []).some(e => e.source === n.id && e.target === selectedNode.id && e.relation_type === "friendship")
+                          return (
+                            <button
+                              key={n.id}
+                              onClick={() => setSelectedNode(n)}
+                              className={`px-1.5 py-0.5 rounded transition-colors ${isReciprocal ? "bg-pink-100 text-pink-800 font-medium" : "bg-muted hover:bg-muted/70"}`}
+                            >
+                              {n.first_name}
+                              {isReciprocal && " ⇄"}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right panel */}
@@ -337,6 +447,7 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 </TabsTrigger>
                 <TabsTrigger value="groups" className="text-xs h-7">Grupos</TabsTrigger>
                 <TabsTrigger value="nodes" className="text-xs h-7">Alumnos</TabsTrigger>
+                <TabsTrigger value="rankings" className="text-xs h-7">Rankings</TabsTrigger>
                 <TabsTrigger value="guide" className="text-xs h-7">Guía</TabsTrigger>
               </TabsList>
 
@@ -554,6 +665,199 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                       </button>
                     ))}
                 </div>
+              </TabsContent>
+
+              {/* Rankings tab */}
+              <TabsContent value="rankings" className="flex-1 overflow-y-auto p-3 mt-0 space-y-4 text-xs">
+
+                {/* Popularity ranking */}
+                <section>
+                  <p className="font-semibold text-sm mb-2 flex items-center gap-1.5">
+                    <span className="text-amber-500">⭐</span> Más elegidos (popularidad)
+                  </p>
+                  <div className="space-y-1">
+                    {[...data.nodes]
+                      .sort((a, b) => b.received_count - a.received_count)
+                      .slice(0, 10)
+                      .map((node, i) => {
+                        const maxR = Math.max(...data.nodes.map(n => n.received_count), 1)
+                        return (
+                          <button
+                            key={node.id}
+                            onClick={() => setSelectedNode(node)}
+                            className="w-full flex items-center gap-2 hover:bg-muted/50 rounded p-1 transition-colors"
+                          >
+                            <span className={`w-5 text-center font-bold shrink-0 ${i === 0 ? "text-amber-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-orange-600" : "text-muted-foreground"}`}>
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="truncate font-medium">{node.first_name} {node.last_name}</span>
+                                <span className="ml-2 shrink-0 text-muted-foreground">{node.received_count}</span>
+                              </div>
+                              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-amber-400 rounded-full" style={{ width: `${(node.received_count / maxR) * 100}%` }} />
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                  </div>
+                </section>
+
+                <div className="border-t" />
+
+                {/* Work ranking */}
+                {data.edges.some(e => e.relation_type === "work") && (
+                  <>
+                    <section>
+                      <p className="font-semibold text-sm mb-2 flex items-center gap-1.5">
+                        <span className="text-blue-500">💼</span> Más elegidos para trabajar
+                      </p>
+                      <div className="space-y-1">
+                        {(() => {
+                          const workCounts = new Map<string, number>()
+                          data.edges.filter(e => e.relation_type === "work").forEach(e => {
+                            workCounts.set(e.target, (workCounts.get(e.target) ?? 0) + 1)
+                          })
+                          const maxW = Math.max(...workCounts.values(), 1)
+                          return [...workCounts.entries()]
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 8)
+                            .map(([id, count], i) => {
+                              const node = data.nodes.find(n => n.id === id)
+                              if (!node) return null
+                              return (
+                                <button
+                                  key={id}
+                                  onClick={() => setSelectedNode(node)}
+                                  className="w-full flex items-center gap-2 hover:bg-muted/50 rounded p-1 transition-colors"
+                                >
+                                  <span className="w-5 text-center font-bold shrink-0 text-muted-foreground">{i + 1}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <span className="truncate font-medium">{node.first_name} {node.last_name}</span>
+                                      <span className="ml-2 shrink-0 text-muted-foreground">{count}</span>
+                                    </div>
+                                    <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                      <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(count / maxW) * 100}%` }} />
+                                    </div>
+                                  </div>
+                                </button>
+                              )
+                            })
+                        })()}
+                      </div>
+                    </section>
+                    <div className="border-t" />
+                  </>
+                )}
+
+                {/* Reciprocal ranking */}
+                <section>
+                  <p className="font-semibold text-sm mb-2 flex items-center gap-1.5">
+                    <span className="text-green-500">⇄</span> Más relaciones recíprocas
+                  </p>
+                  <div className="space-y-1">
+                    {[...data.nodes]
+                      .sort((a, b) => b.reciprocal_count - a.reciprocal_count)
+                      .filter(n => n.reciprocal_count > 0)
+                      .slice(0, 8)
+                      .map((node, i) => {
+                        const maxRec = Math.max(...data.nodes.map(n => n.reciprocal_count), 1)
+                        return (
+                          <button
+                            key={node.id}
+                            onClick={() => setSelectedNode(node)}
+                            className="w-full flex items-center gap-2 hover:bg-muted/50 rounded p-1 transition-colors"
+                          >
+                            <span className="w-5 text-center font-bold shrink-0 text-muted-foreground">{i + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="truncate font-medium">{node.first_name} {node.last_name}</span>
+                                <span className="ml-2 shrink-0 text-muted-foreground">{node.reciprocal_count}</span>
+                              </div>
+                              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-green-400 rounded-full" style={{ width: `${(node.reciprocal_count / maxRec) * 100}%` }} />
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    {data.nodes.every(n => n.reciprocal_count === 0) && (
+                      <p className="text-muted-foreground text-center py-2">Sin relaciones recíprocas detectadas</p>
+                    )}
+                  </div>
+                </section>
+
+                <div className="border-t" />
+
+                {/* At-risk students */}
+                <section>
+                  <p className="font-semibold text-sm mb-2 flex items-center gap-1.5">
+                    <span className="text-red-500">⚠️</span> Alumnos en riesgo social
+                  </p>
+                  {data.nodes.filter(n => n.is_isolated || n.is_vulnerable).length === 0 ? (
+                    <p className="text-green-600 text-xs py-1">✓ Ningún alumno en riesgo detectado</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {data.nodes.filter(n => n.is_isolated).map(node => (
+                        <button
+                          key={node.id}
+                          onClick={() => setSelectedNode(node)}
+                          className="w-full flex items-center gap-2 bg-red-50 border border-red-200 rounded p-1.5 hover:bg-red-100 transition-colors text-left"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                          <span className="flex-1 truncate font-medium text-red-800">{node.first_name} {node.last_name}</span>
+                          <span className="text-red-600 font-semibold shrink-0">Aislado</span>
+                        </button>
+                      ))}
+                      {data.nodes.filter(n => !n.is_isolated && n.is_vulnerable).map(node => (
+                        <button
+                          key={node.id}
+                          onClick={() => setSelectedNode(node)}
+                          className="w-full flex items-center gap-2 bg-orange-50 border border-orange-200 rounded p-1.5 hover:bg-orange-100 transition-colors text-left"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                          <span className="flex-1 truncate font-medium text-orange-800">{node.first_name} {node.last_name}</span>
+                          <span className="text-orange-600 font-semibold shrink-0">Vulnerable</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Distribution by class */}
+                {classes.length > 1 && (
+                  <>
+                    <div className="border-t" />
+                    <section>
+                      <p className="font-semibold text-sm mb-2">Elecciones recibidas por clase</p>
+                      {classes.map(cls => {
+                        const classNodes = data.nodes.filter(n => n.current_class === cls)
+                        const totalReceived = classNodes.reduce((s, n) => s + n.received_count, 0)
+                        const avg = classNodes.length > 0 ? totalReceived / classNodes.length : 0
+                        const maxAvg = Math.max(...classes.map(c => {
+                          const cn = data.nodes.filter(n => n.current_class === c)
+                          return cn.length > 0 ? cn.reduce((s, n) => s + n.received_count, 0) / cn.length : 0
+                        }), 0.1)
+                        return (
+                          <div key={cls} className="mb-2">
+                            <div className="flex justify-between mb-0.5">
+                              <span className="font-medium">{cls}</span>
+                              <span className="text-muted-foreground">{avg.toFixed(1)} media</span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${(avg / maxAvg) * 100}%` }} />
+                            </div>
+                            <p className="text-muted-foreground mt-0.5">{classNodes.length} alumnos · {totalReceived} elecciones totales</p>
+                          </div>
+                        )
+                      })}
+                    </section>
+                  </>
+                )}
+
               </TabsContent>
 
               {/* Guía tab */}

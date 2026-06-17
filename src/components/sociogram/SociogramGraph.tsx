@@ -18,11 +18,12 @@ interface SociogramGraphProps {
   colorBy?: SociogramColorBy
   layout?: SociogramLayout
   filter?: Partial<SociogramFilter>
-  onNodeClick?: (node: SociogramNode) => void
+  onNodeClick?: (node: SociogramNode | null) => void
 }
 
 export interface SociogramGraphHandle {
   exportPNG: () => void
+  exportSVG: () => void
 }
 
 const GENDER_COLORS: Record<string, string> = {
@@ -95,6 +96,22 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
           const a = document.createElement("a")
           a.href = url
           a.download = "sociograma.png"
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          setTimeout(() => URL.revokeObjectURL(url), 100)
+        } catch { /* no-op */ }
+      },
+      exportSVG() {
+        if (!cyRef.current) return
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const svgStr: string = cyRef.current.svg({ scale: 1, full: true, bg: "white" })
+          const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = "sociograma.svg"
           document.body.appendChild(a)
           a.click()
           document.body.removeChild(a)
@@ -248,9 +265,21 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
           const nodeData = evt.target.data("node") as SociogramNode
           setSelectedNode(nodeData)
           onNodeClick?.(nodeData)
+
+          // Highlight neighbourhood — dim everything else
+          const tapped = evt.target
+          const neighbourhood = tapped.closedNeighborhood()
+          cy.elements().not(neighbourhood).style({ opacity: 0.15 })
+          neighbourhood.style({ opacity: 1 })
         })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        cy.on("tap", (evt: any) => { if (evt.target === cy) setSelectedNode(null) })
+        cy.on("tap", (evt: any) => {
+          if (evt.target === cy) {
+            setSelectedNode(null)
+            onNodeClick?.(null)
+            cy.elements().style({ opacity: 1 })
+          }
+        })
 
         cyRef.current = cy
       }
@@ -263,39 +292,6 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
     return (
       <div className="relative w-full h-full">
         <div ref={containerRef} className="w-full h-full" />
-
-        {selectedNode && (
-          <div className="absolute top-4 right-4 w-60 bg-card border rounded-xl shadow-lg p-4 text-sm z-10">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <p className="font-semibold">{selectedNode.first_name} {selectedNode.last_name}</p>
-                <p className="text-xs text-muted-foreground">{selectedNode.current_class}</p>
-              </div>
-              <div className="flex flex-col gap-0.5 items-end">
-                {selectedNode.is_isolated && <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">Aislado</span>}
-                {selectedNode.is_vulnerable && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">Vulnerable</span>}
-                {selectedNode.is_leader && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">Líder</span>}
-                {selectedNode.is_bridge && <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium">Puente</span>}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs border-t pt-2">
-              <span className="text-muted-foreground">Elec. recibidas</span><span className="font-medium text-right">{selectedNode.received_count}</span>
-              <span className="text-muted-foreground">Elec. dadas</span><span className="font-medium text-right">{selectedNode.given_count}</span>
-              <span className="text-muted-foreground">Recíprocas</span><span className="font-medium text-right">{selectedNode.reciprocal_count}</span>
-              <span className="text-muted-foreground">Centralidad</span><span className="font-medium text-right">{(selectedNode.centrality * 100).toFixed(0)}%</span>
-              <span className="text-muted-foreground">Intermediación</span><span className="font-medium text-right">{(selectedNode.betweenness * 100).toFixed(1)}%</span>
-              {selectedNode.academic_level && <><span className="text-muted-foreground">Nivel</span><span className="font-medium text-right">{selectedNode.academic_level}</span></>}
-              {selectedNode.behavior_level && <><span className="text-muted-foreground">Conducta</span><span className="font-medium text-right">{selectedNode.behavior_level}</span></>}
-              {selectedNode.needs_type && selectedNode.needs_type !== "No" && <><span className="text-muted-foreground">Nec. educativas</span><span className="font-medium text-right">{selectedNode.needs_type}</span></>}
-            </div>
-            {typeof selectedNode.community_id === "number" && (
-              <div className="mt-2 pt-2 border-t flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COMMUNITY_PALETTE[selectedNode.community_id % COMMUNITY_PALETTE.length] }} />
-                <span className="text-xs text-muted-foreground">Grupo {selectedNode.community_id + 1}</span>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     )
   }

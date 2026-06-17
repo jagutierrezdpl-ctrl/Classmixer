@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Plus, FolderOpen, ArrowRight } from "lucide-react"
+import { Plus, FolderOpen, ArrowRight, Users, MessageSquare, GitBranch, CheckCircle2 } from "lucide-react"
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "success" | "warning" | "outline" }> = {
   borrador: { label: "Borrador", variant: "secondary" },
@@ -23,10 +23,10 @@ export default async function ProcessesPage() {
   if (!profile || !profile.center_id) redirect("/pending")
   const supabase = createServiceClient()
 
-  let processes: unknown[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let processes: any[] = []
 
   if (hasFullAccess(profile.role)) {
-    // Admin, superadmin, orientador: all center processes
     const { data } = await supabase
       .from("processes")
       .select("*")
@@ -34,7 +34,6 @@ export default async function ProcessesPage() {
       .order("created_at", { ascending: false })
     processes = data ?? []
   } else {
-    // Tutor: processes explicitly assigned OR whose source_groups overlap their groups
     const tutorGroups = await getTutorGroups(profile.center_id, profile.id)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: assignments } = await (supabase as any)
@@ -55,10 +54,106 @@ export default async function ProcessesPage() {
     })
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const active = (processes as any[]).filter(p => !["cerrado", "archivado"].includes(p.status))
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const archived = (processes as any[]).filter(p => ["cerrado", "archivado"].includes(p.status))
+  // Fetch stats for all processes in parallel
+  const processIds = processes.map(p => p.id)
+  const [studentsRes, tokensRes, proposalsRes] = await Promise.all([
+    processIds.length > 0
+      ? supabase.from("students").select("process_id").in("process_id", processIds).eq("active", true)
+      : Promise.resolve({ data: [] }),
+    processIds.length > 0
+      ? supabase.from("questionnaire_tokens").select("process_id, completed_at").in("process_id", processIds)
+      : Promise.resolve({ data: [] }),
+    processIds.length > 0
+      ? supabase.from("proposals").select("process_id, status").in("process_id", processIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const studentCounts = new Map<string, number>()
+  const tokenCounts = new Map<string, { total: number; completed: number }>()
+  const proposalCounts = new Map<string, number>()
+  const approvedProposals = new Set<string>()
+
+  ;(studentsRes.data ?? []).forEach((s: { process_id: string }) => {
+    studentCounts.set(s.process_id, (studentCounts.get(s.process_id) ?? 0) + 1)
+  })
+  ;(tokensRes.data ?? []).forEach((t: { process_id: string; completed_at: string | null }) => {
+    const cur = tokenCounts.get(t.process_id) ?? { total: 0, completed: 0 }
+    tokenCounts.set(t.process_id, { total: cur.total + 1, completed: cur.completed + (t.completed_at ? 1 : 0) })
+  })
+  ;(proposalsRes.data ?? []).forEach((pr: { process_id: string; status: string }) => {
+    proposalCounts.set(pr.process_id, (proposalCounts.get(pr.process_id) ?? 0) + 1)
+    if (pr.status === "aprobada") approvedProposals.add(pr.process_id)
+  })
+
+  const active = processes.filter(p => !["cerrado", "archivado"].includes(p.status))
+  const archived = processes.filter(p => ["cerrado", "archivado"].includes(p.status))
+
+  function ProcessCard({ p, dim = false }: { p: Record<string, unknown>; dim?: boolean }) {
+    const id = p.id as string
+    const st = STATUS_MAP[p.status as string] ?? { label: p.status as string, variant: "outline" as const }
+    const students = studentCounts.get(id) ?? 0
+    const tokens = tokenCounts.get(id)
+    const proposals = proposalCounts.get(id) ?? 0
+    const approved = approvedProposals.has(id)
+    const responsePct = tokens && tokens.total > 0 ? Math.round((tokens.completed / tokens.total) * 100) : null
+
+    return (
+      <Link href={`/processes/${id}`}>
+        <Card className={`transition-all cursor-pointer hover:border-primary/50 hover:shadow-sm ${dim ? "opacity-60 hover:opacity-80" : ""}`}>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <p className="font-semibold">{p.name as string}</p>
+                  <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
+                  {approved && (
+                    <span className="flex items-center gap-0.5 text-xs text-green-600 font-medium">
+                      <CheckCircle2 className="w-3 h-3" /> Aprobada
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  {p.source_level as string} → {p.target_level as string} · Curso {p.school_year as string}
+                </p>
+                {/* Quick stats */}
+                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  {students > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      {students} alumnos
+                    </span>
+                  )}
+                  {responsePct !== null && (
+                    <span className={`flex items-center gap-1 ${responsePct === 100 ? "text-green-600" : responsePct >= 70 ? "text-amber-600" : "text-muted-foreground"}`}>
+                      <MessageSquare className="w-3 h-3" />
+                      {responsePct}% respuestas
+                      {tokens && <span className="text-muted-foreground">({tokens.completed}/{tokens.total})</span>}
+                    </span>
+                  )}
+                  {proposals > 0 && (
+                    <span className="flex items-center gap-1 text-indigo-600">
+                      <GitBranch className="w-3 h-3" />
+                      {proposals} propuesta{proposals !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                {/* Response bar */}
+                {responsePct !== null && tokens && tokens.total > 0 && (
+                  <div className="mt-2.5 h-1 bg-muted rounded-full overflow-hidden w-full max-w-xs">
+                    <div
+                      className={`h-full rounded-full transition-all ${responsePct === 100 ? "bg-green-500" : responsePct >= 70 ? "bg-amber-400" : "bg-blue-400"}`}
+                      style={{ width: `${responsePct}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+              <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    )
+  }
 
   return (
     <div className="p-8">
@@ -95,27 +190,7 @@ export default async function ProcessesPage() {
                 Activos ({active.length})
               </h2>
               <div className="grid gap-3">
-                {active.map(p => {
-                  const st = STATUS_MAP[p.status] ?? { label: p.status, variant: "outline" as const }
-                  return (
-                    <Link key={p.id} href={`/processes/${p.id}`}>
-                      <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-                        <CardContent className="flex items-center justify-between p-5">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-semibold">{p.name}</p>
-                              <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {p.source_level} → {p.target_level} · Curso {p.school_year}
-                            </p>
-                          </div>
-                          <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  )
-                })}
+                {active.map(p => <ProcessCard key={p.id as string} p={p} />)}
               </div>
             </section>
           )}
@@ -126,21 +201,7 @@ export default async function ProcessesPage() {
                 Archivados ({archived.length})
               </h2>
               <div className="grid gap-3">
-                {archived.map(p => (
-                  <Link key={p.id} href={`/processes/${p.id}`}>
-                    <Card className="opacity-60 hover:opacity-80 hover:border-primary/30 transition-all cursor-pointer">
-                      <CardContent className="flex items-center justify-between p-5">
-                        <div>
-                          <p className="font-medium">{p.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {p.source_level} → {p.target_level} · {p.school_year}
-                          </p>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+                {archived.map(p => <ProcessCard key={p.id as string} p={p} dim />)}
               </div>
             </section>
           )}
