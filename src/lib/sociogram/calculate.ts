@@ -176,18 +176,20 @@ export function calculateSociogram(
     }
   }
 
-  // ── Directed adjacency (outgoing only) — for betweenness ─────────────────
-  // Must be directed so students with in-degree=0 get betweenness=0.
-  // Using undirected adjacency causes Bug A: isolated students get false
-  // betweenness because their outgoing edges are treated as bidirectional.
+  // ── Directed adjacency (FRIENDSHIP ONLY, outgoing) — for betweenness ───────
+  // Using only friendship-like edges ensures that:
+  //   (a) the graph models positive social choice (not rejection or work),
+  //   (b) nodes with in-degree=0 on the friendship network get betweenness=0,
+  //       preventing the "isolated node classified as bridge" bug that arose
+  //       when negative/work edges provided spurious incoming paths.
   const adjOut = new Map<string, Set<string>>(nodeIds.map(n => [n, new Set()]))
-  for (const r of responses) {
+  for (const r of friendshipResponses) {
     adjOut.get(r.respondent_student_id)?.add(r.target_student_id)
   }
 
-  // ── Undirected adjacency (both directions) — for bridge/community detection
+  // ── Undirected adjacency (all friendship, both directions) — for community detection
   const adjAll = new Map<string, Set<string>>(nodeIds.map(n => [n, new Set()]))
-  for (const r of responses) {
+  for (const r of friendshipResponses) {
     adjAll.get(r.respondent_student_id)?.add(r.target_student_id)
     adjAll.get(r.target_student_id)?.add(r.respondent_student_id)
   }
@@ -218,9 +220,15 @@ export function calculateSociogram(
   const zSPArr = toZScores(spArr)
   const zSIArr = toZScores(siArr)
 
-  // ── Bridge threshold ──────────────────────────────────────────────────────
-  const maxBetweenness = Math.max(...[...betweenness.values()], 0.001)
-  const bridgeThreshold = maxBetweenness * 0.15
+  // ── Bridge threshold (mean + 1 SD of betweenness) ────────────────────────
+  // Using "mean + 1 SD" selects approximately the top 16% of nodes by
+  // betweenness, which is the statistically principled criterion for a
+  // "notable intermediary" role. The old "15% of max" threshold was too
+  // permissive and classified ~80% of a typical class as bridges.
+  const btwArr = nodeIds.map(n => betweenness.get(n) ?? 0)
+  const btwMean = mean(btwArr)
+  const btwSD   = stddev(btwArr, btwMean)
+  const bridgeThreshold = Math.max(btwMean + btwSD, 0.0001)
   const maxDegree = Math.max(...nodeIds.map(n => (received.get(n) ?? 0) + (given.get(n) ?? 0)), 1)
 
   // ── Build nodes ───────────────────────────────────────────────────────────
@@ -256,7 +264,11 @@ export function calculateSociogram(
     const isLeader = status === "popular" || status === "controvertido" || (recvCount >= 4 && centrality >= 0.35)
 
     const neighborCommunities = new Set([...(adjAll.get(s.id) ?? new Set())].map(nb => communityMap.get(nb)))
-    const isBridge = btwn > bridgeThreshold && neighborCommunities.size >= 2
+    // A bridge must: (1) have positive betweenness, (2) not be isolated,
+    // (3) have at least one positive friendship nomination received (in-degree > 0
+    //     on the friendship graph — ensures directed betweenness is meaningful),
+    // (4) exceed the mean+1SD threshold, (5) connect ≥2 distinct communities.
+    const isBridge = recvCount > 0 && !isIsolated && btwn > bridgeThreshold && neighborCommunities.size >= 2
 
     const reciprocityRate = recvCount > 0 ? recipCount / recvCount : 0
 
