@@ -5,7 +5,127 @@ import { NextResponse } from "next/server"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 import { filterVisibleResponses } from "@/lib/questionnaire/visibility"
+import type { SociogramData, SociogramNode } from "@/types"
 import type { UserRole } from "@/types"
+
+// Build the structured report from computed sociogram data — no LLM needed for this part
+function buildReport(sg: SociogramData, proc: { name: string; school_year: string }, responseCount: number): string {
+  const total = sg.nodes.length
+  const nodeMap = new Map(sg.nodes.map(n => [n.id, n]))
+  const lines: string[] = []
+
+  // ── DIAGNÓSTICO ──────────────────────────────────────────────────
+  const cohPct = (sg.metrics.cohesion * 100).toFixed(0)
+  const denPct = (sg.metrics.density * 100).toFixed(1)
+  const avgR = (sg.nodes.reduce((s, n) => s + n.received_count, 0) / total).toFixed(1)
+  const isolated = sg.nodes.filter(n => n.is_isolated)
+  const vulnerable = sg.nodes.filter(n => n.is_vulnerable && !n.is_isolated)
+  const leaders = sg.nodes.filter(n => n.is_leader).sort((a, b) => b.received_count - a.received_count)
+  const bridges = sg.nodes.filter(n => n.is_bridge)
+  const closedGroups = sg.communities.filter(c => c.is_closed)
+
+  const cohLabel = Number(cohPct) >= 50 ? "buena" : Number(cohPct) >= 30 ? "moderada" : "baja"
+
+  lines.push(`DIAGNÓSTICO — ${proc.name} (${proc.school_year})`)
+  lines.push(
+    `${total} alumnos analizados con ${responseCount} respuestas. ` +
+    `Cohesión ${cohPct}% (${cohLabel}), densidad de red ${denPct}%, ` +
+    `media de ${avgR} elecciones recibidas por alumno. ` +
+    `${sg.communities.length} subgrupos detectados` +
+    (closedGroups.length > 0 ? `, ${closedGroups.length} de ellos cerrados.` : ".")
+  )
+  lines.push("")
+
+  // ── AISLADOS ─────────────────────────────────────────────────────
+  if (isolated.length > 0) {
+    lines.push(`ALUMNOS AISLADOS (${isolated.length}) — PRIORIDAD MÁXIMA`)
+    for (const n of isolated) {
+      const choosers = sg.edges
+        .filter(e => e.target === n.id && e.relation_type === "friendship")
+        .map(e => nodeMap.get(e.source)).filter((x): x is SociogramNode => !!x)
+      const chose = sg.edges
+        .filter(e => e.source === n.id && e.relation_type === "friendship")
+        .map(e => nodeMap.get(e.target)).filter((x): x is SociogramNode => !!x)
+
+      let action: string
+      if (choosers.length > 0) {
+        action = `Le eligió ${choosers.map(x => x.first_name).join(", ")} — colocar en la misma clase que uno de ellos.`
+      } else if (chose.length > 0) {
+        action = `Eligió a ${chose.map(x => x.first_name).join(", ")} pero nadie le eligió — intentar colocarle con uno de ellos.`
+      } else {
+        action = `Sin ninguna conexión en ambas direcciones — crear regla "protect_vulnerable".`
+      }
+      lines.push(`• ${n.first_name} ${n.last_name}: ${action}`)
+    }
+    lines.push("")
+  }
+
+  // ── VULNERABLES ──────────────────────────────────────────────────
+  if (vulnerable.length > 0) {
+    const shown = vulnerable.slice(0, 12)
+    lines.push(`ALUMNOS CON UN SOLO VÍNCULO (${vulnerable.length}) — NO SEPARAR DE SU ÚNICO AMIGO`)
+    for (const n of shown) {
+      const reciprocal = sg.edges
+        .filter(e => e.source === n.id && e.relation_type === "friendship")
+        .filter(e => sg.edges.some(e2 => e2.source === e.target && e2.target === n.id && e2.relation_type === "friendship"))
+        .map(e => nodeMap.get(e.target)).filter((x): x is SociogramNode => !!x)
+      if (reciprocal.length > 0) {
+        lines.push(`• ${n.first_name} ${n.last_name} ↔ ${reciprocal[0].first_name} ${reciprocal[0].last_name} — no separarlos.`)
+      }
+    }
+    if (vulnerable.length > 12) lines.push(`  … y ${vulnerable.length - 12} más con el mismo criterio.`)
+    lines.push("")
+  }
+
+  // ── GRUPOS CERRADOS ──────────────────────────────────────────────
+  if (closedGroups.length > 0) {
+    lines.push(`GRUPOS CERRADOS — REPARTIR (${closedGroups.length})`)
+    for (const g of closedGroups.slice(0, 4)) {
+      const names = g.members.slice(0, 6).map(id => nodeMap.get(id)?.first_name).filter(Boolean).join(", ")
+      const maxTogether = Math.ceil(g.size / 2)
+      lines.push(`• ${g.size} alumnos: ${names}${g.size > 6 ? "…" : ""} — máximo ${maxTogether} en la misma clase.`)
+    }
+    lines.push("")
+  }
+
+  // ── DISTRIBUCIÓN ESTRATÉGICA ─────────────────────────────────────
+  const hasStrategic = bridges.length > 0 || leaders.length > 0
+  if (hasStrategic) {
+    lines.push("DISTRIBUCIÓN ESTRATÉGICA")
+    if (bridges.length > 0) {
+      const names = bridges.slice(0, 5).map(n => `${n.first_name} ${n.last_name}`).join(", ")
+      lines.push(`• Puentes sociales — distribuir en clases distintas para integrar subgrupos: ${names}.`)
+    }
+    if (leaders.length > 0) {
+      const names = leaders.slice(0, 5).map(n => `${n.first_name} ${n.last_name} (${n.received_count})`).join(", ")
+      lines.push(`• Líderes — repartir entre clases para equilibrio social: ${names}.`)
+    }
+    lines.push("")
+  }
+
+  // ── CRITERIOS PARA EL ALGORITMO ──────────────────────────────────
+  lines.push("CRITERIOS PARA EL ALGORITMO (por prioridad)")
+
+  let priority = 1
+  if (isolated.length > 0) {
+    lines.push(`${priority++}. Crear regla "protect_vulnerable" para los ${isolated.length} alumnos aislados.`)
+  }
+  if (vulnerable.length > 0) {
+    lines.push(`${priority++}. Crear reglas "should_keep_together" para los ${vulnerable.length} pares vulnerables.`)
+  }
+  if (closedGroups.length > 0) {
+    lines.push(`${priority++}. Crear reglas "max_from_group" para los ${closedGroups.length} subgrupos cerrados.`)
+  }
+  if (bridges.length > 0) {
+    lines.push(`${priority++}. Distribuir los ${bridges.length} alumnos puente en clases diferentes (must_separate si hay solo 2 clases).`)
+  }
+  if (leaders.length > 0) {
+    lines.push(`${priority++}. Repartir los ${leaders.length} líderes equitativamente — no más de 1-2 por clase.`)
+  }
+  lines.push(`${priority}. Equilibrar nota media, género y clase de origen entre los grupos nuevos.`)
+
+  return lines.join("\n")
+}
 
 export async function POST(
   _request: Request,
@@ -31,18 +151,15 @@ export async function POST(
   if (!proc || proc.center_id !== profile.center_id) {
     return NextResponse.json({ error: "Proceso no encontrado" }, { status: 404 })
   }
-
   if (!allStudents || allStudents.length === 0) {
     return NextResponse.json({ error: "No hay alumnos en este proceso" }, { status: 400 })
   }
-
   if (!allResponses || allResponses.length === 0) {
     return NextResponse.json({
-      summary: "No hay respuestas al cuestionario sociométrico todavía. Para obtener un análisis, los alumnos deben completar el cuestionario primero.",
+      summary: "No hay respuestas al cuestionario todavía. Los alumnos deben completar el cuestionario primero.",
     })
   }
 
-  // Log access for orientadores
   if (profile.role === "orientador") {
     await logAudit(profile.id, profile.center_id, "view_sociogram_ai", "process", {
       processId: id,
@@ -53,120 +170,30 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const students = (allStudents as any[]).filter((s: any) => !s.excluded_from_mix)
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
-  const responses = filterVisibleResponses(
-    allResponses ?? [],
-    profile.role as UserRole,
-    catalogIndex.sensitivity
-  )
-
+  const responses = filterVisibleResponses(allResponses ?? [], profile.role as UserRole, catalogIndex.sensitivity)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sg = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
 
-  const total = sg.nodes.length
-  if (total === 0) {
+  if (sg.nodes.length === 0) {
     return NextResponse.json({ summary: "No hay datos suficientes para generar un análisis." })
   }
 
-  const nodeMap = new Map(sg.nodes.map(n => [n.id, n]))
+  // Generate the structured report from data (no LLM)
+  const report = buildReport(sg, proc, responses.length)
 
-  // Isolated: find who (if anyone) chose them — so we can suggest keeping them together
-  const isolatedDetail = sg.nodes
-    .filter(n => n.is_isolated)
-    .map(n => {
-      const choosers = sg.edges
-        .filter(e => e.target === n.id && e.relation_type === "friendship")
-        .map(e => nodeMap.get(e.source)?.first_name)
-        .filter(Boolean)
-      const chose = sg.edges
-        .filter(e => e.source === n.id && e.relation_type === "friendship")
-        .map(e => nodeMap.get(e.target)?.first_name)
-        .filter(Boolean)
-      const parts = []
-      if (choosers.length) parts.push(`le eligió: ${choosers.join(", ")}`)
-      if (chose.length) parts.push(`eligió a: ${chose.join(", ")}`)
-      return `• ${n.first_name} ${n.last_name}${parts.length ? ` (${parts.join("; ")})` : " (nadie le eligió ni él eligió a nadie)"}`
-    })
-    .join("\n")
-
-  // Vulnerable: show their single reciprocal friend
-  const vulnerableDetail = sg.nodes
-    .filter(n => n.is_vulnerable && !n.is_isolated)
-    .slice(0, 8)
-    .map(n => {
-      const reciprocal = sg.edges
-        .filter(e => e.source === n.id && e.relation_type === "friendship")
-        .filter(e => sg.edges.some(e2 => e2.source === e.target && e2.target === n.id && e2.relation_type === "friendship"))
-        .map(e => nodeMap.get(e.target)?.first_name)
-        .filter(Boolean)
-      return `• ${n.first_name} ${n.last_name}${reciprocal.length ? ` (único vínculo: ${reciprocal.join(", ")})` : ""}`
-    })
-    .join("\n")
-
-  const leaders = sg.nodes.filter(n => n.is_leader)
-  const bridges = sg.nodes.filter(n => n.is_bridge)
-  const closedGroups = sg.communities.filter(c => c.is_closed)
-
-  const leaderDetail = leaders.slice(0, 6)
-    .map(n => `• ${n.first_name} ${n.last_name} — ${n.received_count} elecciones recibidas`)
-    .join("\n")
-
-  const bridgeDetail = bridges.slice(0, 5)
-    .map(n => `• ${n.first_name} ${n.last_name}`)
-    .join("\n")
-
-  const closedGroupDetail = closedGroups.slice(0, 3).map((c, i) => {
-    const names = c.members.slice(0, 6).map(id => nodeMap.get(id)?.first_name).filter(Boolean).join(", ")
-    return `• Grupo cerrado ${i + 1} (${c.size} alumnos): ${names}${c.size > 6 ? "…" : ""}`
-  }).join("\n")
-
-  const prompt = `Eres un orientador escolar experto en análisis sociométrico. Tu tarea es analizar los datos del sociograma del proceso "${proc.name}" (${proc.school_year}) y producir recomendaciones CONCRETAS y ESPECÍFICAS para ayudar al equipo docente a distribuir a estos ${total} alumnos en clases nuevas el próximo curso.
-
-CONTEXTO IMPORTANTE: Este proceso es de MEZCLA DE CLASES. Los alumnos serán distribuidos en nuevos grupos. El objetivo del informe es guiar esa distribución, NO proponer actividades para la clase actual.
-
-DATOS DEL GRUPO (${total} alumnos, ${responses.length} respuestas):
-- Cohesión del grupo: ${(sg.metrics.cohesion * 100).toFixed(1)}% (recíprocos / total)
-- Densidad de red: ${(sg.metrics.density * 100).toFixed(1)}%
-- Media de elecciones recibidas: ${(sg.nodes.reduce((s, n) => s + n.received_count, 0) / total).toFixed(1)} por alumno
-- Pares con amistad recíproca: ${sg.metrics.reciprocal_pairs}
-- Subgrupos detectados: ${sg.communities.length} (${closedGroups.length} cerrados)
-
-ALUMNOS AISLADOS (${sg.nodes.filter(n => n.is_isolated).length}) — PRIORIDAD MÁXIMA:
-${isolatedDetail || "Ninguno"}
-
-ALUMNOS VULNERABLES — solo 1 vínculo recíproco (${sg.nodes.filter(n => n.is_vulnerable && !n.is_isolated).length}):
-${vulnerableDetail || "Ninguno"}
-
-LÍDERES SOCIALES:
-${leaderDetail || "Ninguno destacado"}
-
-ALUMNOS PUENTE (conectan subgrupos):
-${bridgeDetail || "Ninguno"}
-
-SUBGRUPOS CERRADOS A REPARTIR:
-${closedGroupDetail || "Ninguno"}
-
-INSTRUCCIONES PARA EL INFORME:
-Escribe exactamente estas tres secciones, sin asteriscos ni markdown, usando solo texto plano:
-
-DIAGNÓSTICO
-[2-3 frases sobre la estructura social real del grupo. Sé directo y usa los números.]
-
-ALUMNOS PRIORITARIOS PARA LA MEZCLA
-[Lista concisa de decisiones específicas. Para cada alumno aislado o vulnerable, di con quién debería ir o de quién no debe separarse. Nombra a los alumnos. Para grupos cerrados, di cuántos máximo deberían ir juntos.]
-
-CRITERIOS PARA EL ALGORITMO
-[3-4 criterios ordenados por prioridad para configurar la mezcla: qué reglas crear, qué alumnos proteger, cómo repartir a los líderes y puentes.]
-
-PROHIBIDO: no uses frases genéricas como "dinámicas de grupo", "tutorías individualizadas", "actividades de cohesión" ni ningún consejo que no dependa de los datos concretos de arriba.`
-
-  try {
-    const summary = await generateAISummary(
-      prompt,
-      (center as { openrouter_api_key?: string | null } | null)?.openrouter_api_key
-    )
-    return NextResponse.json({ summary })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Error desconocido"
-    return NextResponse.json({ error: msg }, { status: 500 })
+  // Optional: use LLM only for a brief 2-sentence qualitative context paragraph
+  const apiKey = (center as { openrouter_api_key?: string | null } | null)?.openrouter_api_key
+  if (apiKey) {
+    try {
+      const cohPct = (sg.metrics.cohesion * 100).toFixed(0)
+      const isolated = sg.nodes.filter(n => n.is_isolated)
+      const narrativePrompt = `En 2 frases concisas y directas, describe la dinámica social de este grupo escolar de ${sg.nodes.length} alumnos que tiene una cohesión del ${cohPct}%, ${isolated.length} alumnos completamente aislados y ${sg.communities.length} subgrupos detectados. Sin recomendaciones, solo descripción del estado social actual. En español.`
+      const narrative = await generateAISummary(narrativePrompt, apiKey)
+      return NextResponse.json({ summary: `CONTEXTO\n${narrative.trim()}\n\n${report}` })
+    } catch {
+      // Fall through to return just the programmatic report
+    }
   }
+
+  return NextResponse.json({ summary: report })
 }
