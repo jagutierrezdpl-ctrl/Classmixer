@@ -67,66 +67,97 @@ export async function POST(
     return NextResponse.json({ summary: "No hay datos suficientes para generar un análisis." })
   }
 
-  // Compute aggregates
-  const isolated = sg.nodes.filter(n => n.is_isolated)
-  const vulnerable = sg.nodes.filter(n => n.is_vulnerable && !n.is_isolated)
+  const nodeMap = new Map(sg.nodes.map(n => [n.id, n]))
+
+  // Isolated: find who (if anyone) chose them — so we can suggest keeping them together
+  const isolatedDetail = sg.nodes
+    .filter(n => n.is_isolated)
+    .map(n => {
+      const choosers = sg.edges
+        .filter(e => e.target === n.id && e.relation_type === "friendship")
+        .map(e => nodeMap.get(e.source)?.first_name)
+        .filter(Boolean)
+      const chose = sg.edges
+        .filter(e => e.source === n.id && e.relation_type === "friendship")
+        .map(e => nodeMap.get(e.target)?.first_name)
+        .filter(Boolean)
+      const parts = []
+      if (choosers.length) parts.push(`le eligió: ${choosers.join(", ")}`)
+      if (chose.length) parts.push(`eligió a: ${chose.join(", ")}`)
+      return `• ${n.first_name} ${n.last_name}${parts.length ? ` (${parts.join("; ")})` : " (nadie le eligió ni él eligió a nadie)"}`
+    })
+    .join("\n")
+
+  // Vulnerable: show their single reciprocal friend
+  const vulnerableDetail = sg.nodes
+    .filter(n => n.is_vulnerable && !n.is_isolated)
+    .slice(0, 8)
+    .map(n => {
+      const reciprocal = sg.edges
+        .filter(e => e.source === n.id && e.relation_type === "friendship")
+        .filter(e => sg.edges.some(e2 => e2.source === e.target && e2.target === n.id && e2.relation_type === "friendship"))
+        .map(e => nodeMap.get(e.target)?.first_name)
+        .filter(Boolean)
+      return `• ${n.first_name} ${n.last_name}${reciprocal.length ? ` (único vínculo: ${reciprocal.join(", ")})` : ""}`
+    })
+    .join("\n")
+
   const leaders = sg.nodes.filter(n => n.is_leader)
   const bridges = sg.nodes.filter(n => n.is_bridge)
-  const avgReceived = (sg.nodes.reduce((s, n) => s + n.received_count, 0) / total).toFixed(1)
-  const avgReciprocal = (sg.nodes.reduce((s, n) => s + n.reciprocal_count, 0) / total).toFixed(1)
-  const reciprocalPairs = sg.metrics.reciprocal_pairs
-  const communityCount = sg.communities.length
   const closedGroups = sg.communities.filter(c => c.is_closed)
 
-  // Top elected students
-  const topElected = [...sg.nodes]
-    .sort((a, b) => b.received_count - a.received_count)
-    .slice(0, 5)
-    .map(n => `${n.first_name} ${n.last_name} (${n.received_count} elecciones)`)
+  const leaderDetail = leaders.slice(0, 6)
+    .map(n => `• ${n.first_name} ${n.last_name} — ${n.received_count} elecciones recibidas`)
+    .join("\n")
 
-  // Compose detailed prompt
-  const isolatedNames = isolated.map(n => `${n.first_name} ${n.last_name}`).join(", ") || "ninguno"
-  const vulnerableNames = vulnerable.slice(0, 5).map(n => `${n.first_name} ${n.last_name}`).join(", ") || "ninguno"
-  const leaderNames = leaders.slice(0, 5).map(n => `${n.first_name} ${n.last_name} (${n.received_count})`).join(", ") || "ninguno"
-  const bridgeNames = bridges.slice(0, 4).map(n => `${n.first_name} ${n.last_name}`).join(", ") || "ninguno"
-  const alertSummary = sg.alerts.map(a => `[${a.severity.toUpperCase()}] ${a.message}`).join("\n") || "Sin alertas"
+  const bridgeDetail = bridges.slice(0, 5)
+    .map(n => `• ${n.first_name} ${n.last_name}`)
+    .join("\n")
 
-  const prompt = `Eres un orientador escolar experto en análisis sociométrico. Analiza estos datos reales del sociograma del proceso "${proc.name}" (${proc.school_year}) y redacta un informe profesional en español para el equipo docente.
+  const closedGroupDetail = closedGroups.slice(0, 3).map((c, i) => {
+    const names = c.members.slice(0, 6).map(id => nodeMap.get(id)?.first_name).filter(Boolean).join(", ")
+    return `• Grupo cerrado ${i + 1} (${c.size} alumnos): ${names}${c.size > 6 ? "…" : ""}`
+  }).join("\n")
 
-DATOS DEL GRUPO (${total} alumnos):
+  const prompt = `Eres un orientador escolar experto en análisis sociométrico. Tu tarea es analizar los datos del sociograma del proceso "${proc.name}" (${proc.school_year}) y producir recomendaciones CONCRETAS y ESPECÍFICAS para ayudar al equipo docente a distribuir a estos ${total} alumnos en clases nuevas el próximo curso.
 
-Métricas globales:
-- Alumnos analizados: ${total}
-- Respuestas recibidas del cuestionario: ${responses.length}
-- Media de elecciones recibidas por alumno: ${avgReceived}
-- Media de relaciones recíprocas por alumno: ${avgReciprocal}
-- Total de pares con amistad recíproca: ${reciprocalPairs}
+CONTEXTO IMPORTANTE: Este proceso es de MEZCLA DE CLASES. Los alumnos serán distribuidos en nuevos grupos. El objetivo del informe es guiar esa distribución, NO proponer actividades para la clase actual.
+
+DATOS DEL GRUPO (${total} alumnos, ${responses.length} respuestas):
+- Cohesión del grupo: ${(sg.metrics.cohesion * 100).toFixed(1)}% (recíprocos / total)
 - Densidad de red: ${(sg.metrics.density * 100).toFixed(1)}%
-- Cohesión del grupo: ${(sg.metrics.cohesion * 100).toFixed(1)}%
-- Comunidades/subgrupos detectados: ${communityCount}
+- Media de elecciones recibidas: ${(sg.nodes.reduce((s, n) => s + n.received_count, 0) / total).toFixed(1)} por alumno
+- Pares con amistad recíproca: ${sg.metrics.reciprocal_pairs}
+- Subgrupos detectados: ${sg.communities.length} (${closedGroups.length} cerrados)
 
-Alumnos en riesgo:
-- Aislados (0 elecciones recibidas): ${isolated.length} — ${isolatedNames}
-- Vulnerables (solo 1 relación recíproca): ${vulnerable.length} — ${vulnerableNames}
+ALUMNOS AISLADOS (${sg.nodes.filter(n => n.is_isolated).length}) — PRIORIDAD MÁXIMA:
+${isolatedDetail || "Ninguno"}
 
-Líderes sociales (más elegidos):
-- ${leaderNames}
+ALUMNOS VULNERABLES — solo 1 vínculo recíproco (${sg.nodes.filter(n => n.is_vulnerable && !n.is_isolated).length}):
+${vulnerableDetail || "Ninguno"}
 
-Más votados en general: ${topElected.join(", ")}
+LÍDERES SOCIALES:
+${leaderDetail || "Ninguno destacado"}
 
-Alumnos puente (conectan distintos grupos): ${bridgeNames}
+ALUMNOS PUENTE (conectan subgrupos):
+${bridgeDetail || "Ninguno"}
 
-Subgrupos detectados: ${communityCount}${closedGroups.length > 0 ? ` (${closedGroups.length} cerrado${closedGroups.length !== 1 ? "s" : ""}, tamaños: ${closedGroups.map(c => c.size).join(", ")})` : ""}
+SUBGRUPOS CERRADOS A REPARTIR:
+${closedGroupDetail || "Ninguno"}
 
-Alertas automáticas del sistema:
-${alertSummary}
+INSTRUCCIONES PARA EL INFORME:
+Escribe exactamente estas tres secciones, sin asteriscos ni markdown, usando solo texto plano:
 
-Redacta el informe con estas tres secciones (máximo 300 palabras en total):
-1. **Observaciones principales**: qué caracteriza la dinámica social de este grupo según los datos
-2. **Puntos de atención**: qué situaciones concretas merecen seguimiento (menciona alumnos por nombre si procede)
-3. **Recomendaciones**: acciones concretas para el momento de la mezcla de clases, especialmente para proteger a los alumnos más vulnerables
+DIAGNÓSTICO
+[2-3 frases sobre la estructura social real del grupo. Sé directo y usa los números.]
 
-Tono: profesional, objetivo, orientado a la acción docente. No inventes datos que no estén arriba.`
+ALUMNOS PRIORITARIOS PARA LA MEZCLA
+[Lista concisa de decisiones específicas. Para cada alumno aislado o vulnerable, di con quién debería ir o de quién no debe separarse. Nombra a los alumnos. Para grupos cerrados, di cuántos máximo deberían ir juntos.]
+
+CRITERIOS PARA EL ALGORITMO
+[3-4 criterios ordenados por prioridad para configurar la mezcla: qué reglas crear, qué alumnos proteger, cómo repartir a los líderes y puentes.]
+
+PROHIBIDO: no uses frases genéricas como "dinámicas de grupo", "tutorías individualizadas", "actividades de cohesión" ni ningún consejo que no dependa de los datos concretos de arriba.`
 
   try {
     const summary = await generateAISummary(
