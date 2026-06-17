@@ -62,13 +62,6 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sg = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
 
-  // Build student name lookup
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nameOf = (id: string) => {
-    const n = sg.nodes.find(x => x.id === id)
-    return n ? `${n.first_name} ${n.last_name}` : id
-  }
-
   const total = sg.nodes.length
   if (total === 0) {
     return NextResponse.json({ summary: "No hay datos suficientes para generar un análisis." })
