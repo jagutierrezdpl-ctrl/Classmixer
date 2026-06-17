@@ -53,8 +53,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id)
     )
 
-  // Log sociogram access for orientadors (sensitive data access tracking)
-  if (profile.role === "orientador") {
+  // Log sociogram access for roles that see sensitive data (orientador, tutor)
+  if (profile.role === "orientador" || profile.role === "tutor") {
     await logAudit(profile.id, profile.center_id, "view_sociogram", "process", {
       processId: id,
       metadata: { role: profile.role },
