@@ -1,15 +1,42 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { GraduationCap, Clock, LogOut } from "lucide-react"
+import { GraduationCap, Clock, LogOut, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export default function PendingPage() {
+  const router = useRouter()
+  const [checking, setChecking] = useState(false)
+
   async function handleLogout() {
     const supabase = createClient()
     await supabase.auth.signOut()
     window.location.href = "/login"
   }
+
+  async function checkActivation() {
+    setChecking(true)
+    try {
+      const res = await fetch("/api/auth/me")
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.center_id) {
+          router.push("/dashboard")
+          return
+        }
+      }
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  // Auto-check on mount in case admin already rescued them
+  useEffect(() => {
+    checkActivation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -32,11 +59,21 @@ export default function PendingPage() {
           </p>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Contacta con el director o coordinador TIC de tu centro para que
-            te asignen el acceso correspondiente.
+            te asignen el acceso correspondiente mediante la opción{" "}
+            <strong>&quot;Activar cuenta pendiente&quot;</strong>.
           </p>
           <Button
+            variant="secondary"
+            className="w-full gap-2"
+            onClick={checkActivation}
+            disabled={checking}
+          >
+            <RefreshCw className={`w-4 h-4 ${checking ? "animate-spin" : ""}`} />
+            {checking ? "Comprobando…" : "Ya me han activado — entrar"}
+          </Button>
+          <Button
             variant="outline"
-            className="w-full gap-2 mt-2"
+            className="w-full gap-2"
             onClick={handleLogout}
           >
             <LogOut className="w-4 h-4" />

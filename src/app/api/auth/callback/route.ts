@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr"
+import { createServiceClient } from "@/lib/supabase/server"
 import { NextResponse, type NextRequest } from "next/server"
 import type { EmailOtpType } from "@supabase/supabase-js"
 
@@ -65,14 +66,17 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && user) {
-      // Staff user (has a users row) → go to next or dashboard
-      const { data: profile } = await supabase
+      // Use service client to bypass RLS — the anon client's cookies may not
+      // carry the new session yet at this point in the same request.
+      const serviceClient = createServiceClient()
+      const { data: profile } = await serviceClient
         .from("users")
-        .select("id")
+        .select("id, center_id")
         .eq("id", user.id)
         .single()
 
-      if (!profile) {
+      // No profile OR pending state (center_id=null) → activation needed
+      if (!profile || !profile.center_id) {
         response.headers.set("Location", `${origin}/pending`)
         return response
       }

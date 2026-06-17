@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (!pendingUser) {
-    // No pending account found — check if they're already fully active (nothing to fix)
+    // No pending row found — check if they're already fully active (nothing to fix)
     const { data: alreadyActive } = await supabase
       .from("users")
       .select("id")
@@ -45,12 +45,40 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (alreadyActive) {
-      return NextResponse.json({ error: "Este usuario ya está activo en el centro y no tiene ninguna cuenta pendiente. Si sigue sin poder entrar, pídele que cierre sesión y vuelva a iniciarla." }, { status: 409 })
+      return NextResponse.json({ error: "Este usuario ya está activo en el centro. Si sigue sin poder entrar, pídele que cierre sesión y vuelva a iniciarla." }, { status: 409 })
     }
 
-    return NextResponse.json({
-      error: "No se encontró ningún usuario pendiente con ese email. Si aún no ha accedido a la app, usa 'Añadir usuario' en su lugar."
-    }, { status: 404 })
+    // The trigger may have failed to create their public.users row. Try to find them
+    // in auth.users by email and create their profile now.
+    const { data: authList } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+    const authUser = authList?.users.find(
+      u => u.email?.toLowerCase() === email.trim().toLowerCase()
+    )
+
+    if (!authUser) {
+      return NextResponse.json({
+        error: "No se encontró ningún usuario con ese email. Si aún no ha accedido a la app, usa 'Añadir usuario' en su lugar."
+      }, { status: 404 })
+    }
+
+    // Create their profile (trigger must have failed silently)
+    const displayName = (authUser.user_metadata?.name as string | undefined)
+      ?? authUser.email?.split("@")[0]
+      ?? email
+
+    const { error: createError } = await supabase
+      .from("users")
+      .upsert({
+        id: authUser.id,
+        email: authUser.email ?? email,
+        name: displayName,
+        role,
+        center_id: profile.center_id,
+      }, { onConflict: "id" })
+
+    if (createError) return NextResponse.json({ error: createError.message }, { status: 500 })
+
+    return NextResponse.json({ success: true, name: displayName })
   }
 
   const { error } = await supabase
