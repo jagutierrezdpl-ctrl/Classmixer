@@ -337,6 +337,7 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 </TabsTrigger>
                 <TabsTrigger value="groups" className="text-xs h-7">Grupos</TabsTrigger>
                 <TabsTrigger value="nodes" className="text-xs h-7">Alumnos</TabsTrigger>
+                <TabsTrigger value="guide" className="text-xs h-7">Guía</TabsTrigger>
               </TabsList>
 
               {/* Métricas tab */}
@@ -553,6 +554,168 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                       </button>
                     ))}
                 </div>
+              </TabsContent>
+
+              {/* Guía tab */}
+              <TabsContent value="guide" className="flex-1 overflow-y-auto p-3 mt-0 space-y-4 text-xs">
+
+                <section>
+                  <p className="font-semibold text-sm mb-2">Tipos de alumno</p>
+                  <div className="space-y-2.5">
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">⭐</span>
+                      <div>
+                        <p className="font-medium">Líder social</p>
+                        <p className="text-muted-foreground">Recibe muchas elecciones de compañeros. Alta centralidad. Tiene influencia en el grupo y conecta con varios subgrupos.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">🔗</span>
+                      <div>
+                        <p className="font-medium">Alumno puente</p>
+                        <p className="text-muted-foreground">Conecta dos o más comunidades distintas. Su presencia es clave para la cohesión global del grupo. Si se aísla, subgrupos quedan desconectados.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">⚠️</span>
+                      <div>
+                        <p className="font-medium">Alumno vulnerable</p>
+                        <p className="text-muted-foreground">Solo tiene una conexión significativa. Si se separa de ese compañero (p.ej. en la mezcla de clases), quedaría sin vínculos. Requiere atención especial.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">🔴</span>
+                      <div>
+                        <p className="font-medium">Alumno aislado</p>
+                        <p className="text-muted-foreground">Sin elecciones recibidas o sin ninguna relación recíproca. No pertenece a ningún subgrupo visible. Puede indicar exclusión o dificultades de integración.</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="border-t" />
+
+                <section>
+                  <p className="font-semibold text-sm mb-2">Métricas individuales</p>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="font-medium">Elecciones recibidas</p>
+                      <p className="text-muted-foreground">Cuántos compañeros han elegido a este alumno. El tamaño del nodo en el grafo lo representa.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Elecciones realizadas</p>
+                      <p className="text-muted-foreground">Cuántos compañeros ha elegido este alumno. No implica reciprocidad.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Relaciones recíprocas</p>
+                      <p className="text-muted-foreground">Elecciones mutuas: A elige a B y B elige a A. Son los vínculos más sólidos y los más importantes para preservar en la mezcla.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Centralidad</p>
+                      <p className="text-muted-foreground">Importancia del alumno dentro de la red. Un valor alto significa que está bien conectado con alumnos que a su vez están bien conectados.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Intermediación</p>
+                      <p className="text-muted-foreground">Mide cuántas veces el alumno actúa como paso entre otros dos. Alta intermediación = posible alumno puente.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="border-t" />
+
+                <section>
+                  <p className="font-semibold text-sm mb-2">Métricas de grupo</p>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="font-medium">Cohesión</p>
+                      <p className="text-muted-foreground">Nivel de conexión global del grupo. Alta cohesión = grupo bien integrado. Baja = muchos alumnos desconectados o subgrupos cerrados.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Densidad de red</p>
+                      <p className="text-muted-foreground">Porcentaje de relaciones existentes sobre el total posible. Un grupo de 30 alumnos podría tener 870 relaciones posibles; la densidad indica cuántas existen.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Reciprocidad</p>
+                      <p className="text-muted-foreground">Porcentaje de elecciones que son mutuas sobre el total de elecciones. Un grupo con alta reciprocidad tiene relaciones más estables.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="border-t" />
+
+                <section>
+                  <p className="font-semibold text-sm mb-2">Tipos de relación (conexiones)</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-0 border-t-2 border-pink-400 shrink-0" />
+                      <p className="text-muted-foreground"><span className="font-medium text-foreground">Amistad unilateral</span> — A elige a B pero B no elige a A.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-0 border-t-4 border-pink-600 shrink-0" />
+                      <p className="text-muted-foreground"><span className="font-medium text-foreground">Amistad recíproca</span> — Elección mutua. Línea más gruesa.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-0 border-t-2 border-blue-400 shrink-0" />
+                      <p className="text-muted-foreground"><span className="font-medium text-foreground">Relación de trabajo</span> — Trabajan bien juntos en clase.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-0 border-t-2 border-red-400 border-dashed shrink-0" />
+                      <p className="text-muted-foreground"><span className="font-medium text-foreground">Conflicto / regla de separación</span> — No deben compartir clase.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="border-t" />
+
+                <section>
+                  <p className="font-semibold text-sm mb-2">Colores por riesgo social</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500 shrink-0" />
+                      <p className="text-muted-foreground">Sin riesgo — Bien integrado en el grupo.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-400 shrink-0" />
+                      <p className="text-muted-foreground">Riesgo moderado — Pocas conexiones o vínculos débiles.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
+                      <p className="text-muted-foreground">Riesgo alto — Aislado o muy vulnerable. Requiere atención.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="border-t" />
+
+                <section>
+                  <p className="font-semibold text-sm mb-2">Comunidades detectadas</p>
+                  <p className="text-muted-foreground">El algoritmo agrupa automáticamente a los alumnos en comunidades según sus relaciones (algoritmo de Louvain). Cada color representa un subgrupo que se relaciona más entre sí que con el resto. Un subgrupo cerrado de muchos alumnos puede dificultar la integración general.</p>
+                </section>
+
+                <div className="border-t" />
+
+                <section>
+                  <p className="font-semibold text-sm mb-2">Alertas</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                      <p className="text-muted-foreground"><span className="font-medium text-foreground">Alta severidad</span> — Situación que requiere intervención: aislamiento, conflicto activo.</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                      <p className="text-muted-foreground"><span className="font-medium text-foreground">Media</span> — Situación a vigilar: vulnerabilidad, subgrupo cerrado.</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                      <p className="text-muted-foreground"><span className="font-medium text-foreground">Informativa</span> — Observación útil para la mezcla: alumnos puente, grupos dominantes.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <p className="text-muted-foreground/60 text-[10px] leading-relaxed pt-1">
+                  El sociograma es una herramienta orientativa. Los datos deben interpretarse siempre en contexto y con criterio docente. No sustituye la observación directa del equipo educativo.
+                </p>
+
               </TabsContent>
             </Tabs>
           </div>
