@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft, Loader2, Link2, Copy,
-  CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail, RotateCcw,
+  CheckCircle2, Clock, Users, QrCode, X, Download, Filter, Mail, MailCheck, RotateCcw,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
@@ -49,6 +49,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   const [sortAlpha, setSortAlpha] = useState(false)
   const [filterClass, setFilterClass] = useState<string | null>(null)
   const [sendingReminder, setSendingReminder] = useState(false)
+  const [sendProgress, setSendProgress] = useState<{ sent: number; total: number } | null>(null)
+  const [emailSentIds, setEmailSentIds] = useState<Set<string>>(new Set())
   const [sendingReminderFor, setSendingReminderFor] = useState<string | null>(null)
   const [resettingId, setResettingId] = useState<string | null>(null)
   const [resettingAll, setResettingAll] = useState(false)
@@ -220,6 +222,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       if (data.sentIndividual > 0) {
+        setEmailSentIds(prev => new Set([...prev, studentId]))
         toast.success(`Email enviado a ${name}`)
       } else if (data.withoutEmail > 0) {
         toast.warning(`${name} no tiene email registrado`)
@@ -234,24 +237,35 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   }
 
   async function sendReminder() {
+    const pending = pendingTokens
+    if (pending.length === 0) return
     setSendingReminder(true)
-    try {
-      const res = await fetch(`/api/processes/${id}/questionnaire/remind`, { method: "POST" })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      if (data.sent) {
-        const parts = []
-        if (data.sentIndividual > 0) parts.push(`${data.sentIndividual} emails a alumnos`)
-        if (data.withoutEmail > 0) parts.push(`${data.withoutEmail} sin email`)
-        if (data.adminEmailSent) parts.push("resumen enviado al admin")
-        toast.success(`Recordatorio enviado — ${parts.join(" · ")}`)
-      } else {
-        toast.info(data.reason ?? "Email no configurado — revisa RESEND_API_KEY en entorno")
+    setSendProgress({ sent: 0, total: pending.length })
+    let sentCount = 0
+    for (let i = 0; i < pending.length; i++) {
+      const t = pending[i]
+      try {
+        const res = await fetch(`/api/processes/${id}/questionnaire/remind`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ student_id: t.student_id }),
+        })
+        const data = await res.json()
+        if (res.ok && data.sentIndividual > 0) {
+          sentCount++
+          setEmailSentIds(prev => new Set([...prev, t.student_id]))
+        }
+      } catch {
+        // continue to next student
       }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al enviar recordatorio")
-    } finally {
-      setSendingReminder(false)
+      setSendProgress({ sent: i + 1, total: pending.length })
+    }
+    setSendingReminder(false)
+    setSendProgress(null)
+    if (sentCount > 0) {
+      toast.success(`Recordatorio enviado a ${sentCount} alumno${sentCount !== 1 ? "s" : ""}`)
+    } else {
+      toast.info("No se enviaron emails (sin email registrado o sin servicio configurado)")
     }
   }
 
@@ -316,21 +330,26 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   async function sendReminderToSelection() {
     const ids = [...selectedIds]
     setSendingReminderToSelection(true)
+    let sentCount = 0
     try {
-      const res = await fetch(`/api/processes/${id}/questionnaire/remind`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ student_ids: ids }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      if (data.sent) {
-        const parts = []
-        if (data.sentIndividual > 0) parts.push(`${data.sentIndividual} emails enviados`)
-        if (data.withoutEmail > 0) parts.push(`${data.withoutEmail} sin email`)
-        toast.success(parts.join(" · ") || "Recordatorio enviado")
+      for (const sid of ids) {
+        const t = tokens.find(tk => tk.student_id === sid && !tk.used)
+        if (!t) continue
+        const res = await fetch(`/api/processes/${id}/questionnaire/remind`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ student_id: sid }),
+        })
+        const data = await res.json()
+        if (res.ok && data.sentIndividual > 0) {
+          sentCount++
+          setEmailSentIds(prev => new Set([...prev, sid]))
+        }
+      }
+      if (sentCount > 0) {
+        toast.success(`Email enviado a ${sentCount} alumno${sentCount !== 1 ? "s" : ""}`)
       } else {
-        toast.info(data.reason ?? "Sin pendientes en la selección")
+        toast.info("Sin pendientes en la selección o sin email registrado")
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al enviar")
@@ -610,8 +629,16 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                     className="text-xs px-2 py-0.5 rounded-full border text-amber-700 border-amber-400 hover:bg-amber-100 transition-colors flex items-center gap-1 disabled:opacity-50"
                   >
                     {sendingReminder ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
-                    Enviar recordatorio
+                    {sendProgress ? `${sendProgress.sent}/${sendProgress.total}` : "Enviar recordatorio"}
                   </button>
+                  {sendProgress && (
+                    <div className="w-full mt-1.5 px-1">
+                      <Progress
+                        value={(sendProgress.sent / sendProgress.total) * 100}
+                        className="h-1.5"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -692,6 +719,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                         <span>{t.students?.last_name}, {t.students?.first_name}</span>
                         {t.students?.current_class && (
                           <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{t.students.current_class}</span>
+                        )}
+                        {emailSentIds.has(t.student_id) && (
+                          <span title="Email enviado esta sesión">
+                            <MailCheck className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
