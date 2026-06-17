@@ -55,6 +55,7 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const [viewerRole, setViewerRole] = useState<string | null>(null)
   const [canSeeSensitive, setCanSeeSensitive] = useState(false)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [aiSummaryVisible, setAiSummaryVisible] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [ruleCreating, setRuleCreating] = useState<string | null>(null)
   const [rulesCreated, setRulesCreated] = useState<Set<string>>(new Set())
@@ -87,15 +88,20 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const hasActiveFilter = filter.classFilter || filter.showOnlyIsolated || filter.showOnlyReciprocal || (filter.relationType && filter.relationType !== "all")
 
   async function handleAISummary() {
+    // If already generated, just toggle visibility
+    if (aiSummary) {
+      setAiSummaryVisible(v => !v)
+      return
+    }
     setAiLoading(true)
-    setAiSummary(null)
     try {
       const res = await fetch(`/api/processes/${id}/sociogram/explain`, { method: "POST" })
       const json = await res.json()
-      if (res.ok) setAiSummary(json.summary)
-      else setAiSummary(`Error: ${json.error}`)
+      if (res.ok) { setAiSummary(json.summary); setAiSummaryVisible(true) }
+      else { setAiSummary(`Error: ${json.error}`); setAiSummaryVisible(true) }
     } catch {
       setAiSummary("Error al conectar con la IA")
+      setAiSummaryVisible(true)
     } finally {
       setAiLoading(false)
     }
@@ -364,15 +370,16 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
           )}
 
           {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleAISummary} disabled={aiLoading}>
-              {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} IA
+            <Button size="sm" variant={aiSummary && aiSummaryVisible ? "secondary" : "outline"} className="h-7 text-xs gap-1.5" onClick={handleAISummary} disabled={aiLoading}>
+              {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {aiSummary ? (aiSummaryVisible ? "Ocultar informe" : "Ver informe IA") : "Análisis IA"}
             </Button>
           )}
         </div>
       </div>
 
       {/* AI Summary panel */}
-      {aiSummary && (
+      {aiSummary && aiSummaryVisible && (
         <div className="border-b bg-violet-50 shrink-0 max-h-72 overflow-y-auto">
           <div className="flex items-start justify-between gap-3 px-4 py-3">
             <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -388,7 +395,7 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 })}
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 mt-0.5" onClick={() => setAiSummary(null)}>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 mt-0.5" onClick={() => setAiSummaryVisible(false)}>
               <X className="w-3.5 h-3.5" />
             </Button>
           </div>
