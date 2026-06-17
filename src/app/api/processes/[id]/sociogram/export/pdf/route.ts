@@ -5,7 +5,7 @@ import { NextResponse } from "next/server"
 import React from "react"
 import { Document, Page, Text, View, Svg, Circle, Line, renderToBuffer } from "@react-pdf/renderer"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
-import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY } from "@/lib/pdf/shared"
+import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY, PdfLogoRow } from "@/lib/pdf/shared"
 import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 import { filterVisibleResponses } from "@/lib/questionnaire/visibility"
 import type { UserRole } from "@/types"
@@ -69,11 +69,12 @@ function nameOf(s: any): string {
   return s ? `${s.first_name} ${s.last_name}` : "Alumno desconocido"
 }
 
-function SociogramaPDF({ process, soc, positions, studentMap }: {
+function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
   process: any
   soc: ReturnType<typeof calculateSociogram>
   positions: ReturnType<typeof layout>
   studentMap: Map<string, any>
+  logoUrl?: string | null
 }) {
   const mostChosen = [...soc.nodes].sort((a, b) => b.received_count - a.received_count).slice(0, 8)
   const leastChosen = [...soc.nodes].sort((a, b) => a.received_count - b.received_count).slice(0, 8)
@@ -81,6 +82,7 @@ function SociogramaPDF({ process, soc, positions, studentMap }: {
 
   return React.createElement(Document, null,
     React.createElement(Page, { size: "A4", style: pdfStyles.page },
+      React.createElement(PdfLogoRow, { logoUrl }),
       React.createElement(View, { style: pdfStyles.header },
         React.createElement(Text, { style: pdfStyles.title }, "Informe de sociograma"),
         React.createElement(Text, { style: pdfStyles.subtitle }, `${process.name} · ${process.school_year} · ${formatDate()}`),
@@ -197,10 +199,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
   }
 
-  const [{ data: allStudents }, { data: allResponses }] = await Promise.all([
+  const [{ data: allStudents }, { data: allResponses }, { data: centerData }] = await Promise.all([
     supabase.from("students").select("*").eq("process_id", id).eq("active", true),
     supabase.from("responses").select("*").eq("process_id", id),
+    supabase.from("centers").select("logo_url").eq("id", profile.center_id).single(),
   ])
+  const logoUrl = (centerData as any)?.logo_url as string | null | undefined
 
   if (!allStudents) return NextResponse.json({ error: "Error al cargar alumnos" }, { status: 500 })
 
@@ -215,7 +219,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const soc = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
   const positions = layout(soc.nodes)
 
-  const buffer = await renderToBuffer(React.createElement(SociogramaPDF, { process, soc, positions, studentMap }) as any)
+  const buffer = await renderToBuffer(React.createElement(SociogramaPDF, { process, soc, positions, studentMap, logoUrl }) as any)
 
   await logAudit(profile.id, profile.center_id, "export_informe_sociograma", "process", {
     processId: id,

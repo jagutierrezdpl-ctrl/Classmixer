@@ -4,7 +4,7 @@ import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import React from "react"
 import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer"
-import { pdfStyles, formatDate } from "@/lib/pdf/shared"
+import { pdfStyles, formatDate, PdfLogoRow } from "@/lib/pdf/shared"
 
 const STATUS_LABEL: Record<string, string> = {
   generada: "Generada",
@@ -26,16 +26,18 @@ const RULE_TYPE_LABELS: Record<string, string> = {
   avoid_tutor: "Evitar tutor (alumno-tutor)",
 }
 
-function DireccionPDF({ process, proposal, classesList, ruleCounts }: {
+function DireccionPDF({ process, proposal, classesList, ruleCounts, logoUrl }: {
   process: any
   proposal: any
   classesList: Array<{ name: string; students: any[]; metrics: Record<string, number> }>
   ruleCounts: Record<string, number>
+  logoUrl?: string | null
 }) {
   const totalStudents = classesList.reduce((s, c) => s + c.students.length, 0)
 
   return React.createElement(Document, null,
     React.createElement(Page, { size: "A4", style: pdfStyles.page },
+      React.createElement(PdfLogoRow, { logoUrl }),
       React.createElement(View, { style: pdfStyles.header },
         React.createElement(Text, { style: pdfStyles.title }, "Informe para dirección"),
         React.createElement(Text, { style: pdfStyles.subtitle }, `${process.name} · ${process.school_year} · ${formatDate()}`),
@@ -133,11 +135,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const proposal = proposalRaw as any
   const process = proposal.processes
 
-  const { data: rules } = await supabase
-    .from("rules")
-    .select("rule_type")
-    .eq("process_id", process.id)
-    .eq("active", true)
+  const [{ data: rules }, { data: centerData }] = await Promise.all([
+    supabase.from("rules").select("rule_type").eq("process_id", process.id).eq("active", true),
+    supabase.from("centers").select("logo_url").eq("id", profile.center_id).single(),
+  ])
+  const logoUrl = (centerData as any)?.logo_url as string | null | undefined
 
   const ruleCounts: Record<string, number> = {}
   for (const r of (rules ?? [])) {
@@ -161,7 +163,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, students]) => ({ name, students, metrics: metricsMap[name] ?? {} }))
 
-  const buffer = await renderToBuffer(React.createElement(DireccionPDF, { process, proposal, classesList, ruleCounts }) as any)
+  const buffer = await renderToBuffer(React.createElement(DireccionPDF, { process, proposal, classesList, ruleCounts, logoUrl }) as any)
 
   await logAudit(profile.id, profile.center_id, "export_informe_direccion", "proposal", {
     processId: process.id,

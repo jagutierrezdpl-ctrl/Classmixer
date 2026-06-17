@@ -4,7 +4,7 @@ import { getUserProfile, hasFullAccess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import React from "react"
 import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer"
-import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY } from "@/lib/pdf/shared"
+import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY, PdfLogoRow } from "@/lib/pdf/shared"
 
 const FLAG_THRESHOLD = 2
 
@@ -27,14 +27,16 @@ function nameOf(s: StudentLite | undefined): string {
   return s ? `${s.first_name} ${s.last_name} (${s.current_class})` : "Alumno desconocido"
 }
 
-function ConvivenciaPDF({ process, categories, flagged, totalResponses }: {
+function ConvivenciaPDF({ process, categories, flagged, totalResponses, logoUrl }: {
   process: any
   categories: CategorySummary[]
   flagged: { student: StudentLite | undefined; signals: number }[]
   totalResponses: number
+  logoUrl?: string | null
 }) {
   return React.createElement(Document, null,
     React.createElement(Page, { size: "A4", style: pdfStyles.page },
+      React.createElement(PdfLogoRow, { logoUrl }),
       React.createElement(View, { style: pdfStyles.header },
         React.createElement(Text, { style: pdfStyles.title }, "Informe de convivencia"),
         React.createElement(Text, { style: pdfStyles.subtitle }, `${process.name} · ${process.school_year} · ${formatDate()}`),
@@ -122,7 +124,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const codes = (bullyingTypes ?? []).map((t: any) => t.code as string)
 
-  const [{ data: students }, { data: responsesRaw }] = await Promise.all([
+  const [{ data: students }, { data: responsesRaw }, { data: centerData }] = await Promise.all([
     supabase.from("students").select("id, first_name, last_name, current_class").eq("process_id", id).eq("active", true),
     codes.length > 0
       ? (supabase as any)
@@ -131,7 +133,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
           .eq("process_id", id)
           .in("relation_type", codes)
       : Promise.resolve({ data: [] as any[] }),
+    supabase.from("centers").select("logo_url").eq("id", profile.center_id).single(),
   ])
+  const logoUrl = (centerData as any)?.logo_url as string | null | undefined
 
   const studentMap = new Map((students as StudentLite[] ?? []).map(s => [s.id, s]))
   const responses = (responsesRaw as any[]) ?? []
@@ -169,7 +173,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .map(([studentId, signals]) => ({ student: studentMap.get(studentId), signals }))
 
   const buffer = await renderToBuffer(
-    React.createElement(ConvivenciaPDF, { process, categories, flagged, totalResponses: responses.length }) as any
+    React.createElement(ConvivenciaPDF, { process, categories, flagged, totalResponses: responses.length, logoUrl }) as any
   )
 
   await logAudit(profile.id, profile.center_id, "export_informe_convivencia", "process", {

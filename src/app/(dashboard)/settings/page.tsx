@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { ArrowLeft, Check, Loader2, Sparkles, Trash2 } from "lucide-react"
+import Image from "next/image"
+import { ArrowLeft, Check, Loader2, Sparkles, Trash2, ImageIcon } from "lucide-react"
 
 const OPENROUTER_MODELS = [
   { id: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — rápido, económico (por defecto)" },
@@ -28,6 +29,7 @@ interface Center {
   country?: string | null
   openrouter_key_set?: boolean
   openrouter_model?: string | null
+  logo_url?: string | null
 }
 
 export default function SettingsPage() {
@@ -48,6 +50,11 @@ export default function SettingsPage() {
   const [savingModel, setSavingModel] = useState(false)
   const [savedModel, setSavedModel] = useState(false)
   const [modelError, setModelError] = useState<string | null>(null)
+
+  // Logo state
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoError, setLogoError] = useState<string | null>(null)
+  const [logoSaved, setLogoSaved] = useState(false)
 
   useEffect(() => {
     fetch("/api/settings/center")
@@ -76,6 +83,44 @@ export default function SettingsPage() {
         }
       })
   }, [])
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoError(null)
+    setLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("logo", file)
+      const res = await fetch("/api/settings/center/logo", { method: "POST", body: fd })
+      const data = await res.json()
+      if (!res.ok) {
+        setLogoError(data.error ?? "Error al subir el logo")
+      } else {
+        setCenter(c => c ? { ...c, logo_url: data.logo_url } : c)
+        setLogoSaved(true)
+        setTimeout(() => setLogoSaved(false), 2500)
+      }
+    } catch {
+      setLogoError("Error de red al subir el logo")
+    } finally {
+      setLogoUploading(false)
+      e.target.value = ""
+    }
+  }
+
+  async function handleLogoDelete() {
+    setLogoError(null)
+    setLogoUploading(true)
+    try {
+      const res = await fetch("/api/settings/center/logo", { method: "DELETE" })
+      if (res.ok) setCenter(c => c ? { ...c, logo_url: null } : c)
+    } catch {
+      setLogoError("Error al eliminar el logo")
+    } finally {
+      setLogoUploading(false)
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -225,6 +270,77 @@ export default function SettingsPage() {
               )}
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" />
+            Logo del centro
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            El logo aparecerá en todos los informes PDF junto a la marca ClassMixer. Formatos: PNG, JPEG, WEBP o SVG (máx. 512 KB).
+          </p>
+
+          {center?.logo_url ? (
+            <div className="flex items-center gap-3">
+              <div className="relative w-24 h-16 border rounded bg-muted/20 flex items-center justify-center overflow-hidden">
+                <Image src={center.logo_url} alt="Logo del centro" fill className="object-contain p-1" unoptimized />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={logoUploading}
+                  onClick={() => document.getElementById("logo-upload")?.click()}
+                >
+                  {logoUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Cambiar logo
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  disabled={logoUploading}
+                  onClick={handleLogoDelete}
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" /> Quitar logo
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={logoUploading || !center}
+              onClick={() => document.getElementById("logo-upload")?.click()}
+            >
+              {logoUploading
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Subiendo...</>
+                : <><ImageIcon className="w-4 h-4 mr-2" />Subir logo</>}
+            </Button>
+          )}
+
+          <input
+            id="logo-upload"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            className="hidden"
+            onChange={handleLogoUpload}
+          />
+
+          {logoError && <p className="text-sm text-destructive">{logoError}</p>}
+          {logoSaved && (
+            <span className="text-sm text-green-600 flex items-center gap-1">
+              <Check className="w-4 h-4" /> Logo guardado
+            </span>
+          )}
         </CardContent>
       </Card>
 

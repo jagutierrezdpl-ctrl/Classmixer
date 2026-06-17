@@ -5,19 +5,20 @@ import { NextResponse } from "next/server"
 import React from "react"
 import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
-import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY } from "@/lib/pdf/shared"
+import { pdfStyles, formatDate, ALERT_STYLE_BY_SEVERITY, PdfLogoRow } from "@/lib/pdf/shared"
 import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 
 function nameOf(s: any): string {
   return s ? `${s.first_name} ${s.last_name}` : "Alumno desconocido"
 }
 
-function OrientacionPDF({ process, soc, studentMap, conflicts, recommendations }: {
+function OrientacionPDF({ process, soc, studentMap, conflicts, recommendations, logoUrl }: {
   process: any
   soc: ReturnType<typeof calculateSociogram>
   studentMap: Map<string, any>
   conflicts: string[]
   recommendations: string[]
+  logoUrl?: string | null
 }) {
   const vulnerable = soc.nodes.filter(n => n.is_vulnerable)
   const isolated = soc.nodes.filter(n => n.is_isolated)
@@ -25,6 +26,7 @@ function OrientacionPDF({ process, soc, studentMap, conflicts, recommendations }
 
   return React.createElement(Document, null,
     React.createElement(Page, { size: "A4", style: pdfStyles.page },
+      React.createElement(PdfLogoRow, { logoUrl }),
       React.createElement(View, { style: pdfStyles.header },
         React.createElement(Text, { style: pdfStyles.title }, "Informe para orientación"),
         React.createElement(Text, { style: pdfStyles.subtitle }, `${process.name} · ${process.school_year} · ${formatDate()}`),
@@ -114,11 +116,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!process) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
-  const [{ data: students }, { data: responses }, { data: rules }] = await Promise.all([
+  const [{ data: students }, { data: responses }, { data: rules }, { data: centerData }] = await Promise.all([
     supabase.from("students").select("*").eq("process_id", id).eq("active", true),
     supabase.from("responses").select("*").eq("process_id", id),
     supabase.from("rules").select("*, rule_students(student_id, students(first_name, last_name))").eq("process_id", id).eq("active", true).eq("rule_type", "must_separate"),
+    supabase.from("centers").select("logo_url").eq("id", profile.center_id).single(),
   ])
+  const logoUrl = (centerData as any)?.logo_url as string | null | undefined
 
   if (!students) return NextResponse.json({ error: "Error al cargar alumnos" }, { status: 500 })
 
@@ -144,7 +148,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (conflicts.length > 0) recommendations.push("Verificar que las reglas de separación obligatoria estén activas antes de ejecutar el algoritmo.")
   if (recommendations.length === 0) recommendations.push("No se han detectado riesgos sociales relevantes en este grupo.")
 
-  const buffer = await renderToBuffer(React.createElement(OrientacionPDF, { process, soc, studentMap, conflicts, recommendations }) as any)
+  const buffer = await renderToBuffer(React.createElement(OrientacionPDF, { process, soc, studentMap, conflicts, recommendations, logoUrl }) as any)
 
   await logAudit(profile.id, profile.center_id, "export_informe_orientacion", "process", {
     processId: id,

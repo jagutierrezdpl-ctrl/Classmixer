@@ -5,21 +5,23 @@ import { NextResponse } from "next/server"
 import React from "react"
 import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
-import { pdfStyles, formatDate } from "@/lib/pdf/shared"
+import { pdfStyles, formatDate, PdfLogoRow } from "@/lib/pdf/shared"
 import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
 
 const GENDER_LABEL: Record<string, string> = { F: "F", M: "M", Otro: "O", "No especificado": "?" }
 
-function ClassPage({ process, cls, students, friendSummary }: {
+function ClassPage({ process, cls, students, friendSummary, logoUrl }: {
   process: any
   cls: string
   students: any[]
   friendSummary: Map<string, string>
+  logoUrl?: string | null
 }) {
   const sorted = [...students].sort((a, b) => (a.last_name ?? "").localeCompare(b.last_name ?? ""))
   const followUp = students.filter(s => ["Seguimiento", "Conflictiva"].includes(s.behavior_level ?? ""))
 
   return React.createElement(Page, { size: "A4", style: pdfStyles.page },
+    React.createElement(PdfLogoRow, { logoUrl }),
     React.createElement(View, { style: pdfStyles.header },
       React.createElement(Text, { style: pdfStyles.title }, `Informe de tutoría — ${cls}`),
       React.createElement(Text, { style: pdfStyles.subtitle }, `${process.name} · ${process.school_year} · ${formatDate()}`),
@@ -102,7 +104,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
   }
 
-  const { data: responses } = await supabase.from("responses").select("*").eq("process_id", process.id)
+  const [{ data: responses }, { data: centerData }] = await Promise.all([
+    supabase.from("responses").select("*").eq("process_id", process.id),
+    supabase.from("centers").select("logo_url").eq("id", profile.center_id).single(),
+  ])
+  const logoUrl = (centerData as any)?.logo_url as string | null | undefined
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
   const friendshipLike = catalogIndex.scoringRoles.friendshipLike
 
@@ -135,7 +141,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       if (node.is_leader) parts.push("Líder social")
       friendSummary.set(node.id, parts.length > 0 ? parts.join(", ") : `${node.given_count} elegido(s)`)
     }
-    return React.createElement(ClassPage, { key: cls, process, cls, students, friendSummary })
+    return React.createElement(ClassPage, { key: cls, process, cls, students, friendSummary, logoUrl })
   })
 
   const buffer = await renderToBuffer(React.createElement(Document, null, ...pages) as any)

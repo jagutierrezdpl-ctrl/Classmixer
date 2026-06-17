@@ -12,6 +12,7 @@ export interface Database {
           country: string | null
           openrouter_api_key: string | null
           openrouter_model: string | null
+          logo_url: string | null
           created_at: string
         }
         Insert: {
@@ -22,6 +23,7 @@ export interface Database {
           country?: string | null
           openrouter_api_key?: string | null
           openrouter_model?: string | null
+          logo_url?: string | null
           created_at?: string
         }
         Update: {
@@ -32,6 +34,7 @@ export interface Database {
           country?: string | null
           openrouter_api_key?: string | null
           openrouter_model?: string | null
+          logo_url?: string | null
           created_at?: string
         }
         Relationships: []

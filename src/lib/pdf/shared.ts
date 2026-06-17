@@ -1,8 +1,13 @@
-import { StyleSheet } from "@react-pdf/renderer"
+import React from "react"
+import { StyleSheet, View, Text, Image } from "@react-pdf/renderer"
 
 export const pdfStyles = StyleSheet.create({
   page: { padding: 40, fontFamily: "Helvetica", fontSize: 10, color: "#1e293b" },
   header: { marginBottom: 24 },
+  logoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  centerLogo: { width: 72, height: 36, objectFit: "contain" },
+  classmixerBrand: { fontSize: 13, fontWeight: "bold", color: "#1e40af" },
+  classmixerSub: { fontSize: 7, color: "#94a3b8", textAlign: "right", marginTop: 1 },
   title: { fontSize: 20, fontWeight: "bold", color: "#1e40af", marginBottom: 4 },
   subtitle: { fontSize: 11, color: "#64748b" },
   metaRow: { flexDirection: "row", gap: 16, marginTop: 8 },
@@ -26,6 +31,19 @@ export const pdfStyles = StyleSheet.create({
   footer: { position: "absolute", bottom: 30, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between" },
   footerText: { fontSize: 8, color: "#94a3b8" },
 })
+
+/** Renders the dual-logo header row (center logo + ClassMixer brand) for all PDF reports. */
+export function PdfLogoRow({ logoUrl }: { logoUrl?: string | null }) {
+  return React.createElement(View, { style: pdfStyles.logoRow },
+    logoUrl
+      ? React.createElement(Image, { src: logoUrl, style: pdfStyles.centerLogo })
+      : React.createElement(View, { style: { width: 72 } }),
+    React.createElement(View, { style: { alignItems: "flex-end" } },
+      React.createElement(Text, { style: pdfStyles.classmixerBrand }, "ClassMixer"),
+      React.createElement(Text, { style: pdfStyles.classmixerSub }, "Análisis sociométrico escolar"),
+    )
+  )
+}
 
 export function formatDate(): string {
   return new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })

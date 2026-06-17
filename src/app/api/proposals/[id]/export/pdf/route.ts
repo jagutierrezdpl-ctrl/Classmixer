@@ -4,6 +4,7 @@ import { getUserProfile } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import React from "react"
 import { Document, Page, Text, View, StyleSheet, renderToBuffer, Font } from "@react-pdf/renderer"
+import { PdfLogoRow } from "@/lib/pdf/shared"
 
 Font.register({
   family: "Helvetica",
@@ -56,7 +57,7 @@ const LEVEL_SHORT: Record<string, string> = {
 const GENDER_LABEL: Record<string, string> = { F: "F", M: "M", Otro: "O", "No especificado": "?" }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ProposalPDF({ proposal, classesList }: { proposal: any; classesList: Array<{ name: string; students: any[] }> }) {
+function ProposalPDF({ proposal, classesList, logoUrl }: { proposal: any; classesList: Array<{ name: string; students: any[] }>; logoUrl?: string | null }) {
   const totalStudents = classesList.reduce((s, c) => s + c.students.length, 0)
   const totalFemale = classesList.reduce((s, c) => s + c.students.filter((st: any) => st.gender === "F").length, 0)
   const totalMale = classesList.reduce((s, c) => s + c.students.filter((st: any) => st.gender === "M").length, 0)
@@ -72,6 +73,7 @@ function ProposalPDF({ proposal, classesList }: { proposal: any; classesList: Ar
     React.createElement(
       Page,
       { size: "A4", style: styles.page },
+      React.createElement(PdfLogoRow, { logoUrl }),
       // Header
       React.createElement(View, { style: styles.header },
         React.createElement(Text, { style: styles.title }, proposal.name ?? "Propuesta de distribución"),
@@ -208,6 +210,9 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const assignments: any[] = proposal.proposal_assignments ?? []
 
+  const { data: centerData } = await supabase.from("centers").select("logo_url").eq("id", profile.center_id).single()
+  const logoUrl = (centerData as any)?.logo_url as string | null | undefined
+
   // Group by class
   const classMap = new Map<string, any[]>()
   for (const a of assignments) {
@@ -220,7 +225,7 @@ export async function GET(
     .map(([name, students]) => ({ name, students }))
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buffer = await renderToBuffer(React.createElement(ProposalPDF, { proposal, classesList }) as any)
+  const buffer = await renderToBuffer(React.createElement(ProposalPDF, { proposal, classesList, logoUrl }) as any)
 
   const safeName = (proposal.name ?? "propuesta").replace(/[^a-z0-9]/gi, "-").toLowerCase()
 

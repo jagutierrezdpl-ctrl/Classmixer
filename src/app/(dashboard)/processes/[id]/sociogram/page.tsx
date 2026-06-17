@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
   Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert, ChevronDown,
-  CheckCircle2, ArrowRight, RefreshCw, Upload, Trash2, FileUp,
+  CheckCircle2, ArrowRight, RefreshCw, Upload, Trash2, FileUp, Printer,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -63,6 +63,95 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const [docsLoading, setDocsLoading] = useState(false)
   const [docUploading, setDocUploading] = useState(false)
   const [docError, setDocError] = useState<string | null>(null)
+  const [convivenciaData, setConvivenciaData] = useState<null | {
+    totalResponses: number
+    flagged: { name: string; current_class: string; signals: number }[]
+    categories: { code: string; label: string; total: number; topMentions: { name: string; current_class: string; count: number }[] }[]
+  }>(null)
+  const [convivenciaVisible, setConvivenciaVisible] = useState(false)
+  const [convivenciaLoading, setConvivenciaLoading] = useState(false)
+
+  function handlePrint() {
+    if (!aiSummary) return
+    const win = window.open("", "_blank", "width=900,height=700")
+    if (!win) return
+    const sections = aiSummary.split("\n").map(line => {
+      const clean = line.replace(/\*\*(.*?)\*\*/g, "$1").trim()
+      if (!clean) return "<br/>"
+      const isSection = /^(CONTEXTO SOCIOMÉTRICO|DIAGNÓSTICO|ALUMNOS (AISLADOS|CON|PRIORITARIOS|SIN)|GRUPOS CERRADOS|DISTRIBUCIÓN|CRITERIOS PARA|ALUMNOS RECHAZADOS|ALUMNOS CON POSICIÓN)/i.test(clean)
+      if (isSection) return `<h2 class="section">${clean}</h2>`
+      if (/^\d+\./.test(clean)) return `<p class="numbered">${clean}</p>`
+      if (clean.startsWith("•") || clean.startsWith("-")) return `<p class="bullet">${clean}</p>`
+      return `<p>${clean}</p>`
+    }).join("")
+
+    win.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Informe sociométrico</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Georgia', serif; font-size: 11pt; color: #1e293b; padding: 2cm; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e40af; padding-bottom: 12px; margin-bottom: 20px; }
+  .header-left h1 { font-size: 18pt; color: #1e40af; font-weight: bold; }
+  .header-left .meta { font-size: 9pt; color: #64748b; margin-top: 4px; }
+  .header-right { text-align: right; }
+  .classmixer-brand { font-size: 14pt; font-weight: bold; color: #1e40af; letter-spacing: -0.5px; }
+  .classmixer-sub { font-size: 7pt; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+  .confidential { display: inline-block; background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; font-size: 8pt; padding: 2px 8px; border-radius: 3px; margin-top: 6px; }
+  h2.section { font-size: 10pt; font-weight: bold; color: #1e293b; margin: 16px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.3px; }
+  p { font-size: 10pt; line-height: 1.55; margin-bottom: 3px; color: #334155; }
+  p.bullet { padding-left: 16px; }
+  p.numbered { padding-left: 16px; }
+  .footer { margin-top: 30px; padding-top: 8px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 8pt; color: #94a3b8; }
+  @media print {
+    body { padding: 1.5cm; }
+    .no-print { display: none; }
+    h2.section { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <h1>Informe sociométrico</h1>
+    <div class="meta">Generado el ${new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })}</div>
+    <div class="confidential">Confidencial — uso interno del equipo docente</div>
+  </div>
+  <div class="header-right">
+    <div class="classmixer-brand">ClassMixer</div>
+    <div class="classmixer-sub">Análisis sociométrico</div>
+  </div>
+</div>
+<div class="content">${sections}</div>
+<div class="footer">
+  <span>ClassMixer · Informe sociométrico · Confidencial</span>
+  <span>${new Date().toLocaleDateString("es-ES")}</span>
+</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`)
+    win.document.close()
+  }
+
+  async function handleConvivencia() {
+    if (convivenciaData) {
+      setConvivenciaVisible(true)
+      return
+    }
+    setConvivenciaLoading(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/convivencia`)
+      if (res.ok) {
+        const d = await res.json()
+        setConvivenciaData(d)
+        setConvivenciaVisible(true)
+      }
+    } finally {
+      setConvivenciaLoading(false)
+    }
+  }
 
   useEffect(() => {
     fetch(`/api/processes/${id}/sociogram`)
@@ -392,10 +481,16 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
           </DropdownMenu>
 
           {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50" asChild title="Informe de convivencia (muy sensible)">
-              <a href={`/api/processes/${id}/sociogram/export/pdf/convivencia`} download>
-                <ShieldAlert className="w-3.5 h-3.5" /> Convivencia
-              </a>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50"
+              title="Informe de convivencia (muy sensible)"
+              disabled={convivenciaLoading}
+              onClick={handleConvivencia}
+            >
+              {convivenciaLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+              Convivencia
             </Button>
           )}
 
@@ -407,6 +502,74 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
           )}
         </div>
       </div>
+
+      {/* Convivencia preview panel */}
+      {convivenciaVisible && convivenciaData && (
+        <div className="border-b bg-red-50 shrink-0 max-h-80 overflow-y-auto">
+          <div className="flex items-start justify-between gap-3 px-4 py-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-3">
+                <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                <span className="text-sm font-semibold text-red-800">Informe de convivencia</span>
+                <span className="text-xs text-red-500 bg-red-100 px-2 py-0.5 rounded">Muy sensible</span>
+                <a
+                  href={`/api/processes/${id}/sociogram/export/pdf/convivencia`}
+                  download
+                  className="ml-auto text-xs text-red-700 underline flex items-center gap-1"
+                >
+                  <Download className="w-3 h-3" /> Descargar PDF
+                </a>
+              </div>
+              <p className="text-xs text-red-700 mb-3 leading-relaxed">
+                Señales recogidas en el cuestionario. Son indicios para apoyar la revisión profesional, no un diagnóstico. Cualquier decisión debe tomarse con observación directa.
+              </p>
+              {/* Summary */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="bg-white border border-red-100 rounded p-2 text-center">
+                  <p className="text-lg font-bold text-red-700">{convivenciaData.totalResponses}</p>
+                  <p className="text-xs text-red-500">Señales totales</p>
+                </div>
+                <div className="bg-white border border-red-100 rounded p-2 text-center">
+                  <p className="text-lg font-bold text-red-700">{convivenciaData.flagged.length}</p>
+                  <p className="text-xs text-red-500">Alumnos a revisar (≥2)</p>
+                </div>
+              </div>
+              {/* Flagged students */}
+              {convivenciaData.flagged.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs font-semibold text-red-800 mb-1.5">Alumnos con más señales</p>
+                  <div className="space-y-1">
+                    {convivenciaData.flagged.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between bg-white border border-red-200 rounded px-2 py-1">
+                        <span className="text-xs text-red-900">{f.name} <span className="text-red-400">({f.current_class})</span></span>
+                        <span className="text-xs font-bold text-red-700">{f.signals} señal{f.signals !== 1 ? "es" : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Categories */}
+              {convivenciaData.categories.filter(c => c.total > 0).map(cat => (
+                <div key={cat.code} className="mb-2">
+                  <p className="text-xs font-semibold text-red-800 mb-1">{cat.label} <span className="font-normal text-red-500">({cat.total})</span></p>
+                  {cat.topMentions.slice(0, 5).map((m, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs text-red-700 py-0.5 border-b border-red-100 last:border-0">
+                      <span>{m.name} <span className="text-red-400">({m.current_class})</span></span>
+                      <span>{m.count}×</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {convivenciaData.totalResponses === 0 && (
+                <p className="text-xs text-red-600">Sin señales registradas para este proceso.</p>
+              )}
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setConvivenciaVisible(false)}>
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* AI Summary panel */}
       {aiSummary && aiSummaryVisible && (
@@ -434,6 +597,9 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 onClick={() => handleAISummary(true)}
               >
                 {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              </Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6" title="Imprimir informe" onClick={handlePrint}>
+                <Printer className="w-3.5 h-3.5" />
               </Button>
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAiSummaryVisible(false)}>
                 <X className="w-3.5 h-3.5" />
@@ -607,7 +773,7 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
         {data && (
           <div className="w-80 border-l bg-background overflow-hidden flex flex-col shrink-0">
             <Tabs defaultValue="metrics" className="flex flex-col h-full">
-              <TabsList className="rounded-none border-b w-full justify-start h-9 px-2 bg-muted/30 shrink-0 overflow-x-auto overflow-y-hidden flex-nowrap">
+              <TabsList className="rounded-none border-b w-full justify-start h-auto px-1.5 py-1 bg-muted/30 shrink-0 flex-wrap gap-y-0.5">
                 <TabsTrigger value="metrics" className="text-xs h-7 shrink-0">Métricas</TabsTrigger>
                 <TabsTrigger value="alerts" className="text-xs h-7 shrink-0">
                   Alertas
