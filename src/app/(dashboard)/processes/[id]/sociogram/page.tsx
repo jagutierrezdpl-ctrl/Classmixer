@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
   Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert, ChevronDown,
-  CheckCircle2, ArrowRight,
+  CheckCircle2, ArrowRight, RefreshCw,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -87,13 +87,14 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
 
   const hasActiveFilter = filter.classFilter || filter.showOnlyIsolated || filter.showOnlyReciprocal || (filter.relationType && filter.relationType !== "all")
 
-  async function handleAISummary() {
-    // If already generated, just toggle visibility
-    if (aiSummary) {
+  async function handleAISummary(force = false) {
+    if (aiSummary && !force) {
       setAiSummaryVisible(v => !v)
       return
     }
     setAiLoading(true)
+    setAiSummary(null)
+    setAiSummaryVisible(false)
     try {
       const res = await fetch(`/api/processes/${id}/sociogram/explain`, { method: "POST" })
       const json = await res.json()
@@ -370,7 +371,7 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
           )}
 
           {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
-            <Button size="sm" variant={aiSummary && aiSummaryVisible ? "secondary" : "outline"} className="h-7 text-xs gap-1.5" onClick={handleAISummary} disabled={aiLoading}>
+            <Button size="sm" variant={aiSummary && aiSummaryVisible ? "secondary" : "outline"} className="h-7 text-xs gap-1.5" onClick={() => handleAISummary()} disabled={aiLoading}>
               {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {aiSummary ? (aiSummaryVisible ? "Ocultar informe" : "Ver informe IA") : "Análisis IA"}
             </Button>
@@ -386,18 +387,29 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-violet-600" />
               <div className="text-sm text-violet-900 leading-relaxed min-w-0 flex-1">
                 {aiSummary.split("\n").map((line, i) => {
-                  const isSection = /^(DIAGNÓSTICO|ALUMNOS PRIORITARIOS|CRITERIOS PARA|OBSERVACIONES|PUNTOS DE|RECOMENDACIONES)/i.test(line.trim())
+                  const isSection = /^(CONTEXTO|DIAGNÓSTICO|ALUMNOS (AISLADOS|CON|PRIORITARIOS)|GRUPOS CERRADOS|DISTRIBUCIÓN|CRITERIOS PARA)/i.test(line.trim())
                   const clean = line.replace(/\*\*(.*?)\*\*/g, "$1").trim()
                   if (!clean) return <div key={i} className="h-2" />
                   if (isSection) return <p key={i} className="font-semibold text-violet-800 mt-3 mb-1 first:mt-0">{clean}</p>
+                  if (/^\d+\./.test(clean)) return <p key={i} className="ml-3">{clean}</p>
                   if (clean.startsWith("•") || clean.startsWith("-")) return <p key={i} className="ml-3">{clean}</p>
                   return <p key={i}>{clean}</p>
                 })}
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 mt-0.5" onClick={() => setAiSummaryVisible(false)}>
-              <X className="w-3.5 h-3.5" />
-            </Button>
+            <div className="flex flex-col gap-1 shrink-0 mt-0.5">
+              <Button
+                variant="ghost" size="icon" className="h-6 w-6"
+                title="Regenerar informe"
+                disabled={aiLoading}
+                onClick={() => handleAISummary(true)}
+              >
+                {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              </Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAiSummaryVisible(false)}>
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
       )}
