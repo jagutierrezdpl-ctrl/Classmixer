@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
   Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert, ChevronDown,
-  CheckCircle2, ArrowRight, RefreshCw,
+  CheckCircle2, ArrowRight, RefreshCw, Upload, Trash2, FileUp,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -59,6 +59,10 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const [aiLoading, setAiLoading] = useState(false)
   const [ruleCreating, setRuleCreating] = useState<string | null>(null)
   const [rulesCreated, setRulesCreated] = useState<Set<string>>(new Set())
+  const [docs, setDocs] = useState<{ id: string; name: string; original_filename: string; created_at: string }[]>([])
+  const [docsLoading, setDocsLoading] = useState(false)
+  const [docUploading, setDocUploading] = useState(false)
+  const [docError, setDocError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/processes/${id}/sociogram`)
@@ -70,6 +74,38 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
       })
       .finally(() => setLoading(false))
   }, [id])
+
+  function fetchDocs() {
+    setDocsLoading(true)
+    fetch(`/api/processes/${id}/documents`)
+      .then(r => r.json())
+      .then(d => setDocs(d.documents ?? []))
+      .finally(() => setDocsLoading(false))
+  }
+
+  async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ""
+    setDocUploading(true)
+    setDocError(null)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      form.append("name", file.name.replace(/\.pdf$/i, ""))
+      const res = await fetch(`/api/processes/${id}/documents`, { method: "POST", body: form })
+      const json = await res.json()
+      if (!res.ok) { setDocError(json.error ?? "Error al subir el documento"); return }
+      setDocs(prev => [json.document, ...prev])
+    } finally {
+      setDocUploading(false)
+    }
+  }
+
+  async function handleDocDelete(docId: string) {
+    await fetch(`/api/processes/${id}/documents/${docId}`, { method: "DELETE" })
+    setDocs(prev => prev.filter(d => d.id !== docId))
+  }
 
   const classes = data ? [...new Set(data.nodes.map(n => n.current_class))].sort() : []
 
@@ -462,13 +498,17 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               <div className="px-3 py-2 space-y-2">
                 {/* Role badges */}
                 <div className="flex flex-wrap gap-1">
-                  {selectedNode.is_isolated && <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Aislado</span>}
-                  {selectedNode.is_vulnerable && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold">Vulnerable</span>}
-                  {selectedNode.is_leader && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">Líder</span>}
+                  {/* CDC sociometric status badge */}
+                  {selectedNode.sociometric_status === "popular" && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">Popular</span>}
+                  {selectedNode.sociometric_status === "rechazado" && <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Rechazado</span>}
+                  {selectedNode.sociometric_status === "ignorado" && <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Ignorado</span>}
+                  {selectedNode.sociometric_status === "controvertido" && <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">Controvertido</span>}
+                  {selectedNode.sociometric_status === "promedio" && <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">Promedio</span>}
+                  {selectedNode.sociometric_status === "no_clasificado" && <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">No clasif.</span>}
+                  {/* Structural flags */}
                   {selectedNode.is_bridge && <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold">Puente</span>}
-                  {!selectedNode.is_isolated && !selectedNode.is_vulnerable && !selectedNode.is_leader && !selectedNode.is_bridge && (
-                    <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">Integrado</span>
-                  )}
+                  {selectedNode.is_isolated && <span className="px-1.5 py-0.5 rounded bg-red-200 text-red-800 font-semibold text-[10px]">0 recibidas</span>}
+                  {selectedNode.is_vulnerable && !selectedNode.is_isolated && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px]">Frágil</span>}
                 </div>
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-1 text-center">
@@ -483,6 +523,21 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                   <div className="bg-muted rounded p-1.5">
                     <p className="text-base font-bold">{selectedNode.reciprocal_count}</p>
                     <p className="text-muted-foreground">Recíprocas</p>
+                  </div>
+                </div>
+                {/* CDC indices row */}
+                <div className="grid grid-cols-3 gap-1 text-center">
+                  <div className="bg-muted/50 rounded p-1">
+                    <p className="font-semibold tabular-nums">{selectedNode.social_preference_z >= 0 ? "+" : ""}{selectedNode.social_preference_z}</p>
+                    <p className="text-muted-foreground text-[10px]">zSP</p>
+                  </div>
+                  <div className="bg-muted/50 rounded p-1">
+                    <p className="font-semibold tabular-nums">{selectedNode.social_impact_z >= 0 ? "+" : ""}{selectedNode.social_impact_z}</p>
+                    <p className="text-muted-foreground text-[10px]">zSI</p>
+                  </div>
+                  <div className="bg-muted/50 rounded p-1">
+                    <p className="font-semibold tabular-nums">{Math.round((selectedNode.reciprocity_rate ?? 0) * 100)}%</p>
+                    <p className="text-muted-foreground text-[10px]">Reciprocidad</p>
                   </div>
                 </div>
                 {/* Academic info */}
@@ -573,27 +628,75 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 <TabsTrigger value="nodes" className="text-xs h-7 shrink-0">Alumnos</TabsTrigger>
                 <TabsTrigger value="rankings" className="text-xs h-7 shrink-0">Rankings</TabsTrigger>
                 <TabsTrigger value="guide" className="text-xs h-7 shrink-0">Guía</TabsTrigger>
+                {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
+                  <TabsTrigger value="docs" className="text-xs h-7 shrink-0" onClick={fetchDocs}>
+                    Docs IA
+                    {docs.length > 0 && <span className="ml-1 bg-violet-100 text-violet-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">{docs.length}</span>}
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               {/* Métricas tab */}
               <TabsContent value="metrics" className="flex-1 overflow-y-auto p-3 mt-0 space-y-3">
-                {/* Global stats */}
-                <div className="grid grid-cols-2 gap-2">
+                {/* CDC status counts */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">Estatus sociométrico CDC</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { label: "Populares", value: data.metrics.popular_count, color: "text-amber-600" },
+                      { label: "Controvertidos", value: data.metrics.controversial_count, color: "text-purple-600" },
+                      { label: "Ignorados", value: data.metrics.neglected_count, color: "text-red-600", warn: true },
+                      { label: "Rechazados", value: data.metrics.rejected_count, color: "text-red-700", warn: true },
+                      { label: "Promedio", value: data.metrics.average_count, color: "text-green-600" },
+                      { label: "Sin clasif.", value: data.nodes.filter(n => n.sociometric_status === "no_clasificado").length, color: "text-gray-400" },
+                    ].map(item => (
+                      <Card key={item.label} className="p-2">
+                        <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                        <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
+                      </Card>
+                    ))}
+                  </div>
+                  {!data.metrics.has_rejection_data && (
+                    <p className="text-[10px] text-muted-foreground mt-1">* Sin pregunta negativa activa — Rechazado no disponible</p>
+                  )}
+                </div>
+                {/* Formal group indices */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">Índices grupales (CIVSOC)</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { label: "Cohesión CG", value: `${(data.metrics.group_cohesion * 100).toFixed(1)}%`, good: data.metrics.group_cohesion >= 0.1 },
+                      { label: "Disociación DG", value: `${(data.metrics.group_dissociation * 100).toFixed(1)}%`, warn: data.metrics.group_dissociation > 0.02 },
+                      { label: "Coherencia CoG", value: `${(data.metrics.group_coherence * 100).toFixed(1)}%` },
+                      { label: "Intensidad IG", value: data.metrics.group_intensity.toFixed(1) },
+                      { label: "Densidad red", value: `${(data.metrics.density * 100).toFixed(1)}%` },
+                      { label: "Pares recíprocos", value: data.metrics.reciprocal_pairs, good: true },
+                    ].map(item => (
+                      <Card key={item.label} className="p-2">
+                        <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                        <p className={`text-lg font-bold ${item.good ? "text-green-600" : item.warn ? "text-orange-500" : ""}`}>{item.value}</p>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+                {/* Structural stats */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">Estructura y riesgo</p>
+                  <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: "Aislados", value: data.metrics.isolated_count, danger: data.metrics.isolated_count > 0 },
-                    { label: "Vulnerables", value: data.metrics.vulnerable_count, warn: data.metrics.vulnerable_count > 0 },
-                    { label: "Líderes", value: data.metrics.leaders_count, good: true },
+                    { label: "Sin nominaciones", value: data.metrics.isolated_count, danger: data.metrics.isolated_count > 0 },
+                    { label: "Posición frágil", value: data.metrics.vulnerable_count, warn: data.metrics.vulnerable_count > 0 },
                     { label: "Puentes", value: data.metrics.bridges_count, info: true },
                     { label: "Comunidades", value: data.metrics.communities_count },
-                    { label: "Pares recíprocos", value: data.metrics.reciprocal_pairs, good: true },
                   ].map(item => (
                     <Card key={item.label} className="p-3">
                       <p className="text-xs text-muted-foreground">{item.label}</p>
-                      <p className={`text-xl font-bold mt-0.5 ${item.danger ? "text-red-600" : item.warn ? "text-orange-500" : item.good ? "text-green-600" : item.info ? "text-indigo-600" : ""}`}>
+                      <p className={`text-xl font-bold mt-0.5 ${item.danger ? "text-red-600" : item.warn ? "text-orange-500" : item.info ? "text-indigo-600" : ""}`}>
                         {item.value}
                       </p>
                     </Card>
                   ))}
+                </div>
                 </div>
 
                 {/* Density and cohesion bars */}
@@ -1049,34 +1152,49 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               <TabsContent value="guide" className="flex-1 overflow-y-auto p-3 mt-0 space-y-4 text-xs">
 
                 <section>
-                  <p className="font-semibold text-sm mb-2">Tipos de alumno</p>
+                  <p className="font-semibold text-sm mb-1">Estatus sociométrico CDC</p>
+                  <p className="text-muted-foreground mb-2">Clasificación científica basada en el algoritmo de Coie, Dodge y Coppotelli (1982) mediante z-scores de preferencia social (zSP) e impacto social (zSI).</p>
                   <div className="space-y-2.5">
                     <div className="flex gap-2">
                       <span className="text-lg leading-none shrink-0">⭐</span>
                       <div>
-                        <p className="font-medium">Líder social</p>
-                        <p className="text-muted-foreground">Recibe muchas elecciones de compañeros. Alta centralidad. Tiene influencia en el grupo y conecta con varios subgrupos.</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-lg leading-none shrink-0">🔗</span>
-                      <div>
-                        <p className="font-medium">Alumno puente</p>
-                        <p className="text-muted-foreground">Conecta dos o más comunidades distintas. Su presencia es clave para la cohesión global del grupo. Si se aísla, subgrupos quedan desconectados.</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-lg leading-none shrink-0">⚠️</span>
-                      <div>
-                        <p className="font-medium">Alumno vulnerable</p>
-                        <p className="text-muted-foreground">Solo tiene una conexión significativa. Si se separa de ese compañero (p.ej. en la mezcla de clases), quedaría sin vínculos. Requiere atención especial.</p>
+                        <p className="font-medium">Popular <span className="text-muted-foreground font-normal">(zSP&gt;1, zLM&gt;0, zLL&lt;0)</span></p>
+                        <p className="text-muted-foreground">Alto agrado neto y bajo rechazo. Recurso clave de integración social. Distribuir entre clases como facilitadores prosociales.</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <span className="text-lg leading-none shrink-0">🔴</span>
                       <div>
-                        <p className="font-medium">Alumno aislado</p>
-                        <p className="text-muted-foreground">Sin elecciones recibidas o sin ninguna relación recíproca. No pertenece a ningún subgrupo visible. Puede indicar exclusión o dificultades de integración.</p>
+                        <p className="font-medium">Rechazado <span className="text-muted-foreground font-normal">(zSP&lt;-1, zLM&lt;0, zLL&gt;0)</span></p>
+                        <p className="text-muted-foreground">Bajo agrado neto con rechazo activo. Dos subtipos: reactivo/agresivo (externalizante) o pasivo/víctima (internalizante). Requiere intervención psicoeducativa.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">👻</span>
+                      <div>
+                        <p className="font-medium">Ignorado <span className="text-muted-foreground font-normal">(zSI&lt;-1, zLM&lt;0, zLL&lt;0)</span></p>
+                        <p className="text-muted-foreground">Baja visibilidad social — no despierta ni simpatía ni antipatía. Pasa desapercibido. Estimular participación mediante actividades cooperativas.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">⚡</span>
+                      <div>
+                        <p className="font-medium">Controvertido <span className="text-muted-foreground font-normal">(zSI&gt;1, zLM&gt;0, zLL&gt;0)</span></p>
+                        <p className="text-muted-foreground">Alto impacto social pero polarizador: muy elegido y muy rechazado a la vez. Liderazgo activo con comportamientos dominantes. Máximo uno por clase nueva.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">✅</span>
+                      <div>
+                        <p className="font-medium">Promedio <span className="text-muted-foreground font-normal">(|zSP|≤0.5, |zSI|≤0.5)</span></p>
+                        <p className="text-muted-foreground">Posición social típica dentro del grupo. Adaptación social adecuada.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-lg leading-none shrink-0">🔗</span>
+                      <div>
+                        <p className="font-medium">Puente <span className="text-muted-foreground font-normal">(alta intermediación)</span></p>
+                        <p className="text-muted-foreground">Conecta comunidades distintas. Su reubicación puede fragmentar la cohesión grupal. Distribuir en clases distintas para preservar conectividad.</p>
                       </div>
                     </div>
                   </div>
@@ -1085,27 +1203,35 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 <div className="border-t" />
 
                 <section>
-                  <p className="font-semibold text-sm mb-2">Métricas individuales</p>
+                  <p className="font-semibold text-sm mb-2">Índices individuales</p>
                   <div className="space-y-2">
                     <div>
-                      <p className="font-medium">Elecciones recibidas</p>
-                      <p className="text-muted-foreground">Cuántos compañeros han elegido a este alumno. El tamaño del nodo en el grafo lo representa.</p>
+                      <p className="font-medium">Elecciones recibidas (LM)</p>
+                      <p className="text-muted-foreground">Nominaciones positivas recibidas. El tamaño del nodo en el grafo lo representa. Base del índice de Popularidad.</p>
                     </div>
                     <div>
                       <p className="font-medium">Elecciones realizadas</p>
-                      <p className="text-muted-foreground">Cuántos compañeros ha elegido este alumno. No implica reciprocidad.</p>
+                      <p className="text-muted-foreground">Expansividad positiva — cuántos compañeros ha elegido. Alta expansividad sin reciprocidad puede indicar vínculos unilaterales.</p>
                     </div>
                     <div>
-                      <p className="font-medium">Relaciones recíprocas</p>
-                      <p className="text-muted-foreground">Elecciones mutuas: A elige a B y B elige a A. Son los vínculos más sólidos y los más importantes para preservar en la mezcla.</p>
+                      <p className="font-medium">Relaciones recíprocas (Re)</p>
+                      <p className="text-muted-foreground">Elecciones mutuas. Los vínculos más estables y más importantes para preservar en la mezcla de clases.</p>
                     </div>
                     <div>
-                      <p className="font-medium">Centralidad</p>
-                      <p className="text-muted-foreground">Importancia del alumno dentro de la red. Un valor alto significa que está bien conectado con alumnos que a su vez están bien conectados.</p>
+                      <p className="font-medium">zSP — Preferencia Social</p>
+                      <p className="text-muted-foreground">z-score de (zLM − zLL). Mide el agrado neto del alumno en el grupo. Positivo = más querido que rechazado. Negativo = al revés.</p>
                     </div>
                     <div>
-                      <p className="font-medium">Intermediación</p>
-                      <p className="text-muted-foreground">Mide cuántas veces el alumno actúa como paso entre otros dos. Alta intermediación = posible alumno puente.</p>
+                      <p className="font-medium">zSI — Impacto Social</p>
+                      <p className="text-muted-foreground">z-score de (zLM + zLL). Mide la visibilidad general. Alto SI = el alumno no pasa desapercibido, sea positivo o negativo.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Reciprocidad %</p>
+                      <p className="text-muted-foreground">Proporción de elecciones recibidas que son correspondidas. Un 0% con muchas recibidas indica vínculos unilaterales.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Intermediación (betweenness)</p>
+                      <p className="text-muted-foreground">Índice de Poder (IP) — cuántas veces el alumno actúa como puente obligado entre otros compañeros. Alta intermediación = alumno puente.</p>
                     </div>
                   </div>
                 </section>
@@ -1113,19 +1239,27 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 <div className="border-t" />
 
                 <section>
-                  <p className="font-semibold text-sm mb-2">Métricas de grupo</p>
+                  <p className="font-semibold text-sm mb-2">Índices grupales (CIVSOC)</p>
                   <div className="space-y-2">
                     <div>
-                      <p className="font-medium">Cohesión</p>
-                      <p className="text-muted-foreground">Nivel de conexión global del grupo. Alta cohesión = grupo bien integrado. Baja = muchos alumnos desconectados o subgrupos cerrados.</p>
+                      <p className="font-medium">CG — Cohesión Grupal</p>
+                      <p className="text-muted-foreground">Pares de amistad recíprocas / pares posibles. Mide la densidad de vínculos consolidados. ≥15% = buena; 8–15% = moderada; &lt;8% = baja.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">DG — Disociación Grupal</p>
+                      <p className="text-muted-foreground">Pares de rechazo mutuo / pares posibles. Mide el nivel de hostilidad estructurada en el aula. Requiere pregunta negativa activa.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">CoG — Coherencia Grupal</p>
+                      <p className="text-muted-foreground">Proporción de elecciones emitidas que encuentran reciprocidad. Alta coherencia = el grupo corresponde sus afectos.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">IG — Intensidad Grupal</p>
+                      <p className="text-muted-foreground">Total de nominaciones (positivas + negativas) dividido entre N. Mide la expresividad relacional media del grupo.</p>
                     </div>
                     <div>
                       <p className="font-medium">Densidad de red</p>
-                      <p className="text-muted-foreground">Porcentaje de relaciones existentes sobre el total posible. Un grupo de 30 alumnos podría tener 870 relaciones posibles; la densidad indica cuántas existen.</p>
-                    </div>
-                    <div>
-                      <p className="font-medium">Reciprocidad</p>
-                      <p className="text-muted-foreground">Porcentaje de elecciones que son mutuas sobre el total de elecciones. Un grupo con alta reciprocidad tiene relaciones más estables.</p>
+                      <p className="text-muted-foreground">Relaciones existentes / relaciones posibles. Un grupo de 30 alumnos tiene 870 relaciones posibles; la densidad indica cuántas existen en cualquier dirección.</p>
                     </div>
                   </div>
                 </section>
@@ -1205,6 +1339,58 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                   El sociograma es una herramienta orientativa. Los datos deben interpretarse siempre en contexto y con criterio docente. No sustituye la observación directa del equipo educativo.
                 </p>
 
+              </TabsContent>
+
+              {/* Docs IA tab */}
+              <TabsContent value="docs" className="flex-1 overflow-y-auto p-3 mt-0 space-y-3 text-xs">
+                <div>
+                  <p className="font-semibold text-sm mb-1">Contexto IA</p>
+                  <p className="text-muted-foreground">Sube PDFs (normativas, informes previos, orientaciones del centro) para que la IA los tenga en cuenta al generar el análisis.</p>
+                </div>
+
+                <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${docUploading ? "opacity-50 pointer-events-none" : "hover:border-violet-400 hover:bg-violet-50"}`}>
+                  {docUploading
+                    ? <><Loader2 className="w-4 h-4 animate-spin text-violet-600" /><span className="text-violet-700">Procesando PDF…</span></>
+                    : <><FileUp className="w-4 h-4 text-muted-foreground" /><span className="text-muted-foreground">Subir PDF</span></>
+                  }
+                  <input type="file" accept=".pdf" className="hidden" onChange={handleDocUpload} disabled={docUploading} />
+                </label>
+
+                {docError && (
+                  <p className="text-red-600 bg-red-50 border border-red-200 rounded p-2">{docError}</p>
+                )}
+
+                {docsLoading && <p className="text-muted-foreground">Cargando…</p>}
+
+                {docs.length === 0 && !docsLoading && (
+                  <p className="text-muted-foreground text-center py-4">No hay documentos todavía.</p>
+                )}
+
+                <div className="space-y-2">
+                  {docs.map(doc => (
+                    <div key={doc.id} className="flex items-start gap-2 p-2 rounded border bg-card">
+                      <FileText className="w-4 h-4 shrink-0 text-violet-500 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{doc.name}</p>
+                        <p className="text-muted-foreground truncate">{doc.original_filename}</p>
+                        <p className="text-muted-foreground">{new Date(doc.created_at).toLocaleDateString("es-ES")}</p>
+                      </div>
+                      <Button
+                        variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground hover:text-red-600"
+                        onClick={() => handleDocDelete(doc.id)}
+                        title="Eliminar documento"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                {docs.length > 0 && (
+                  <p className="text-muted-foreground text-center text-[11px]">
+                    {docs.length} documento{docs.length !== 1 ? "s" : ""} · se incluirán en el próximo análisis IA
+                  </p>
+                )}
               </TabsContent>
             </Tabs>
           </div>

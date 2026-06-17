@@ -309,6 +309,9 @@ export interface AuditLog {
 
 // ─── Sociogram types ──────────────────────────────────────────────────────────
 
+// CDC sociometric status (Coie, Dodge & Coppotelli, 1982)
+export type SociometricStatus = "popular" | "rechazado" | "ignorado" | "controvertido" | "promedio" | "no_clasificado"
+
 export interface SociogramNode {
   id: string
   label: string
@@ -323,10 +326,17 @@ export interface SociogramNode {
   received_count: number
   given_count: number
   reciprocal_count: number
+  rejection_received_count: number   // LL: negative nominations received
   centrality: number
   betweenness: number
   isolation_score: number
   community_id?: number
+  // CDC indices
+  sociometric_status: SociometricStatus
+  social_preference_z: number        // zSP = zLM − zLL
+  social_impact_z: number            // zSI = zLM + zLL
+  reciprocity_rate: number           // Re/Se — proportion of received that are reciprocated
+  // Derived flags (kept for backward compat with mixing algorithm & UI)
   is_isolated: boolean
   is_vulnerable: boolean
   is_leader: boolean
@@ -371,6 +381,18 @@ export interface SociogramData {
     reciprocal_pairs: number
     density: number
     cohesion: number
+    // CDC status counts
+    popular_count: number
+    rejected_count: number
+    neglected_count: number
+    controversial_count: number
+    average_count: number
+    // Formal group indices (CIVSOC)
+    group_cohesion: number       // CG — reciprocal positive pairs / possible pairs
+    group_dissociation: number   // DG — mutual rejection pairs / possible pairs
+    group_coherence: number      // CoG — reciprocated nominations / total nominations
+    group_intensity: number      // IG — total nominations per student
+    has_rejection_data: boolean  // whether negative nominations were collected
   }
 }
 

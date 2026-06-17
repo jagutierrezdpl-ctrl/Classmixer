@@ -144,6 +144,16 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
         if (f.showOnlyIsolated) visibleNodes = visibleNodes.filter(n => n.is_isolated || n.is_vulnerable)
         const visibleIds = new Set(visibleNodes.map(n => n.id))
 
+        // Track which first names appear more than once so we can disambiguate with last initial
+        const firstNameCount = new Map<string, number>()
+        for (const n of visibleNodes) firstNameCount.set(n.first_name, (firstNameCount.get(n.first_name) ?? 0) + 1)
+        function nodeLabel(n: SociogramNode): string {
+          if ((firstNameCount.get(n.first_name) ?? 1) > 1 && n.last_name) {
+            return `${n.first_name} ${n.last_name.charAt(0).toUpperCase()}.`
+          }
+          return n.first_name
+        }
+
         let visibleEdges = data.edges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target))
         if (f.showOnlyReciprocal) visibleEdges = visibleEdges.filter(e => e.is_reciprocal)
         if (f.relationType !== "all") visibleEdges = visibleEdges.filter(e => e.relation_type === f.relationType)
@@ -156,7 +166,7 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
             return {
               data: {
                 id: node.id,
-                label: node.first_name,
+                label: nodeLabel(node),
                 node,
                 bgColor: getNodeColor(node),
                 size,

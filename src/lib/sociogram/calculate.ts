@@ -1,6 +1,6 @@
-import type { Student, Response, SociogramData, SociogramNode, SociogramEdge, SociogramAlert, SociogramCommunity } from "@/types"
+import type { Student, Response, SociogramData, SociogramNode, SociogramEdge, SociogramAlert, SociogramCommunity, SociometricStatus } from "@/types"
 
-// Union-Find: communities from reciprocal friendship edges
+// ── Union-Find: communities from reciprocal friendship edges ──────────────────
 function buildCommunities(nodeIds: string[], reciprocalEdges: { a: string; b: string }[]): Map<string, number> {
   const parent = new Map(nodeIds.map(n => [n, n]))
 
@@ -17,7 +17,6 @@ function buildCommunities(nodeIds: string[], reciprocalEdges: { a: string; b: st
     if (pa !== pb) parent.set(pa, pb)
   }
 
-  // Count members per root, sort by size desc → sequential IDs
   const rootCount = new Map<string, number>()
   for (const n of nodeIds) rootCount.set(find(n), (rootCount.get(find(n)) ?? 0) + 1)
   const sorted = [...rootCount.entries()].sort((a, b) => b[1] - a[1])
@@ -28,7 +27,7 @@ function buildCommunities(nodeIds: string[], reciprocalEdges: { a: string; b: st
   return result
 }
 
-// Brandes algorithm — betweenness centrality on undirected graph
+// ── Brandes algorithm — normalised betweenness centrality ─────────────────────
 function computeBetweenness(nodeIds: string[], adj: Map<string, Set<string>>): Map<string, number> {
   const cb = new Map<string, number>(nodeIds.map(n => [n, 0]))
 
@@ -69,47 +68,86 @@ function computeBetweenness(nodeIds: string[], adj: Map<string, Set<string>>): M
   return cb
 }
 
+// ── Statistical helpers ───────────────────────────────────────────────────────
+function mean(arr: number[]): number {
+  return arr.length === 0 ? 0 : arr.reduce((s, v) => s + v, 0) / arr.length
+}
+
+function stddev(arr: number[], mu: number): number {
+  const variance = arr.reduce((s, v) => s + (v - mu) ** 2, 0) / Math.max(arr.length - 1, 1)
+  return Math.sqrt(variance)
+}
+
+function toZScores(arr: number[]): number[] {
+  const mu = mean(arr)
+  const sd = stddev(arr, mu)
+  if (sd === 0) return arr.map(() => 0)
+  return arr.map(v => (v - mu) / sd)
+}
+
+// ── CDC classification (Coie, Dodge & Coppotelli, 1982) ───────────────────────
+// Without rejection data we can still classify Popular/Ignorado/Promedio
+function cdcClassify(zSP: number, zSI: number, zLM: number, zLL: number, hasRejectionData: boolean): SociometricStatus {
+  if (zSP > 1.0 && zLM > 0.0 && (!hasRejectionData || zLL < 0.0)) return "popular"
+  if (hasRejectionData && zSP < -1.0 && zLM < 0.0 && zLL > 0.0) return "rechazado"
+  if (zSI < -1.0 && zLM < 0.0 && (!hasRejectionData || zLL < 0.0)) return "ignorado"
+  if (hasRejectionData && zSI > 1.0 && zLM > 0.0 && zLL > 0.0) return "controvertido"
+  if (Math.abs(zSP) <= 0.5 && Math.abs(zSI) <= 0.5) return "promedio"
+  return "no_clasificado"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export function calculateSociogram(
   students: Student[],
   rawResponses: Response[],
   friendshipLike: string[] = ["friendship"],
-  excludedFromGraph: string[] = []
+  excludedFromGraph: string[] = [],
+  negativeLike: string[] = ["negative"]
 ): SociogramData {
-  // Tipos como nominación de roles o convivencia/acoso se recogen para sus propios
-  // informes (dashboard de respuestas, informe de convivencia) pero no deben mezclarse
-  // visualmente con las relaciones del sociograma ni alterar centralidad/densidad.
   const responses = excludedFromGraph.length > 0
     ? rawResponses.filter(r => !excludedFromGraph.includes(r.relation_type))
     : rawResponses
 
   const nodeIds = students.map(s => s.id)
-  const isFriendshipLike = (relationType: string) => friendshipLike.includes(relationType)
+  const isFriendshipLike = (rt: string) => friendshipLike.includes(rt)
+  const isNegativeLike   = (rt: string) => negativeLike.includes(rt)
 
-  const received = new Map<string, number>(nodeIds.map(n => [n, 0]))
-  const given = new Map<string, number>(nodeIds.map(n => [n, 0]))
+  // ── Nomination counts ─────────────────────────────────────────────────────
+  const received  = new Map<string, number>(nodeIds.map(n => [n, 0]))  // LM: positive received
+  const given     = new Map<string, number>(nodeIds.map(n => [n, 0]))
   const reciprocal = new Map<string, number>(nodeIds.map(n => [n, 0]))
+  const rejRecv   = new Map<string, number>(nodeIds.map(n => [n, 0]))  // LL: rejection received
+  const rejGiven  = new Map<string, number>(nodeIds.map(n => [n, 0]))
+  const rejRecipr = new Map<string, number>(nodeIds.map(n => [n, 0]))
 
   const friendshipResponses = responses.filter(r => isFriendshipLike(r.relation_type))
+  const negativeResponses   = responses.filter(r => isNegativeLike(r.relation_type))
+
   const friendshipSet = new Set(friendshipResponses.map(r => `${r.respondent_student_id}→${r.target_student_id}`))
+  const negativeSet   = new Set(negativeResponses.map(r => `${r.respondent_student_id}→${r.target_student_id}`))
 
   for (const r of friendshipResponses) {
     given.set(r.respondent_student_id, (given.get(r.respondent_student_id) ?? 0) + 1)
     received.set(r.target_student_id, (received.get(r.target_student_id) ?? 0) + 1)
   }
+  for (const r of negativeResponses) {
+    rejGiven.set(r.respondent_student_id, (rejGiven.get(r.respondent_student_id) ?? 0) + 1)
+    rejRecv.set(r.target_student_id, (rejRecv.get(r.target_student_id) ?? 0) + 1)
+  }
 
-  // Build deduplicated edges, marking reciprocal
+  // ── Build edges ───────────────────────────────────────────────────────────
   const edges: SociogramEdge[] = []
   const addedEdges = new Set<string>()
   for (const r of responses) {
-    const isReciprocal = isFriendshipLike(r.relation_type) && friendshipSet.has(`${r.target_student_id}→${r.respondent_student_id}`)
+    const isRecip = isFriendshipLike(r.relation_type) && friendshipSet.has(`${r.target_student_id}→${r.respondent_student_id}`)
     const key = [r.respondent_student_id, r.target_student_id].sort().join("—") + r.relation_type
     if (!addedEdges.has(key)) {
       addedEdges.add(key)
-      edges.push({ id: r.id, source: r.respondent_student_id, target: r.target_student_id, relation_type: r.relation_type, weight: r.weight, is_reciprocal: isReciprocal })
+      edges.push({ id: r.id, source: r.respondent_student_id, target: r.target_student_id, relation_type: r.relation_type, weight: r.weight, is_reciprocal: isRecip })
     }
   }
 
-  // Count reciprocal per student
+  // Count reciprocal friendship pairs per student (Re)
   for (const e of edges) {
     if (e.is_reciprocal && isFriendshipLike(e.relation_type)) {
       reciprocal.set(e.source, (reciprocal.get(e.source) ?? 0) + 1)
@@ -117,7 +155,22 @@ export function calculateSociogram(
     }
   }
 
-  // Undirected adjacency for betweenness (all relation types)
+  // Count mutual rejection pairs (Rr) — for group dissociation index
+  let mutualRejectionPairs = 0
+  const countedRejPairs = new Set<string>()
+  for (const r of negativeResponses) {
+    if (negativeSet.has(`${r.target_student_id}→${r.respondent_student_id}`)) {
+      const key = [r.respondent_student_id, r.target_student_id].sort().join("—")
+      if (!countedRejPairs.has(key)) {
+        countedRejPairs.add(key)
+        mutualRejectionPairs++
+        rejRecipr.set(r.respondent_student_id, (rejRecipr.get(r.respondent_student_id) ?? 0) + 1)
+        rejRecipr.set(r.target_student_id, (rejRecipr.get(r.target_student_id) ?? 0) + 1)
+      }
+    }
+  }
+
+  // ── Undirected adjacency for betweenness ──────────────────────────────────
   const adjAll = new Map<string, Set<string>>(nodeIds.map(n => [n, new Set()]))
   for (const r of responses) {
     adjAll.get(r.respondent_student_id)?.add(r.target_student_id)
@@ -128,33 +181,66 @@ export function calculateSociogram(
     ? computeBetweenness(nodeIds, adjAll)
     : new Map(nodeIds.map(n => [n, 0]))
 
-  // Communities via Union-Find on reciprocal friendship edges
+  // ── Communities (Union-Find on reciprocal friendship edges) ───────────────
   const reciprocalEdgePairs = edges
     .filter(e => e.is_reciprocal && isFriendshipLike(e.relation_type))
     .map(e => ({ a: e.source, b: e.target }))
   const communityMap = buildCommunities(nodeIds, reciprocalEdgePairs)
 
-  const maxDegree = Math.max(...nodeIds.map(n => (received.get(n) ?? 0) + (given.get(n) ?? 0)), 1)
+  // ── CDC Algorithm (Coie, Dodge & Coppotelli, 1982) ────────────────────────
+  const N = students.length
+  const hasRejectionData = negativeResponses.length > 0
+
+  const lmArr = nodeIds.map(id => received.get(id) ?? 0)   // LM vector
+  const llArr = nodeIds.map(id => rejRecv.get(id) ?? 0)    // LL vector
+
+  const zLMArr = toZScores(lmArr)
+  const zLLArr = hasRejectionData ? toZScores(llArr) : lmArr.map(() => 0)
+
+  const spArr = nodeIds.map((_, i) => zLMArr[i] - zLLArr[i])  // SP = zLM - zLL
+  const siArr = nodeIds.map((_, i) => zLMArr[i] + zLLArr[i])  // SI = zLM + zLL
+
+  const zSPArr = toZScores(spArr)
+  const zSIArr = toZScores(siArr)
+
+  // ── Bridge threshold ──────────────────────────────────────────────────────
   const maxBetweenness = Math.max(...[...betweenness.values()], 0.001)
   const bridgeThreshold = maxBetweenness * 0.15
+  const maxDegree = Math.max(...nodeIds.map(n => (received.get(n) ?? 0) + (given.get(n) ?? 0)), 1)
 
-  const nodes: SociogramNode[] = students.map(s => {
-    const recvCount = received.get(s.id) ?? 0
-    const givenCount = given.get(s.id) ?? 0
-    const reciprocalCount = reciprocal.get(s.id) ?? 0
-    const btwn = betweenness.get(s.id) ?? 0
-    const degree = recvCount + givenCount
-    const centrality = degree / maxDegree
+  // ── Build nodes ───────────────────────────────────────────────────────────
+  const nodes: SociogramNode[] = students.map((s, i) => {
+    const recvCount    = received.get(s.id) ?? 0
+    const givenCount   = given.get(s.id) ?? 0
+    const recipCount   = reciprocal.get(s.id) ?? 0
+    const rejRcvCount  = rejRecv.get(s.id) ?? 0
+    const btwn         = betweenness.get(s.id) ?? 0
+    const degree       = recvCount + givenCount
+    const centrality   = degree / maxDegree
 
-    const isIsolated = recvCount === 0 && reciprocalCount === 0
-    const isVulnerable = !isIsolated && reciprocalCount === 1
+    const zLM = zLMArr[i]
+    const zLL = zLLArr[i]
+    const zSP = zSPArr[i]
+    const zSI = zSIArr[i]
 
-    // Leader: many choices received AND high centrality
-    const isLeader = recvCount >= 4 && centrality >= 0.35
+    const status = cdcClassify(zSP, zSI, zLM, zLL, hasRejectionData)
 
-    // Bridge: high betweenness AND neighbors span multiple communities
+    // Backward-compat flags (drive mixing algorithm & UI colours)
+    // is_isolated → "ignorado" (invisible) OR truly zero received
+    const isIsolated = recvCount === 0
+    // is_vulnerable → rejected OR fragile position (low visibility, no reciprocals)
+    const isVulnerable = !isIsolated && (
+      status === "rechazado" ||
+      (recipCount === 0 && recvCount <= 3) ||
+      (recipCount === 1 && recvCount <= 2)
+    )
+    // is_leader → popular OR controversial (high social impact)
+    const isLeader = status === "popular" || status === "controvertido" || (recvCount >= 4 && centrality >= 0.35)
+
     const neighborCommunities = new Set([...(adjAll.get(s.id) ?? new Set())].map(nb => communityMap.get(nb)))
     const isBridge = btwn > bridgeThreshold && neighborCommunities.size >= 2
+
+    const reciprocityRate = recvCount > 0 ? recipCount / recvCount : 0
 
     return {
       id: s.id,
@@ -169,11 +255,16 @@ export function calculateSociogram(
       needs_type: s.needs_type,
       received_count: recvCount,
       given_count: givenCount,
-      reciprocal_count: reciprocalCount,
+      reciprocal_count: recipCount,
+      rejection_received_count: rejRcvCount,
       centrality: Math.round(centrality * 1000) / 1000,
       betweenness: Math.round(btwn * 1000) / 1000,
       isolation_score: isIsolated ? 1 : isVulnerable ? 0.5 : 0,
       community_id: communityMap.get(s.id) ?? 0,
+      sociometric_status: status,
+      social_preference_z: Math.round(zSP * 100) / 100,
+      social_impact_z: Math.round(zSI * 100) / 100,
+      reciprocity_rate: Math.round(reciprocityRate * 100) / 100,
       is_isolated: isIsolated,
       is_vulnerable: isVulnerable,
       is_leader: isLeader,
@@ -181,7 +272,7 @@ export function calculateSociogram(
     }
   })
 
-  // Build community structures with closed-subgroup detection
+  // ── Community structures ──────────────────────────────────────────────────
   const commMembers = new Map<number, string[]>()
   for (const n of nodes) {
     const cid = n.community_id ?? 0
@@ -207,28 +298,50 @@ export function calculateSociogram(
   }
   communities.sort((a, b) => b.size - a.size)
 
-  // Alerts
+  // ── Alerts ────────────────────────────────────────────────────────────────
   const alerts: SociogramAlert[] = []
-  const isolated = nodes.filter(n => n.is_isolated)
-  const vulnerable = nodes.filter(n => n.is_vulnerable)
-  const bridges = nodes.filter(n => n.is_bridge)
+  const isolated    = nodes.filter(n => n.is_isolated)
+  const vulnerable  = nodes.filter(n => n.is_vulnerable && !n.is_isolated)
+  const bridges     = nodes.filter(n => n.is_bridge)
   const closedGroups = communities.filter(c => c.is_closed && c.size >= 4)
 
   if (isolated.length > 0)
     alerts.push({ type: "isolated", severity: "high", student_ids: isolated.map(n => n.id), message: `${isolated.length} alumno(s) sin ninguna relación social detectada` })
   if (vulnerable.length > 0)
-    alerts.push({ type: "vulnerable", severity: "medium", student_ids: vulnerable.map(n => n.id), message: `${vulnerable.length} alumno(s) con una única relación recíproca (riesgo de exclusión)` })
+    alerts.push({ type: "vulnerable", severity: "medium", student_ids: vulnerable.map(n => n.id), message: `${vulnerable.length} alumno(s) con posición social frágil (riesgo de exclusión)` })
   closedGroups.forEach(g =>
     alerts.push({ type: "closed_group", severity: "medium", student_ids: g.members, message: `Subgrupo cerrado de ${g.size} alumnos con escasas conexiones externas` })
   )
   if (bridges.length > 0)
     alerts.push({ type: "bridge", severity: "low", student_ids: bridges.map(n => n.id), message: `${bridges.length} alumno(s) puente detectado(s) — clave para la cohesión del grupo` })
 
-  // Global metrics
-  const n = students.length
-  const density = n > 1 ? responses.length / (n * (n - 1)) : 0
+  // ── Formal group indices (CIVSOC — Fernández-Ballesteros, 1995) ───────────
+  const possiblePairs = N > 1 ? N * (N - 1) / 2 : 1
   const reciprocalEdges = edges.filter(e => e.is_reciprocal && isFriendshipLike(e.relation_type))
+
+  // CG — Group Cohesion: reciprocal positive pairs / possible pairs
+  const groupCohesion = reciprocalEdges.length / possiblePairs
+
+  // DG — Group Dissociation: mutual rejection pairs / possible pairs
+  const groupDissociation = mutualRejectionPairs / possiblePairs
+
+  // CoG — Group Coherence: reciprocated nominations / total nominations given
+  // (what proportion of outgoing choices find reciprocity)
+  const groupCoherence = friendshipResponses.length > 0
+    ? (reciprocalEdges.length * 2) / friendshipResponses.length
+    : 0
+
+  // IG — Group Intensity: total active nominations (positive + negative) per student
+  const groupIntensity = N > 0
+    ? (friendshipResponses.length + negativeResponses.length) / N
+    : 0
+
+  // Legacy density & cohesion (kept for backward compat)
+  const density = N > 1 ? responses.length / (N * (N - 1)) : 0
   const cohesion = friendshipResponses.length > 0 ? reciprocalEdges.length / friendshipResponses.length : 0
+
+  // CDC status counts
+  const statusCounts = (status: SociometricStatus) => nodes.filter(n => n.sociometric_status === status).length
 
   return {
     nodes,
@@ -236,15 +349,25 @@ export function calculateSociogram(
     alerts,
     communities,
     metrics: {
-      total_students: n,
+      total_students: N,
       isolated_count: isolated.length,
       vulnerable_count: vulnerable.length,
-      leaders_count: nodes.filter(nd => nd.is_leader).length,
+      leaders_count: nodes.filter(n => n.is_leader).length,
       bridges_count: bridges.length,
       communities_count: communities.length,
       reciprocal_pairs: reciprocalEdges.length,
       density: Math.round(density * 1000) / 1000,
       cohesion: Math.round(cohesion * 1000) / 1000,
+      popular_count: statusCounts("popular"),
+      rejected_count: statusCounts("rechazado"),
+      neglected_count: statusCounts("ignorado"),
+      controversial_count: statusCounts("controvertido"),
+      average_count: statusCounts("promedio"),
+      group_cohesion: Math.round(groupCohesion * 1000) / 1000,
+      group_dissociation: Math.round(groupDissociation * 1000) / 1000,
+      group_coherence: Math.round(groupCoherence * 1000) / 1000,
+      group_intensity: Math.round(groupIntensity * 100) / 100,
+      has_rejection_data: hasRejectionData,
     },
   }
 }
