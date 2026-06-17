@@ -12,7 +12,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import type { AlgorithmProfile, AlgorithmWeights } from "@/types"
-import { WEIGHT_PROFILES, DEFAULT_WEIGHTS, WEIGHT_LABELS } from "@/lib/algorithm/weights"
+import { WEIGHT_PROFILES, DEFAULT_WEIGHTS, WEIGHT_LABELS, WEIGHT_TOOLTIPS } from "@/lib/algorithm/weights"
 import { DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
 import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
 
@@ -273,7 +273,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
               const isModified = profile === "personalizado" && weights[key] !== WEIGHT_PROFILES[baseProfile][key]
               return (
                 <div key={key} className={isModified ? "rounded-lg bg-blue-50 p-3 -m-3" : ""}>
-                  <div className="flex justify-between items-center mb-2">
+                  <div className="flex justify-between items-center mb-1">
                     <label className={`text-sm font-medium ${isModified ? "text-blue-800" : ""}`}>
                       {WEIGHT_LABELS[key]}
                       {isModified && (
@@ -286,6 +286,9 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
                       {weights[key]}
                     </span>
                   </div>
+                  <p className={`text-xs leading-snug mb-2 ${isModified ? "text-blue-600/80" : "text-muted-foreground"}`}>
+                    {WEIGHT_TOOLTIPS[key]}
+                  </p>
                   <Slider
                     min={0}
                     max={100}

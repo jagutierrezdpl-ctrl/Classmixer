@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react"
 import type { SociogramData, SociogramNode } from "@/types"
 
 export type SociogramColorBy = "class" | "gender" | "level" | "community" | "isolation" | "behavior"
@@ -64,7 +64,7 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
     const containerRef = useRef<HTMLDivElement>(null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cyRef = useRef<any>(null)
-    const [selectedNode, setSelectedNode] = useState<SociogramNode | null>(null)
+
 
     const classes = [...new Set(data.nodes.map(n => n.current_class))].sort()
     const classColorMap = Object.fromEntries(classes.map((c, i) => [c, CLASS_PALETTE[i % CLASS_PALETTE.length]]))
@@ -263,7 +263,6 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         cy.on("tap", "node", (evt: any) => {
           const nodeData = evt.target.data("node") as SociogramNode
-          setSelectedNode(nodeData)
           onNodeClick?.(nodeData)
 
           // Highlight neighbourhood — dim everything else
@@ -275,7 +274,6 @@ export const SociogramGraph = forwardRef<SociogramGraphHandle, SociogramGraphPro
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         cy.on("tap", (evt: any) => {
           if (evt.target === cy) {
-            setSelectedNode(null)
             onNodeClick?.(null)
             cy.elements().style({ opacity: 1 })
           }

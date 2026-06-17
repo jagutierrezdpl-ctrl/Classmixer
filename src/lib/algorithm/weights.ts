@@ -65,3 +65,16 @@ export const WEIGHT_LABELS: Record<keyof AlgorithmWeights, string> = {
   behavior: "Distribución de conducta",
   special_needs: "Distribución de necesidades",
 }
+
+export const WEIGHT_TOOLTIPS: Record<keyof AlgorithmWeights, string> = {
+  conflicts: "Penaliza si dos alumnos con regla 'no juntar' acaban en la misma clase. A 100, es casi una restricción dura.",
+  avoid_isolation: "Recompensa que cada alumno tenga al menos un amigo elegido en su nueva clase. Especialmente importante para alumnos vulnerables.",
+  reciprocal_friendships: "Recompensa preservar parejas de amistad mutua (A eligió a B y B eligió a A). Son los vínculos más fuertes.",
+  chosen_friendships: "Recompensa mantener cualquier elección de amistad, aunque no sea recíproca. Más flexible que el anterior.",
+  work_relations: "Recompensa que los alumnos que trabajan bien juntos compartan clase. Útil para proyectos y cooperativo.",
+  academic_balance: "Penaliza diferencias de nota media entre clases. A 100, las clases tendrán notas casi idénticas.",
+  gender_balance: "Penaliza desequilibrios de género entre clases. A 100, la proporción de chicos/chicas será casi igual en todas.",
+  group_mix: "Penaliza que muchos alumnos de la misma clase de origen acaben juntos. Favorece la mezcla real entre grupos.",
+  behavior: "Penaliza concentrar alumnos con conducta difícil o de seguimiento en una sola clase. Los reparte entre todas.",
+  special_needs: "Penaliza concentrar alumnos con necesidades educativas en una sola clase. Los distribuye equitativamente.",
+}

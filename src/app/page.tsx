@@ -117,11 +117,18 @@ export default function LandingPage() {
             ClassMixer combina sociogramas interactivos, datos académicos y criterios pedagógicos
             para distribuir el alumnado de forma equilibrada, transparente y revisable.
           </p>
-          <Button size="lg" className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/20 border-0 h-12 px-8 text-base" asChild>
-            <Link href="/login">
-              Acceder a la plataforma <ArrowRight className="w-4 h-4" />
-            </Link>
-          </Button>
+          <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
+            <Button size="lg" className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/20 border-0 h-12 px-8 text-base" asChild>
+              <Link href="/login">
+                Acceder a la plataforma <ArrowRight className="w-4 h-4" />
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" className="h-12 px-8 text-base border-gray-200 text-gray-700 hover:bg-gray-50" asChild>
+              <Link href="/demo">
+                <Network className="w-4 h-4" /> Ver demo interactiva
+              </Link>
+            </Button>
+          </div>
         </div>
       </section>
 
