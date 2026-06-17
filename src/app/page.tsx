@@ -2,7 +2,8 @@ import Link from "next/link"
 import {
   GraduationCap, Network, BarChart3, Shield, Users, Zap,
   CheckCircle, ArrowRight, FileSpreadsheet,
-  Brain, ClipboardList, Lock, Sparkles,
+  Brain, ClipboardList, Lock, Sparkles, AlertTriangle,
+  TableProperties, UserCheck, BookOpen, Eye,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import SociogramIllustration from "@/components/landing/SociogramIllustration"
@@ -68,6 +69,69 @@ const STATS = [
   { value: "100%", label: "supervisión humana en cada decisión" },
 ]
 
+const BEFORE_AFTER = [
+  {
+    before: "Hojas de cálculo sin visibilidad social",
+    after: "Sociograma interactivo con alertas automáticas",
+  },
+  {
+    before: "Criterios subjetivos sin documentar",
+    after: "Reglas pedagógicas explícitas con prioridad",
+  },
+  {
+    before: "Una propuesta de mezcla sin métricas",
+    after: "Varias propuestas comparadas con puntuación",
+  },
+  {
+    before: "Alumnos aislados descubiertos semanas después",
+    after: "Detección automática antes de la mezcla",
+  },
+  {
+    before: "Revisión manual sin saber el impacto",
+    after: "Editor con impacto en tiempo real al mover alumnos",
+  },
+  {
+    before: "Sin trazabilidad de las decisiones tomadas",
+    after: "Auditoría completa de cada acción del equipo",
+  },
+]
+
+const ROLES = [
+  {
+    icon: UserCheck,
+    role: "Director / Jefe de estudios",
+    color: "indigo",
+    benefits: [
+      "Crea y supervisa todos los procesos de mezcla",
+      "Aprueba la distribución final con un clic",
+      "Exporta informes ejecutivos en PDF",
+      "Ve el historial de decisiones del equipo",
+    ],
+  },
+  {
+    icon: Eye,
+    role: "Orientador",
+    color: "violet",
+    benefits: [
+      "Acceso completo al sociograma con datos sensibles",
+      "Alertas de aislamiento y vulnerabilidad",
+      "Informe de convivencia por alumno",
+      "Registro automático de cada acceso",
+    ],
+  },
+  {
+    icon: BookOpen,
+    role: "Tutor",
+    color: "emerald",
+    benefits: [
+      "Ve solo los alumnos de sus grupos",
+      "Añade observaciones y reglas entre alumnos",
+      "Revisa las propuestas de su clase",
+      "Descarga el listado final con un clic",
+    ],
+  },
+]
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -81,9 +145,14 @@ export default function LandingPage() {
             </div>
             <span className="font-bold text-lg tracking-tight">ClassMixer</span>
           </div>
+          <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
+            <a href="#como-funciona" className="hover:text-gray-900 transition-colors">Cómo funciona</a>
+            <a href="#sociograma" className="hover:text-gray-900 transition-colors">Sociograma</a>
+            <a href="#roles" className="hover:text-gray-900 transition-colors">Para quién</a>
+          </nav>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" className="text-gray-500 hover:text-gray-900" asChild>
-              <Link href="/login">Iniciar sesión</Link>
+            <Button variant="ghost" className="text-gray-500 hover:text-gray-900 hidden sm:flex" asChild>
+              <Link href="/demo">Ver demo</Link>
             </Button>
             <Button className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 border-0" asChild>
               <Link href="/login">
@@ -96,15 +165,14 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="relative overflow-hidden bg-white">
-        {/* Subtle gradient blob */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-indigo-50 rounded-full blur-[80px] opacity-80" />
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-6 py-16 text-center">
+        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-12 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 font-medium mb-8">
             <Sparkles className="w-3.5 h-3.5" />
-            Sociograma + algoritmo de mezcla para centros educativos
+            Diseñado para equipos docentes, no para ingenieros
           </div>
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 max-w-4xl mx-auto leading-[1.08] text-gray-900">
             Mezcla clases con{" "}
@@ -117,7 +185,7 @@ export default function LandingPage() {
             ClassMixer combina sociogramas interactivos, datos académicos y criterios pedagógicos
             para distribuir el alumnado de forma equilibrada, transparente y revisable.
           </p>
-          <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
+          <div className="flex flex-col sm:flex-row items-center gap-3 justify-center mb-14">
             <Button size="lg" className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/20 border-0 h-12 px-8 text-base" asChild>
               <Link href="/login">
                 Acceder a la plataforma <ArrowRight className="w-4 h-4" />
@@ -128,6 +196,20 @@ export default function LandingPage() {
                 <Network className="w-4 h-4" /> Ver demo interactiva
               </Link>
             </Button>
+          </div>
+
+          {/* Pain point callout */}
+          <div className="max-w-3xl mx-auto rounded-2xl border border-amber-200 bg-amber-50 p-5 text-left flex gap-4">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-900 mb-1">
+                ¿Tu equipo sigue repartiendo alumnos en hojas de cálculo?
+              </p>
+              <p className="text-sm text-amber-700 leading-relaxed">
+                Sin datos sociales, sin detección de alumnos aislados y sin forma de comparar
+                alternativas — hasta que llega ClassMixer.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -145,7 +227,7 @@ export default function LandingPage() {
       </section>
 
       {/* Steps */}
-      <section className="max-w-6xl mx-auto px-6 py-14">
+      <section id="como-funciona" className="max-w-6xl mx-auto px-6 py-14">
         <div className="text-center mb-10">
           <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Flujo de trabajo</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">¿Cómo funciona?</h2>
@@ -169,42 +251,118 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Sociogram illustration */}
+      {/* Before / After */}
       <section className="bg-gray-50 border-y py-14">
-        <div className="max-w-4xl mx-auto px-6">
-          <div className="text-center mb-8">
-            <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Sociograma</p>
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Antes y después</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Entiende las relaciones antes de mezclar
+              Lo que cambia con ClassMixer
             </h2>
             <p className="text-gray-500 max-w-xl mx-auto">
-              El sociograma detecta automáticamente líderes, alumnos puente, subgrupos y
-              alumnos en riesgo de aislamiento — antes de tomar ninguna decisión.
+              De decisiones intuitivas basadas en experiencia a propuestas fundamentadas en datos.
             </p>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
-            <SociogramIllustration />
+          <div className="rounded-2xl border border-gray-200 overflow-hidden bg-white shadow-sm">
+            <div className="grid grid-cols-2 text-sm font-semibold">
+              <div className="px-5 py-3 bg-red-50 text-red-700 border-b border-gray-200 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" /> Sin ClassMixer
+              </div>
+              <div className="px-5 py-3 bg-green-50 text-green-700 border-b border-gray-200 border-l flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" /> Con ClassMixer
+              </div>
+            </div>
+            {BEFORE_AFTER.map((row, i) => (
+              <div key={i} className={`grid grid-cols-2 text-sm ${i < BEFORE_AFTER.length - 1 ? "border-b border-gray-100" : ""}`}>
+                <div className="px-5 py-3.5 text-gray-500 flex items-start gap-2.5">
+                  <span className="text-red-400 font-bold shrink-0 mt-0.5">✗</span>
+                  {row.before}
+                </div>
+                <div className="px-5 py-3.5 text-gray-700 border-l border-gray-100 flex items-start gap-2.5">
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
+                  {row.after}
+                </div>
+              </div>
+            ))}
           </div>
+        </div>
+      </section>
+
+      {/* Sociogram illustration */}
+      <section id="sociograma" className="max-w-4xl mx-auto px-6 py-14">
+        <div className="text-center mb-8">
+          <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Sociograma</p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+            Entiende las relaciones antes de mezclar
+          </h2>
+          <p className="text-gray-500 max-w-xl mx-auto">
+            El sociograma detecta automáticamente líderes, alumnos puente, subgrupos y
+            alumnos en riesgo de aislamiento — antes de tomar ninguna decisión.
+          </p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+          <SociogramIllustration />
         </div>
       </section>
 
       {/* Dashboard Preview Charts */}
-      <section className="max-w-6xl mx-auto px-6 py-14">
-        <div className="text-center mb-8">
-          <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Analítica</p>
+      <section className="bg-gray-50 border-y py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-8">
+            <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Analítica</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              Compara propuestas con métricas reales
+            </h2>
+            <p className="text-gray-500 max-w-xl mx-auto">
+              Radar de equilibrio multidimensional, comparativa académica por clase y seguimiento de participación — todo en tiempo real.
+            </p>
+          </div>
+          <ProposalPreviewChart />
+          <p className="text-center text-xs text-gray-400 mt-4">Datos de muestra. En la plataforma se muestran los datos reales de tu centro.</p>
+        </div>
+      </section>
+
+      {/* For whom */}
+      <section id="roles" className="max-w-6xl mx-auto px-6 py-14">
+        <div className="text-center mb-10">
+          <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Para quién</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Compara propuestas con métricas reales
+            Cada rol, su propia experiencia
           </h2>
           <p className="text-gray-500 max-w-xl mx-auto">
-            Radar de equilibrio multidimensional, comparativa académica por clase y seguimiento de participación — todo en tiempo real.
+            Acceso diferenciado según el rol. Cada perfil ve lo que necesita y solo lo que puede ver.
           </p>
         </div>
-        <ProposalPreviewChart />
-        <p className="text-center text-xs text-gray-400 mt-4">Datos de muestra. En la plataforma se muestran los datos reales de tu centro.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {ROLES.map(r => {
+            const colorMap: Record<string, { bg: string; border: string; text: string; icon: string }> = {
+              indigo: { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-700", icon: "bg-indigo-100 text-indigo-600" },
+              violet: { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-700", icon: "bg-violet-100 text-violet-600" },
+              emerald: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", icon: "bg-emerald-100 text-emerald-600" },
+            }
+            const c = colorMap[r.color]
+            return (
+              <div key={r.role} className={`rounded-2xl border ${c.border} ${c.bg} p-6`}>
+                <div className={`w-10 h-10 rounded-xl ${c.icon} flex items-center justify-center mb-4`}>
+                  <r.icon className="w-5 h-5" />
+                </div>
+                <h3 className={`font-bold text-gray-900 mb-4 text-lg`}>{r.role}</h3>
+                <ul className="space-y-2.5">
+                  {r.benefits.map(b => (
+                    <li key={b} className="flex items-start gap-2.5 text-sm text-gray-600">
+                      <CheckCircle className={`w-4 h-4 ${c.text} shrink-0 mt-0.5`} />
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
       </section>
 
       {/* Features grid */}
-      <section className="bg-white border-y py-14">
+      <section className="bg-gray-50 border-y py-14">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-10">
             <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Funcionalidades</p>
@@ -310,17 +468,24 @@ export default function LandingPage() {
         <div className="absolute inset-0 pointer-events-none opacity-10"
           style={{ backgroundImage: "linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px)", backgroundSize: "40px 40px" }}
         />
-        <div className="relative max-w-2xl mx-auto px-6 text-center">
+        <div className="relative max-w-3xl mx-auto px-6 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">¿Listo para empezar?</h2>
-          <p className="text-indigo-200 mb-8 leading-relaxed">
+          <p className="text-indigo-200 mb-8 leading-relaxed max-w-xl mx-auto">
             Accede a la plataforma con las credenciales de tu centro.
             Si no tienes acceso, contacta con tu administrador.
           </p>
-          <Button size="lg" className="bg-white text-indigo-600 hover:bg-indigo-50 border-0 h-12 px-10 text-base font-semibold shadow-xl" asChild>
-            <Link href="/login">
-              Iniciar sesión <ArrowRight className="w-4 h-4" />
-            </Link>
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button size="lg" className="bg-white text-indigo-600 hover:bg-indigo-50 border-0 h-12 px-10 text-base font-semibold shadow-xl" asChild>
+              <Link href="/login">
+                Iniciar sesión <ArrowRight className="w-4 h-4" />
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" className="h-12 px-8 text-base border-white/30 text-white hover:bg-white/10 bg-transparent" asChild>
+              <Link href="/demo">
+                <TableProperties className="w-4 h-4" /> Ver demo interactiva
+              </Link>
+            </Button>
+          </div>
         </div>
       </section>
 
