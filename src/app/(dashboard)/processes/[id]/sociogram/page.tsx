@@ -373,13 +373,13 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
 
       {/* AI Summary panel */}
       {aiSummary && (
-        <div className="border-b bg-violet-50 px-4 py-3 text-sm text-violet-900 shrink-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-2">
+        <div className="border-b bg-violet-50 shrink-0 max-h-64 overflow-y-auto">
+          <div className="flex items-start justify-between gap-3 px-4 py-3">
+            <div className="flex items-start gap-2 min-w-0">
               <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-violet-600" />
-              <div className="whitespace-pre-line leading-relaxed">{aiSummary}</div>
+              <div className="text-sm text-violet-900 whitespace-pre-line leading-relaxed">{aiSummary}</div>
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setAiSummary(null)}>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 sticky top-3" onClick={() => setAiSummary(null)}>
               <X className="w-3.5 h-3.5" />
             </Button>
           </div>
