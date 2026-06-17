@@ -241,19 +241,43 @@ export async function POST(
       docs.map(d => `### ${d.name}\n${d.content_markdown.slice(0, 3000)}`).join("\n\n")
     : ""
 
-  // Optional: use LLM only for a brief 2-sentence qualitative context paragraph
+  // Optional: LLM writes a qualitative contextualisation paragraph grounded in CDC/CIVSOC
   const apiKey = (center as { openrouter_api_key?: string | null } | null)?.openrouter_api_key
   if (apiKey) {
     try {
-      const cohPct = (sg.metrics.group_cohesion * 100).toFixed(1)
+      const cohPct   = (sg.metrics.group_cohesion * 100).toFixed(1)
+      const m        = sg.metrics
       const isolated = sg.nodes.filter(n => n.is_isolated)
+      const rejected = sg.nodes.filter(n => n.sociometric_status === "rechazado")
+      const ignored  = sg.nodes.filter(n => n.sociometric_status === "ignorado")
+      const popular  = sg.nodes.filter(n => n.sociometric_status === "popular")
+      const controversial = sg.nodes.filter(n => n.sociometric_status === "controvertido")
+
+      const cdcSummary = [
+        m.popular_count > 0     && `${m.popular_count} popular${m.popular_count > 1 ? "es" : ""}`,
+        m.rejected_count > 0    && `${m.rejected_count} rechazado${m.rejected_count > 1 ? "s" : ""}`,
+        m.neglected_count > 0   && `${m.neglected_count} ignorado${m.neglected_count > 1 ? "s" : ""}`,
+        m.controversial_count > 0 && `${m.controversial_count} controvertido${m.controversial_count > 1 ? "s" : ""}`,
+        isolated.length > 0     && `${isolated.length} sin ninguna nominación recibida`,
+      ].filter(Boolean).join(", ")
+
       const docNote = docs.length > 0
-        ? ` Ten en cuenta el contexto adicional del centro aportado al final del mensaje.`
+        ? " Al final del mensaje encontrarás documentos de contexto del centro; tenlos en cuenta si son relevantes."
         : ""
+
       const narrativePrompt =
-        `En 2 frases concisas y directas, describe la dinámica social de este grupo escolar de ${sg.nodes.length} alumnos que tiene una cohesión del ${cohPct}%, ${isolated.length} alumnos completamente aislados y ${sg.communities.length} subgrupos detectados. Sin recomendaciones, solo descripción del estado social actual. En español.${docNote}${docContext}`
+        `Redacta un párrafo de contexto clínico (4-6 frases) para el informe sociométrico de este grupo de ${sg.nodes.length} alumnos. ` +
+        `Datos clave: CG=${cohPct}% (cohesión grupal IAg), densidad red=${(m.density * 100).toFixed(1)}%, ` +
+        `${sg.communities.length} comunidades detectadas (${sg.communities.filter(c => c.is_closed).length} cerradas), ` +
+        `distribución CDC: ${cdcSummary || "sin clasificación diferenciada"}. ` +
+        `${rejected.length > 0 ? `Hay ${rejected.length} alumno(s) rechazado(s) activos — menciona explícitamente la diferencia protocolar con los ignorados. ` : ""}` +
+        `${popular.length > 0 || controversial.length > 0 ? `Hay ${popular.length + controversial.length} figura(s) de alto impacto social (populares y controvertidos). ` : ""}` +
+        `Describe el clima social real del grupo usando terminología CDC/CIVSOC. ` +
+        `No repitas los datos numéricos literalmente; interprétalos. No hagas recomendaciones de mezcla (eso va en el informe). En español.` +
+        docNote + docContext
+
       const narrative = await generateAISummary(narrativePrompt, apiKey)
-      return NextResponse.json({ summary: `CONTEXTO\n${narrative.trim()}\n\n${report}` })
+      return NextResponse.json({ summary: `CONTEXTO SOCIOMÉTRICO\n${narrative.trim()}\n\n${report}` })
     } catch {
       // Fall through to return just the programmatic report
     }
