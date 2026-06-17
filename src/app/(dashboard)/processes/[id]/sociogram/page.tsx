@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
-  Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert, ChevronDown
+  Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert, ChevronDown,
+  CheckCircle2, ArrowRight,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -55,6 +56,8 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const [canSeeSensitive, setCanSeeSensitive] = useState(false)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
+  const [ruleCreating, setRuleCreating] = useState<string | null>(null)
+  const [rulesCreated, setRulesCreated] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetch(`/api/processes/${id}/sociogram`)
@@ -118,6 +121,95 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   }
 
   const nodeMap = data ? new Map(data.nodes.map(n => [n.id, n])) : new Map<string, SociogramNode>()
+
+  async function createSuggestedRule(key: string, ruleType: string, studentIds: string[], description: string) {
+    setRuleCreating(key)
+    try {
+      const res = await fetch(`/api/processes/${id}/rules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule_type: ruleType, priority: "high", description, student_ids: studentIds, active: true }),
+      })
+      if (res.ok) setRulesCreated(prev => new Set([...prev, key]))
+    } finally {
+      setRuleCreating(null)
+    }
+  }
+
+  // Compute smart rule suggestions from sociogram data
+  const ruleSuggestions = data ? (() => {
+    const suggestions: { key: string; type: string; label: string; reason: string; studentIds: string[]; ruleType: string }[] = []
+
+    // 1. Isolated students — suggest protect_vulnerable
+    const isolated = data.nodes.filter(n => n.is_isolated)
+    for (const n of isolated.slice(0, 5)) {
+      suggestions.push({
+        key: `protect_${n.id}`,
+        type: "protect",
+        label: `Proteger a ${n.first_name} ${n.last_name}`,
+        reason: "Sin elecciones recibidas — garantizar al menos un vínculo",
+        studentIds: [n.id],
+        ruleType: "protect_vulnerable",
+      })
+    }
+
+    // 2. Vulnerable students — suggest protect_vulnerable
+    const vulnerable = data.nodes.filter(n => n.is_vulnerable && !n.is_isolated)
+    for (const n of vulnerable.slice(0, 3)) {
+      suggestions.push({
+        key: `vuln_${n.id}`,
+        type: "protect",
+        label: `Proteger vínculo de ${n.first_name} ${n.last_name}`,
+        reason: "Solo 1 conexión — mantener al menos un amigo en su nueva clase",
+        studentIds: [n.id],
+        ruleType: "protect_vulnerable",
+      })
+    }
+
+    // 3. Closed groups — suggest max_from_group
+    for (const comm of data.communities.filter(c => c.is_closed && c.size >= 4).slice(0, 2)) {
+      suggestions.push({
+        key: `group_${comm.id}`,
+        type: "split",
+        label: `Repartir Grupo ${comm.id + 1} (${comm.size} alumnos)`,
+        reason: "Subgrupo cerrado — evitar que vayan todos juntos",
+        studentIds: comm.members,
+        ruleType: "max_from_group",
+      })
+    }
+
+    // 4. Strong reciprocal pairs not in suggestions yet — suggest keep_together
+    const reciprocalPairs: { ids: [string, string]; names: string }[] = []
+    const seen = new Set<string>()
+    for (const edge of data.edges) {
+      if (edge.relation_type !== "friendship") continue
+      const reverse = data.edges.find(e => e.source === edge.target && e.target === edge.source && e.relation_type === "friendship")
+      if (!reverse) continue
+      const pairKey = [edge.source, edge.target].sort().join("_")
+      if (seen.has(pairKey)) continue
+      seen.add(pairKey)
+      const a = nodeMap.get(edge.source)
+      const b = nodeMap.get(edge.target)
+      if (a && b) reciprocalPairs.push({ ids: [edge.source, edge.target], names: `${a.first_name} y ${b.first_name}` })
+    }
+    // Only suggest keep_together for the top pairs involving isolated/vulnerable students
+    for (const pair of reciprocalPairs) {
+      const aNode = nodeMap.get(pair.ids[0])
+      const bNode = nodeMap.get(pair.ids[1])
+      if (aNode?.is_isolated || bNode?.is_isolated || aNode?.is_vulnerable || bNode?.is_vulnerable) {
+        suggestions.push({
+          key: `keep_${pair.ids.join("_")}`,
+          type: "keep",
+          label: `Mantener juntos a ${pair.names}`,
+          reason: "Relación recíproca — uno de ellos es aislado o vulnerable",
+          studentIds: pair.ids,
+          ruleType: "should_keep_together",
+        })
+      }
+    }
+
+    return suggestions.slice(0, 10)
+  })() : []
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -445,6 +537,10 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                   Alertas
                   {data.alerts.length > 0 && <span className="ml-1 bg-orange-100 text-orange-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">{data.alerts.length}</span>}
                 </TabsTrigger>
+                <TabsTrigger value="suggestions" className="text-xs h-7">
+                  Reglas
+                  {ruleSuggestions.length > 0 && <span className="ml-1 bg-indigo-100 text-indigo-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">{ruleSuggestions.length}</span>}
+                </TabsTrigger>
                 <TabsTrigger value="groups" className="text-xs h-7">Grupos</TabsTrigger>
                 <TabsTrigger value="nodes" className="text-xs h-7">Alumnos</TabsTrigger>
                 <TabsTrigger value="rankings" className="text-xs h-7">Rankings</TabsTrigger>
@@ -590,6 +686,67 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Sugerencias de reglas tab */}
+              <TabsContent value="suggestions" className="flex-1 overflow-y-auto p-3 mt-0">
+                {ruleSuggestions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    No hay sugerencias de reglas
+                    <p className="text-xs mt-1">El sociograma no detecta patrones que requieran reglas especiales</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Sugerencias basadas en el análisis del sociograma. Puedes crear estas reglas directamente desde aquí.
+                    </p>
+                    {ruleSuggestions.map(s => {
+                      const created = rulesCreated.has(s.key)
+                      const creating = ruleCreating === s.key
+                      const typeColor = s.type === "protect" ? "bg-orange-50 border-orange-200" : s.type === "keep" ? "bg-green-50 border-green-200" : "bg-indigo-50 border-indigo-200"
+                      const badge = s.type === "protect" ? "text-orange-700 bg-orange-100" : s.type === "keep" ? "text-green-700 bg-green-100" : "text-indigo-700 bg-indigo-100"
+                      return (
+                        <div key={s.key} className={`border rounded-lg p-3 text-xs ${created ? "opacity-60 bg-muted" : typeColor}`}>
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <p className="font-semibold text-foreground leading-snug">{s.label}</p>
+                            <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${badge}`}>
+                              {s.type === "protect" ? "Proteger" : s.type === "keep" ? "Mantener" : "Separar"}
+                            </span>
+                          </div>
+                          <p className="text-muted-foreground mb-2">{s.reason}</p>
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {s.studentIds.slice(0, 6).map(sid => {
+                              const n = nodeMap.get(sid)
+                              return n ? (
+                                <span key={sid} className="bg-white/80 border rounded px-1.5 py-0.5">{n.first_name}</span>
+                              ) : null
+                            })}
+                            {s.studentIds.length > 6 && <span className="text-muted-foreground">+{s.studentIds.length - 6}</span>}
+                          </div>
+                          {created ? (
+                            <p className="text-green-600 font-medium flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Regla creada
+                            </p>
+                          ) : (
+                            <button
+                              onClick={() => createSuggestedRule(s.key, s.ruleType, s.studentIds, s.label)}
+                              disabled={creating}
+                              className="text-xs px-2.5 py-1 rounded border bg-white hover:bg-muted/60 font-medium transition-colors disabled:opacity-50"
+                            >
+                              {creating ? "Creando…" : "Crear regla"}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                    <div className="pt-1">
+                      <a href={`/processes/${id}/rules`} className="text-xs text-primary hover:underline flex items-center gap-1">
+                        Ver todas las reglas <ArrowRight className="w-3 h-3" />
+                      </a>
+                    </div>
                   </div>
                 )}
               </TabsContent>

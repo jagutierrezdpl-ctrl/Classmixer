@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare, FileText } from "lucide-react"
+import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare, FileText, ArrowRight, AlertTriangle, CheckCircle2 } from "lucide-react"
 import ProcessActions from "./ProcessActions"
 import ProcessTeam from "./ProcessTeam"
 import { ProcessStepper } from "@/components/processes/ProcessStepper"
@@ -132,6 +132,109 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
 
       {/* Progress stepper */}
       <ProcessStepper processId={id} steps={stepperSteps} />
+
+      {/* Smart Next Step Banner */}
+      {(() => {
+        if (approved) return (
+          <div className="mb-6 rounded-xl border border-green-300 bg-green-50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-sm text-green-900">Proceso completado — distribución aprobada</p>
+                <p className="text-xs text-green-700 mt-0.5">Puedes exportar las clases finales, los informes PDF y los listados para tutores.</p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" asChild className="shrink-0 border-green-400 text-green-800 hover:bg-green-100">
+              <Link href={`/processes/${id}/proposals`}>Ver propuesta <ArrowRight className="w-3 h-3 ml-1" /></Link>
+            </Button>
+          </div>
+        )
+        if ((studentCount ?? 0) === 0) return (
+          <div className="mb-6 rounded-xl border-2 border-blue-200 bg-blue-50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">1</div>
+              <div>
+                <p className="font-semibold text-sm text-blue-900">Empieza importando el alumnado</p>
+                <p className="text-xs text-blue-700 mt-0.5">Sube un Excel con los datos del alumnado para comenzar el proceso.</p>
+              </div>
+            </div>
+            <Button size="sm" asChild className="shrink-0 bg-blue-600 hover:bg-blue-700">
+              <Link href={`/processes/${id}/students`}>Importar alumnos <ArrowRight className="w-3 h-3 ml-1" /></Link>
+            </Button>
+          </div>
+        )
+        if ((totalTokens ?? 0) === 0) return (
+          <div className="mb-6 rounded-xl border-2 border-blue-200 bg-blue-50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">2</div>
+              <div>
+                <p className="font-semibold text-sm text-blue-900">Lanza el cuestionario sociométrico</p>
+                <p className="text-xs text-blue-700 mt-0.5">{studentCount} alumno{(studentCount ?? 0) !== 1 ? "s" : ""} listo{(studentCount ?? 0) !== 1 ? "s" : ""}. Genera los enlaces individuales y compártelos con el alumnado.</p>
+              </div>
+            </div>
+            <Button size="sm" asChild className="shrink-0 bg-blue-600 hover:bg-blue-700">
+              <Link href={`/processes/${id}/questionnaire`}>Configurar cuestionario <ArrowRight className="w-3 h-3 ml-1" /></Link>
+            </Button>
+          </div>
+        )
+        if (completionPct < 60) return (
+          <div className="mb-6 rounded-xl border-2 border-amber-200 bg-amber-50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-sm text-amber-900">Solo el {completionPct}% ha respondido — más respuestas, mejor análisis</p>
+                <p className="text-xs text-amber-700 mt-0.5">{(totalTokens ?? 0) - (completedTokens ?? 0)} alumnos pendientes. Envía recordatorios para aumentar la participación.</p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" asChild className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100">
+              <Link href={`/processes/${id}/questionnaire`}>Enviar recordatorios <ArrowRight className="w-3 h-3 ml-1" /></Link>
+            </Button>
+          </div>
+        )
+        if ((sociogramCount ?? 0) === 0 && (responseCount ?? 0) > 0) return (
+          <div className="mb-6 rounded-xl border-2 border-indigo-200 bg-indigo-50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold shrink-0">3</div>
+              <div>
+                <p className="font-semibold text-sm text-indigo-900">Explora el sociograma</p>
+                <p className="text-xs text-indigo-700 mt-0.5">{completedTokens} respuestas recogidas ({completionPct}%). Analiza las relaciones sociales antes de mezclar las clases.</p>
+              </div>
+            </div>
+            <Button size="sm" asChild className="shrink-0 bg-indigo-600 hover:bg-indigo-700">
+              <Link href={`/processes/${id}/sociogram`}>Ver sociograma <ArrowRight className="w-3 h-3 ml-1" /></Link>
+            </Button>
+          </div>
+        )
+        if (!isSociograma && (proposalCount ?? 0) === 0) return (
+          <div className="mb-6 rounded-xl border-2 border-blue-200 bg-blue-50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">4</div>
+              <div>
+                <p className="font-semibold text-sm text-blue-900">Ejecuta el algoritmo de mezcla</p>
+                <p className="text-xs text-blue-700 mt-0.5">Configura los criterios de distribución y genera las propuestas de nuevas clases.</p>
+              </div>
+            </div>
+            <Button size="sm" asChild className="shrink-0 bg-blue-600 hover:bg-blue-700">
+              <Link href={`/processes/${id}/algorithm`}>Ejecutar algoritmo <ArrowRight className="w-3 h-3 ml-1" /></Link>
+            </Button>
+          </div>
+        )
+        if (!isSociograma && (proposalCount ?? 0) > 0) return (
+          <div className="mb-6 rounded-xl border-2 border-green-200 bg-green-50 px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold shrink-0">5</div>
+              <div>
+                <p className="font-semibold text-sm text-green-900">{proposalCount} propuesta{(proposalCount ?? 0) > 1 ? "s" : ""} lista{(proposalCount ?? 0) > 1 ? "s" : ""} para revisar</p>
+                <p className="text-xs text-green-700 mt-0.5">Compara las opciones, edítalas si es necesario y aprueba la distribución final.</p>
+              </div>
+            </div>
+            <Button size="sm" asChild className="shrink-0 bg-green-600 hover:bg-green-700">
+              <Link href={`/processes/${id}/proposals`}>Revisar propuestas <ArrowRight className="w-3 h-3 ml-1" /></Link>
+            </Button>
+          </div>
+        )
+        return null
+      })()}
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">

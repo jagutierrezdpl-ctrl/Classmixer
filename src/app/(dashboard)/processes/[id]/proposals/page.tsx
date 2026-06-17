@@ -9,6 +9,7 @@ import {
   ArrowLeft, Zap, Download, Users, Loader2,
   ChevronDown, ChevronUp, CheckCircle, Settings2,
   UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap, GitBranch,
+  Star, AlertTriangle, Printer, TrendingUp,
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
@@ -269,6 +270,51 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
             </Card>
           )}
 
+          {/* Recommendation banner */}
+          {proposals.length > 1 && proposals.every(p => p.status !== "aprobada") && (() => {
+            const best = proposals.reduce((a, b) => a.score_total > b.score_total ? a : b)
+            const bestIdx = proposals.indexOf(best)
+            const mm = buildMetricsMap(best.metrics ?? [])
+            const totalStudents = Object.values(mm).reduce((s, m) => s + (m.count ?? 0), 0)
+            const withFriend = Object.values(mm).reduce((s, m) => s + (m.students_with_friend ?? 0), 0)
+            const friendPct = totalStudents > 0 ? Math.round((withFriend / totalStudents) * 100) : 0
+            const runners = proposals.filter(p => p !== best)
+            const isBestSocial = best.score_social >= Math.max(...runners.map(r => r.score_social ?? 0))
+            const isBestAcademic = best.score_academic >= Math.max(...runners.map(r => r.score_academic ?? 0))
+            const isolated = totalStudents - withFriend
+            return (
+              <div className="mb-4 rounded-xl border-2 border-green-300 bg-green-50 px-5 py-4 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm shrink-0 mt-0.5">
+                    {String.fromCharCode(65 + bestIdx)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-green-900">Propuesta {String.fromCharCode(65 + bestIdx)} recomendada</p>
+                      <span className="flex items-center gap-1 text-xs bg-green-200 text-green-800 rounded-full px-2 py-0.5">
+                        <Star className="w-3 h-3" /> Mejor puntuación
+                      </span>
+                    </div>
+                    <p className="text-sm text-green-800 mt-1">
+                      Puntuación total <strong>{best.score_total.toFixed(1)}/100</strong>.
+                      {isBestSocial && " Mejor resultado social."}
+                      {isBestAcademic && " Mayor equilibrio académico."}
+                      {` El ${friendPct}% del alumnado queda con al menos un amigo.`}
+                      {isolated > 0 && ` ⚠ ${isolated} alumno${isolated > 1 ? "s" : ""} sin vínculo directo.`}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="shrink-0 bg-green-600 hover:bg-green-700"
+                  onClick={() => handleApprove(best.id)}
+                >
+                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> Aprobar esta
+                </Button>
+              </div>
+            )
+          })()}
+
           {/* Proposal cards */}
           <div className="space-y-4">
             {proposals.map((proposal, idx) => {
@@ -319,6 +365,12 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" asChild title="Listado imprimible por clase">
+                          <Link href={`/processes/${id}/proposals/${proposal.id}/print`} target="_blank">
+                            <Printer className="w-4 h-4" />
+                            Imprimir
+                          </Link>
+                        </Button>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/processes/${id}/proposals/${proposal.id}/friends`}>
                             <GitBranch className="w-4 h-4" />
@@ -421,16 +473,30 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                       <ScoreBar label="Convivencia" value={proposal.score_behavior} color="bg-green-400" />
                     </div>
 
-                    {/* Social summary chips */}
+                    {/* Per-class health chips */}
                     <div className="flex flex-wrap gap-2 mb-3">
-                      {classNames.map(cls => (
-                        <div key={cls} className="flex items-center gap-1.5 text-xs">
-                          <Badge variant="outline">{cls}</Badge>
-                          <span className="text-muted-foreground flex items-center gap-0.5">
-                            <Users className="w-3 h-3" /> {metricsMap[cls]?.count ?? 0}
-                          </span>
-                        </div>
-                      ))}
+                      {classNames.map(cls => {
+                        const m = metricsMap[cls] ?? {}
+                        const cnt = m.count ?? 0
+                        const withF = m.students_with_friend ?? 0
+                        const isolated = cnt - withF
+                        const pct = cnt > 0 ? withF / cnt : 1
+                        const health = pct >= 0.95 ? "green" : pct >= 0.8 ? "amber" : "red"
+                        const healthDot = health === "green" ? "bg-green-500" : health === "amber" ? "bg-amber-500" : "bg-red-500"
+                        const healthTitle = `${withF}/${cnt} con amigo · ${isolated > 0 ? `${isolated} sin vínculo` : "todos conectados"}`
+                        return (
+                          <div key={cls} className="flex items-center gap-1.5 text-xs rounded-lg border px-2 py-1 bg-muted/30" title={healthTitle}>
+                            <div className={`w-2 h-2 rounded-full ${healthDot}`} />
+                            <Badge variant="outline" className="text-xs px-1 py-0">{cls}</Badge>
+                            <span className="text-muted-foreground flex items-center gap-0.5">
+                              <Users className="w-3 h-3" /> {cnt}
+                            </span>
+                            {isolated > 0 && (
+                              <span className="text-red-500 font-semibold">{isolated} ✗</span>
+                            )}
+                          </div>
+                        )
+                      })}
                       {totalStudents > 0 && (
                         <>
                           <div className="flex items-center gap-1 text-xs text-green-600">

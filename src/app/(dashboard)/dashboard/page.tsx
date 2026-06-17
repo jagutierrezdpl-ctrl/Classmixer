@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   FolderOpen, Users, BookOpen, CheckCircle2, Plus,
   ArrowRight, Clock, Zap, Network, FileText, Sparkles,
-  AlertTriangle, GraduationCap,
+  AlertTriangle, GraduationCap, CircleDot, Mail, LayoutGrid,
 } from "lucide-react"
 import { getCenterLicense } from "@/lib/license"
 import { OnboardingWizard } from "@/components/layout/OnboardingWizard"
@@ -83,6 +83,8 @@ export default async function DashboardPage() {
     { count: isolatedStudents },
     { count: totalProfiles },
     { data: openProcessTokenStats },
+    { data: studentRows },
+    { data: proposalRows },
   ] = await Promise.all([
     supabase
       .from("students")
@@ -119,6 +121,17 @@ export default async function DashboardPage() {
       .from("questionnaire_tokens")
       .select("process_id, used")
       .in("process_id", pIds),
+    // Student counts per process (for priority actions)
+    supabase
+      .from("students")
+      .select("process_id")
+      .in("process_id", pIds)
+      .eq("active", true),
+    // Proposal counts per process (for priority actions)
+    supabase
+      .from("proposals")
+      .select("process_id, status")
+      .in("process_id", pIds),
   ])
 
   const activeProcesses = (processes ?? []).filter(p => !["cerrado", "archivado"].includes(p.status))
@@ -132,6 +145,50 @@ export default async function DashboardPage() {
     if (t.used) tokenMap[t.process_id].completed++
   }
   const openProcesses = (processes ?? []).filter(p => p.status === "cuestionario_abierto")
+
+  // Per-process student & proposal counts for priority actions
+  const studentCountMap: Record<string, number> = {}
+  for (const s of (studentRows ?? [])) {
+    studentCountMap[s.process_id] = (studentCountMap[s.process_id] ?? 0) + 1
+  }
+  const proposalCountMap: Record<string, number> = {}
+  for (const pr of (proposalRows ?? [])) {
+    proposalCountMap[pr.process_id] = (proposalCountMap[pr.process_id] ?? 0) + 1
+  }
+
+  type PriorityAction = {
+    processId: string; processName: string
+    label: string; sublabel: string
+    href: string; urgency: "urgent" | "info" | "success"
+  }
+  const priorityActions: PriorityAction[] = activeProcesses
+    .flatMap(p => {
+      const tkStats = tokenMap[p.id] ?? { total: 0, completed: 0 }
+      const pct = tkStats.total > 0 ? Math.round((tkStats.completed / tkStats.total) * 100) : 0
+      const studs = studentCountMap[p.id] ?? 0
+      const props = proposalCountMap[p.id] ?? 0
+      const acts: PriorityAction[] = []
+
+      if (studs === 0) {
+        acts.push({ processId: p.id, processName: p.name, label: "Importar alumnos", sublabel: "Sin alumnos todavía", href: `/processes/${p.id}/import`, urgency: "info" })
+      } else if (tkStats.total === 0 && !["cerrado", "propuesta_seleccionada", "archivado"].includes(p.status)) {
+        acts.push({ processId: p.id, processName: p.name, label: "Lanzar cuestionario", sublabel: `${studs} alumnos registrados`, href: `/processes/${p.id}/questionnaire`, urgency: "info" })
+      } else if (p.status === "cuestionario_abierto" && pct < 60) {
+        acts.push({ processId: p.id, processName: p.name, label: "Enviar recordatorio", sublabel: `Solo ${pct}% respondido (${tkStats.completed}/${tkStats.total})`, href: `/processes/${p.id}/questionnaire`, urgency: pct < 30 ? "urgent" : "info" })
+      }
+
+      if (p.status === "propuestas_generadas") {
+        acts.push({ processId: p.id, processName: p.name, label: "Revisar propuestas", sublabel: `${props} propuesta${props !== 1 ? "s" : ""} lista${props !== 1 ? "s" : ""}`, href: `/processes/${p.id}/proposals`, urgency: "success" })
+      }
+
+      if (p.status === "cuestionario_cerrado" || (p.status === "en_analisis" && props === 0)) {
+        acts.push({ processId: p.id, processName: p.name, label: "Ejecutar algoritmo", sublabel: "Cuestionario cerrado — listo para mezclar", href: `/processes/${p.id}/algorithm`, urgency: "info" })
+      }
+
+      return acts
+    })
+    .sort((a, b) => ({ urgent: 0, success: 1, info: 2 }[a.urgency] - { urgent: 0, success: 1, info: 2 }[b.urgency]))
+    .slice(0, 5)
 
   const isAdmin = ["admin", "superadmin"].includes(profile?.role ?? "")
 
@@ -246,6 +303,44 @@ export default async function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {/* Priority actions — "Qué hacer ahora" */}
+      {priorityActions.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Qué hacer ahora
+          </h2>
+          <div className="space-y-2">
+            {priorityActions.map((action, i) => {
+              const isUrgent = action.urgency === "urgent"
+              const isSuccess = action.urgency === "success"
+              const Icon = isUrgent ? AlertTriangle : isSuccess ? CheckCircle2 : CircleDot
+              return (
+                <Link
+                  key={i}
+                  href={action.href}
+                  className={`flex items-center gap-4 px-4 py-3 rounded-lg border transition-colors hover:bg-muted/40 ${
+                    isUrgent ? "border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800" :
+                    isSuccess ? "border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800" :
+                    "border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-800"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${isUrgent ? "text-red-500" : isSuccess ? "text-green-500" : "text-blue-500"}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm font-semibold ${isUrgent ? "text-red-700 dark:text-red-400" : isSuccess ? "text-green-700 dark:text-green-400" : "text-blue-700 dark:text-blue-400"}`}>
+                      {action.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      <span className="font-medium">{action.processName}</span> · {action.sublabel}
+                    </p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 shrink-0 text-muted-foreground" />
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Questionnaire progress chart */}
       {openProcesses.length > 0 && (

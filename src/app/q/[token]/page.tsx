@@ -79,7 +79,32 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
         setQuestions(qs)
         const initial: Record<string, string[]> = {}
         qs.forEach(q => { initial[q.type] = [] })
-        setSelections(initial)
+
+        // Restore draft from localStorage if available
+        try {
+          const saved = localStorage.getItem(`q_draft_${token}`)
+          if (saved) {
+            const { selections: savedSels, timestamp } = JSON.parse(saved)
+            if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+              // Merge saved with initial — only restore types that exist in current questions
+              const merged = { ...initial }
+              for (const q of qs) {
+                if (Array.isArray(savedSels?.[q.type]) && savedSels[q.type].length > 0) {
+                  merged[q.type] = savedSels[q.type]
+                }
+              }
+              setSelections(merged)
+              toast.info("Hemos recuperado tus respuestas guardadas. Puedes editarlas o enviarlas.", { duration: 4000 })
+            } else {
+              localStorage.removeItem(`q_draft_${token}`)
+              setSelections(initial)
+            }
+          } else {
+            setSelections(initial)
+          }
+        } catch {
+          setSelections(initial)
+        }
         setSearches(Object.fromEntries(qs.map(q => [q.type, ""])))
 
         const advanced: AdvancedQuestionConfig[] = Array.isArray(data.advanced_questions) ? data.advanced_questions : []
@@ -91,6 +116,16 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
       .catch(() => setError("Error al cargar el cuestionario"))
       .finally(() => setLoading(false))
   }, [token])
+
+  // Auto-save to localStorage whenever selections change
+  useEffect(() => {
+    if (questions.length === 0 || submitted) return
+    const hasAny = Object.values(selections).some(arr => arr.length > 0)
+    if (!hasAny) return
+    try {
+      localStorage.setItem(`q_draft_${token}`, JSON.stringify({ selections, timestamp: Date.now() }))
+    } catch { /* no-op */ }
+  }, [selections, questions, token, submitted])
 
   function addStudent(questionType: string, studentId: string, max: number) {
     setSelections(prev => {
@@ -169,6 +204,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      try { localStorage.removeItem(`q_draft_${token}`) } catch { /* no-op */ }
       setSubmitted(true)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al enviar")
