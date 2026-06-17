@@ -559,20 +559,20 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
         {data && (
           <div className="w-80 border-l bg-background overflow-hidden flex flex-col shrink-0">
             <Tabs defaultValue="metrics" className="flex flex-col h-full">
-              <TabsList className="rounded-none border-b w-full justify-start h-9 px-2 bg-muted/30 shrink-0">
-                <TabsTrigger value="metrics" className="text-xs h-7">Métricas</TabsTrigger>
-                <TabsTrigger value="alerts" className="text-xs h-7">
+              <TabsList className="rounded-none border-b w-full justify-start h-9 px-2 bg-muted/30 shrink-0 overflow-x-auto overflow-y-hidden flex-nowrap">
+                <TabsTrigger value="metrics" className="text-xs h-7 shrink-0">Métricas</TabsTrigger>
+                <TabsTrigger value="alerts" className="text-xs h-7 shrink-0">
                   Alertas
                   {data.alerts.length > 0 && <span className="ml-1 bg-orange-100 text-orange-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">{data.alerts.length}</span>}
                 </TabsTrigger>
-                <TabsTrigger value="suggestions" className="text-xs h-7">
+                <TabsTrigger value="suggestions" className="text-xs h-7 shrink-0">
                   Reglas
                   {ruleSuggestions.length > 0 && <span className="ml-1 bg-indigo-100 text-indigo-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">{ruleSuggestions.length}</span>}
                 </TabsTrigger>
-                <TabsTrigger value="groups" className="text-xs h-7">Grupos</TabsTrigger>
-                <TabsTrigger value="nodes" className="text-xs h-7">Alumnos</TabsTrigger>
-                <TabsTrigger value="rankings" className="text-xs h-7">Rankings</TabsTrigger>
-                <TabsTrigger value="guide" className="text-xs h-7">Guía</TabsTrigger>
+                <TabsTrigger value="groups" className="text-xs h-7 shrink-0">Grupos</TabsTrigger>
+                <TabsTrigger value="nodes" className="text-xs h-7 shrink-0">Alumnos</TabsTrigger>
+                <TabsTrigger value="rankings" className="text-xs h-7 shrink-0">Rankings</TabsTrigger>
+                <TabsTrigger value="guide" className="text-xs h-7 shrink-0">Guía</TabsTrigger>
               </TabsList>
 
               {/* Métricas tab */}
