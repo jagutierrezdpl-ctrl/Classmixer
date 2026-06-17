@@ -25,19 +25,9 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
-  // Check if they're already active in this center
-  const { data: alreadyActive } = await supabase
-    .from("users")
-    .select("id")
-    .ilike("email", email)
-    .eq("center_id", profile.center_id)
-    .maybeSingle()
-
-  if (alreadyActive) {
-    return NextResponse.json({ error: "Este usuario ya está activo en el centro" }, { status: 409 })
-  }
-
-  // Find a pending user (center_id IS NULL) with this email
+  // Find the pending user (center_id IS NULL) first — this is the Google OAuth account
+  // that needs to be rescued. There may also be an orphaned password account for the same
+  // email that already has the correct center_id; we still need to rescue the Google one.
   const { data: pendingUser } = await supabase
     .from("users")
     .select("id, email, name")
@@ -46,6 +36,18 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (!pendingUser) {
+    // No pending account found — check if they're already fully active (nothing to fix)
+    const { data: alreadyActive } = await supabase
+      .from("users")
+      .select("id")
+      .ilike("email", email)
+      .eq("center_id", profile.center_id)
+      .maybeSingle()
+
+    if (alreadyActive) {
+      return NextResponse.json({ error: "Este usuario ya está activo en el centro y no tiene ninguna cuenta pendiente. Si sigue sin poder entrar, pídele que cierre sesión y vuelva a iniciarla." }, { status: 409 })
+    }
+
     return NextResponse.json({
       error: "No se encontró ningún usuario pendiente con ese email. Si aún no ha accedido a la app, usa 'Añadir usuario' en su lugar."
     }, { status: 404 })
