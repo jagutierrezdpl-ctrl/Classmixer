@@ -9,8 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
-  Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert
+  Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert, ChevronDown
 } from "lucide-react"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import type { SociogramData, SociogramNode } from "@/types"
 import type { SociogramGraphHandle, SociogramColorBy, SociogramLayout, SociogramFilter } from "@/components/sociogram/SociogramGraph"
@@ -132,17 +136,20 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
         </div>
       )}
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-background shrink-0 flex-wrap">
-        <Button variant="ghost" size="icon" className="shrink-0" asChild>
+      <div className="flex items-center gap-2 px-3 py-2 border-b bg-background shrink-0">
+        {/* Back + title */}
+        <Button variant="ghost" size="icon" className="shrink-0 h-7 w-7" asChild>
           <Link href={`/processes/${id}`}><ArrowLeft className="w-4 h-4" /></Link>
         </Button>
-        <div className="mr-2">
+        <div className="shrink-0 mr-1">
           <h1 className="text-sm font-bold leading-tight">Sociograma</h1>
-          {data && <p className="text-xs text-muted-foreground">{data.metrics.total_students} alumnos · {data.edges.length} relaciones</p>}
+          {data && <p className="text-xs text-muted-foreground leading-tight">{data.metrics.total_students} alumnos · {data.edges.length} relaciones</p>}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-1 flex-wrap">
-          {/* Layout */}
+        <div className="w-px h-6 bg-border shrink-0" />
+
+        {/* View controls */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <Select value={layout} onValueChange={v => setLayout(v as SociogramLayout)}>
             <SelectTrigger className="w-36 h-7 text-xs">
               <SelectValue />
@@ -156,7 +163,6 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
             </SelectContent>
           </Select>
 
-          {/* Color by */}
           <Select value={colorBy} onValueChange={v => setColorBy(v as SociogramColorBy)}>
             <SelectTrigger className="w-40 h-7 text-xs">
               <SelectValue />
@@ -171,13 +177,12 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
             </SelectContent>
           </Select>
 
-          {/* Class filter */}
           {classes.length > 1 && (
             <Select
               value={filter.classFilter ?? "all"}
               onValueChange={v => setQuickFilter("classFilter", v === "all" ? null : v)}
             >
-              <SelectTrigger className="w-28 h-7 text-xs">
+              <SelectTrigger className="w-24 h-7 text-xs">
                 <SelectValue placeholder="Clase" />
               </SelectTrigger>
               <SelectContent>
@@ -187,66 +192,85 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
             </Select>
           )}
 
-          {/* Quick filter chips */}
+          <div className="w-px h-5 bg-border shrink-0" />
+
           <Button
             size="sm"
             variant={filter.showOnlyIsolated ? "default" : "outline"}
-            className="h-7 text-xs px-2"
+            className="h-7 text-xs px-2.5"
             onClick={() => setQuickFilter("showOnlyIsolated", !filter.showOnlyIsolated)}
           >
-            Solo en riesgo
+            En riesgo
           </Button>
           <Button
             size="sm"
             variant={filter.showOnlyReciprocal ? "default" : "outline"}
-            className="h-7 text-xs px-2"
+            className="h-7 text-xs px-2.5"
             onClick={() => setQuickFilter("showOnlyReciprocal", !filter.showOnlyReciprocal)}
           >
-            Solo recíprocas
+            Recíprocas
           </Button>
 
           {hasActiveFilter && (
-            <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-muted-foreground" onClick={clearFilters}>
-              <X className="w-3 h-3 mr-1" /> Limpiar
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground" onClick={clearFilters} title="Limpiar filtros">
+              <X className="w-3.5 h-3.5" />
             </Button>
           )}
         </div>
 
-        {/* Export + AI buttons */}
+        <div className="w-px h-6 bg-border shrink-0" />
+
+        {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild>
             <Link href={`/processes/${id}/sociogram/report`}>
               <FileText className="w-3.5 h-3.5" /> Informe
             </Link>
           </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => graphRef.current?.exportPNG()}>
-            <ImageDown className="w-3.5 h-3.5" /> PNG
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleExportExcel} disabled={exportingExcel}>
-            {exportingExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Excel
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild title="Informe de sociograma (PDF)">
-            <a href={`/api/processes/${id}/sociogram/export/pdf`} download>
-              <Download className="w-3.5 h-3.5" /> PDF
-            </a>
-          </Button>
+
+          {/* Export dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                <Download className="w-3.5 h-3.5" /> Exportar <ChevronDown className="w-3 h-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="text-xs">
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => graphRef.current?.exportPNG()}>
+                <ImageDown className="w-3.5 h-3.5" /> Imagen PNG
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportExcel} disabled={exportingExcel}>
+                {exportingExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Excel (métricas)
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" asChild>
+                <a href={`/api/processes/${id}/sociogram/export/pdf`} download>
+                  <Download className="w-3.5 h-3.5" /> PDF sociograma
+                </a>
+              </DropdownMenuItem>
+              {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="gap-2 text-xs" asChild>
+                    <a href={`/api/processes/${id}/sociogram/export/pdf/orientacion`} download>
+                      <Download className="w-3.5 h-3.5" /> PDF orientación
+                    </a>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild title="Informe para orientación (PDF, datos sensibles)">
-              <a href={`/api/processes/${id}/sociogram/export/pdf/orientacion`} download>
-                <Download className="w-3.5 h-3.5" /> Orientación
-              </a>
-            </Button>
-          )}
-          {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50" asChild title="Informe de convivencia (PDF, muy sensible)">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50" asChild title="Informe de convivencia (muy sensible)">
               <a href={`/api/processes/${id}/sociogram/export/pdf/convivencia`} download>
                 <ShieldAlert className="w-3.5 h-3.5" /> Convivencia
               </a>
             </Button>
           )}
+
           {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleAISummary} disabled={aiLoading}>
-              {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Análisis IA
+              {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} IA
             </Button>
           )}
         </div>
