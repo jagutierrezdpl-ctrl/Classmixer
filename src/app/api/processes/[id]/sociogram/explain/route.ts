@@ -62,9 +62,8 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
 
   // ── VULNERABLES ──────────────────────────────────────────────────
   if (vulnerable.length > 0) {
-    const shown = vulnerable.slice(0, 12)
     lines.push(`ALUMNOS CON UN SOLO VÍNCULO (${vulnerable.length}) — NO SEPARAR DE SU ÚNICO AMIGO`)
-    for (const n of shown) {
+    for (const n of vulnerable) {
       const reciprocal = sg.edges
         .filter(e => e.source === n.id && e.relation_type === "friendship")
         .filter(e => sg.edges.some(e2 => e2.source === e.target && e2.target === n.id && e2.relation_type === "friendship"))
@@ -73,7 +72,6 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
         lines.push(`• ${n.first_name} ${n.last_name} ↔ ${reciprocal[0].first_name} ${reciprocal[0].last_name} — no separarlos.`)
       }
     }
-    if (vulnerable.length > 12) lines.push(`  … y ${vulnerable.length - 12} más con el mismo criterio.`)
     lines.push("")
   }
 
@@ -89,16 +87,24 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
   }
 
   // ── DISTRIBUCIÓN ESTRATÉGICA ─────────────────────────────────────
-  const hasStrategic = bridges.length > 0 || leaders.length > 0
-  if (hasStrategic) {
+  // Only show true top bridges (by betweenness) and top leaders — cap at 5 each
+  // If bridges > 20% of total they're probably false positives; show top by betweenness only
+  const topBridges = [...bridges]
+    .sort((a, b) => (b.betweenness ?? 0) - (a.betweenness ?? 0))
+    .slice(0, 5)
+  const topLeaders = leaders.slice(0, 5)
+
+  if (topBridges.length > 0 || topLeaders.length > 0) {
     lines.push("DISTRIBUCIÓN ESTRATÉGICA")
-    if (bridges.length > 0) {
-      const names = bridges.slice(0, 5).map(n => `${n.first_name} ${n.last_name}`).join(", ")
-      lines.push(`• Puentes sociales — distribuir en clases distintas para integrar subgrupos: ${names}.`)
+    if (topBridges.length > 0) {
+      const names = topBridges.map(n => `${n.first_name} ${n.last_name}`).join(", ")
+      const note = bridges.length > total * 0.2 ? ` (top ${topBridges.length} por centralidad de intermediación)` : ""
+      lines.push(`• Puentes sociales${note} — distribuir en clases distintas: ${names}.`)
     }
-    if (leaders.length > 0) {
-      const names = leaders.slice(0, 5).map(n => `${n.first_name} ${n.last_name} (${n.received_count})`).join(", ")
-      lines.push(`• Líderes — repartir entre clases para equilibrio social: ${names}.`)
+    if (topLeaders.length > 0) {
+      const names = topLeaders.map(n => `${n.first_name} ${n.last_name} (${n.received_count})`).join(", ")
+      const note = leaders.length > 5 ? ` (${leaders.length} en total — se muestran los más influyentes)` : ""
+      lines.push(`• Líderes${note} — repartir entre clases: ${names}.`)
     }
     lines.push("")
   }
@@ -116,11 +122,11 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
   if (closedGroups.length > 0) {
     lines.push(`${priority++}. Crear reglas "max_from_group" para los ${closedGroups.length} subgrupos cerrados.`)
   }
-  if (bridges.length > 0) {
-    lines.push(`${priority++}. Distribuir los ${bridges.length} alumnos puente en clases diferentes (must_separate si hay solo 2 clases).`)
+  if (topBridges.length > 0) {
+    lines.push(`${priority++}. Distribuir los ${topBridges.length} alumnos puente principales en clases distintas.`)
   }
-  if (leaders.length > 0) {
-    lines.push(`${priority++}. Repartir los ${leaders.length} líderes equitativamente — no más de 1-2 por clase.`)
+  if (topLeaders.length > 0) {
+    lines.push(`${priority++}. Repartir líderes equitativamente — no más de ${Math.ceil(leaders.length / sg.communities.length)} por clase.`)
   }
   lines.push(`${priority}. Equilibrar nota media, género y clase de origen entre los grupos nuevos.`)
 
