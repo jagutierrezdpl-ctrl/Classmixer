@@ -243,8 +243,11 @@ export function calculateSociogram(
     // Backward-compat flags (drive mixing algorithm & UI colours)
     // is_isolated → "ignorado" (invisible) OR truly zero received
     const isIsolated = recvCount === 0
-    // is_vulnerable → rejected OR fragile position (low visibility, no reciprocals)
-    const isVulnerable = !isIsolated && (
+    // is_vulnerable → fragile position (low visibility, no reciprocals) OR rejected.
+    // Popular/controversial students are high-impact by definition — they are not at risk
+    // of passive isolation and must never appear in the vulnerable list.
+    const isHighImpact = status === "popular" || status === "controvertido"
+    const isVulnerable = !isIsolated && !isHighImpact && (
       status === "rechazado" ||
       (recipCount === 0 && recvCount <= 3) ||
       (recipCount === 1 && recvCount <= 2)

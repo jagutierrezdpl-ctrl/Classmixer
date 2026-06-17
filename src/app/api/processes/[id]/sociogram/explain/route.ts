@@ -123,10 +123,15 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
   }
 
   // ── 5. POPULARES Y CONTROVERTIDOS — DISTRIBUCIÓN ESTRATÉGICA ─────
-  const topBridges = [...bridges].sort((a, b) => (b.betweenness ?? 0) - (a.betweenness ?? 0)).slice(0, 5)
+  // Bridges that are also rejected must NOT be used as connectors — their protection takes
+  // absolute priority over their structural role in the network.
+  const sortedBridges = [...bridges].sort((a, b) => (b.betweenness ?? 0) - (a.betweenness ?? 0))
+  const rejectedIds = new Set(rejected.map(n => n.id))
+  const distributableBridges = sortedBridges.filter(n => !rejectedIds.has(n.id)).slice(0, 5)
+  const protectedBridges     = sortedBridges.filter(n => rejectedIds.has(n.id))
   const leaders = [...popular, ...controversial].slice(0, 6)
 
-  if (leaders.length > 0 || topBridges.length > 0) {
+  if (leaders.length > 0 || distributableBridges.length > 0 || protectedBridges.length > 0) {
     lines.push("DISTRIBUCIÓN ESTRATÉGICA DE LÍDERES Y PUENTES")
 
     if (popular.length > 0) {
@@ -137,10 +142,20 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
       const names = controversial.slice(0, 3).map(n => `${n.first_name} ${n.last_name}`)
       lines.push(`• Controvertidos (alto impacto polarizador) — no juntar entre sí; asignar uno por clase para redirigir su liderazgo: ${names.join(", ")}.`)
     }
-    if (topBridges.length > 0) {
-      const names = topBridges.map(n => `${n.first_name} ${n.last_name}`)
-      const note = bridges.length > total * 0.2 ? ` (top ${topBridges.length} por intermediación)` : ""
+    if (distributableBridges.length > 0) {
+      const names = distributableBridges.map(n => `${n.first_name} ${n.last_name}`)
+      const note = bridges.length > total * 0.2 ? ` (top ${distributableBridges.length} por intermediación)` : ""
       lines.push(`• Alumnos puente${note} (conectores entre subgrupos) — distribuir en clases distintas: ${names.join(", ")}.`)
+    }
+    if (protectedBridges.length > 0) {
+      // A rejected bridge node's protection supersedes their structural role
+      const names = protectedBridges.map(n => `${n.first_name} ${n.last_name} (zSP=${n.social_preference_z.toFixed(2)})`)
+      lines.push(
+        `• EXCEPCIÓN — Puentes rechazados (${protectedBridges.length}): ${names.join(", ")}. ` +
+        `Su rol de conector NO debe usarse como criterio de distribución. ` +
+        `Prioridad absoluta: protección psicosocial y anclaje junto a sus escasos vínculos positivos. ` +
+        `Activar protocolo de atención individual antes de cualquier decisión de mezcla.`
+      )
     }
     lines.push("")
   }
@@ -171,8 +186,8 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
     lines.push(`${p++}. Repartir los ${controversial.length} alumnos controvertidos — un máximo de 1 por clase nueva.`)
   if (popular.length > 0)
     lines.push(`${p++}. Repartir los ${popular.length} populares prosociales como facilitadores de integración — al menos 1 por clase.`)
-  if (topBridges.length > 0)
-    lines.push(`${p++}. Distribuir los ${topBridges.length} alumnos puente en clases distintas para preservar la conectividad global.`)
+  if (distributableBridges.length > 0)
+    lines.push(`${p++}. Distribuir los ${distributableBridges.length} alumnos puente en clases distintas para preservar la conectividad global${protectedBridges.length > 0 ? ` (excluidos ${protectedBridges.length} puente(s) rechazados, cuya prioridad es protección, no distribución)` : ""}.`)
   lines.push(`${p}. Equilibrar nota media, género y clase de origen entre todas las clases nuevas.`)
 
   return lines.join("\n")
