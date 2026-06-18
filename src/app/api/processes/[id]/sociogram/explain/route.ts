@@ -114,9 +114,27 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
         .filter(e => e.source === n.id && e.is_reciprocal && e.relation_type === "friendship")
         .map(e => nodeMap.get(e.target)).filter((x): x is SociogramNode => !!x)
       if (reciprocalPartners.length > 0) {
-        lines.push(`• ${n.first_name} ${n.last_name} ↔ ${reciprocalPartners.map(p => p.first_name).join(" / ")} — mantener juntos (su único ancla afectiva).`)
+        lines.push(`• ${n.first_name} ${n.last_name} ↔ ${reciprocalPartners.map(p => `${p.first_name} ${p.last_name}`).join(" / ")} — mantener juntos (su único ancla afectiva).`)
       } else {
-        lines.push(`• ${n.first_name} ${n.last_name} — sin reciprocidades, baja visibilidad (${n.received_count} elec. recibidas). Colocar cerca de alumnos que le eligieron.`)
+        // No reciprocals: resolve who the student chose and who chose the student
+        const choseNodes = sg.edges
+          .filter(e => e.source === n.id && e.relation_type === "friendship")
+          .map(e => nodeMap.get(e.target)).filter((x): x is SociogramNode => !!x)
+        const chooserNodes = sg.edges
+          .filter(e => e.target === n.id && e.relation_type === "friendship")
+          .map(e => nodeMap.get(e.source)).filter((x): x is SociogramNode => !!x)
+
+        const parts: string[] = [`sin reciprocidades, baja visibilidad (${n.received_count} elec. recibidas)`]
+        if (choseNodes.length > 0) {
+          parts.push(`Asignar con una de sus elecciones positivas: ${choseNodes.map(p => `${p.first_name} ${p.last_name}`).join(", ")}.`)
+        }
+        if (chooserNodes.length > 0) {
+          parts.push(`También le eligió: ${chooserNodes.map(p => `${p.first_name} ${p.last_name}`).join(", ")}.`)
+        }
+        if (choseNodes.length === 0 && chooserNodes.length === 0) {
+          parts.push("Sin ninguna conexión unidireccional — añadir perfil prosocial en su equipo y activar seguimiento.")
+        }
+        lines.push(`• ${n.first_name} ${n.last_name} — ${parts.join(" ")}`)
       }
     }
     lines.push("")
