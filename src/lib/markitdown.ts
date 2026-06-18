@@ -2,7 +2,7 @@ import { execFile } from "child_process"
 import { promisify } from "util"
 import { writeFile, unlink } from "fs/promises"
 import { tmpdir, homedir } from "os"
-import { join } from "path"
+import { join, basename } from "path"
 import { randomUUID } from "crypto"
 
 const execFileAsync = promisify(execFile)
@@ -21,7 +21,9 @@ export async function isMarkitdownAvailable(): Promise<boolean> {
 }
 
 export async function convertPdfToMarkdown(buffer: Buffer, filename: string): Promise<string> {
-  const tmpPath = join(tmpdir(), `${randomUUID()}-${filename}`)
+  // Strip directory traversal and limit to safe characters — user controls filename
+  const safeFilename = basename(filename).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100) || "upload.pdf"
+  const tmpPath = join(tmpdir(), `${randomUUID()}-${safeFilename}`)
   try {
     await writeFile(tmpPath, buffer)
     const { stdout } = await execFileAsync(MARKITDOWN_BIN, [tmpPath], {
