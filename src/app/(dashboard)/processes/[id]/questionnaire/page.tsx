@@ -462,11 +462,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
                     checked={watchNegative}
                     onCheckedChange={v => setValue("negative_enabled", v)}
                   />
-                  <Label className="font-medium text-destructive">Pregunta negativa</Label>
+                  <Label className="font-medium text-destructive">Pregunta de convivencia</Label>
                   <Badge variant="destructive" className="text-xs">Sensible</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground pl-8">
-                  &ldquo;¿Con quién te cuesta trabajar?&rdquo; — Solo visible para orientación/admin
+                  &ldquo;¿Con qué compañeros te resulta más difícil convivir o tienes más conflictos?&rdquo; — Solo visible para orientación/admin
                 </p>
               </div>
               {watchNegative && (

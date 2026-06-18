@@ -267,7 +267,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {[
             { n: "01", title: "Importa tus alumnos", desc: "Sube el Excel del grupo. Valida errores, detecta duplicados y muestra la distribución antes de confirmar." },
-            { n: "02", title: "Lanza el cuestionario", desc: "Genera un enlace único por alumno. Compatible con Google Workspace. Recoge elecciones positivas y negativas." },
+            { n: "02", title: "Lanza el cuestionario", desc: "Genera un enlace único por alumno. Compatible con Google Workspace. Recoge elecciones positivas y preguntas de convivencia." },
             { n: "03", title: "Analiza con IA y sociograma", desc: "El algoritmo clasifica CDC, detecta rechazados activos y propone reglas. La IA redacta el diagnóstico con nombres." },
             { n: "04", title: "Genera y aprueba la mezcla", desc: "El algoritmo propone distribuciones respetando todas las reglas. Revisas, ajustas y exportas 4 informes PDF." },
           ].map(step => (
