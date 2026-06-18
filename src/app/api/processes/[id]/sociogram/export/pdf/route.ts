@@ -53,8 +53,8 @@ function SociogramGraph({ soc }: { soc: ReturnType<typeof calculateSociogram> })
         React.createElement(Circle, {
           cx: p.x, cy: p.y, r,
           fill: p.node.is_isolated ? "#f87171" : color,
-          stroke: p.node.is_vulnerable ? "#f59e0b" : "#ffffff",
-          strokeWidth: p.node.is_vulnerable ? 2 : 1,
+          stroke: p.node.is_bridge ? "#f59e0b" : p.node.is_vulnerable ? "#fb923c" : "#ffffff",
+          strokeWidth: (p.node.is_bridge || p.node.is_vulnerable) ? 2 : 1,
         } as any),
         React.createElement(Text, {
           x: p.x, y: p.y + 3,
@@ -69,6 +69,22 @@ function nameOf(s: any): string {
   return s ? `${s.first_name} ${s.last_name}` : "Alumno desconocido"
 }
 
+const CDC_STATUS_LABEL: Record<string, string> = {
+  popular: "Popular",
+  rechazado: "Rechazado",
+  ignorado: "Ignorado",
+  controvertido: "Controvertido",
+  promedio: "Promedio",
+}
+
+const CDC_STATUS_COLOR: Record<string, string> = {
+  popular: "#16a34a",
+  rechazado: "#dc2626",
+  ignorado: "#64748b",
+  controvertido: "#d97706",
+  promedio: "#2563eb",
+}
+
 function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
   process: any
   soc: ReturnType<typeof calculateSociogram>
@@ -77,10 +93,22 @@ function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
   logoUrl?: string | null
 }) {
   const mostChosen = [...soc.nodes].sort((a, b) => b.received_count - a.received_count).slice(0, 8)
-  const leastChosen = [...soc.nodes].sort((a, b) => a.received_count - b.received_count).slice(0, 8)
+  const leastChosen = soc.nodes.filter(n => !n.is_isolated).sort((a, b) => a.received_count - b.received_count).slice(0, 8)
   const reciprocalPairs = soc.edges.filter(e => e.relation_type === "friendship" && e.is_reciprocal)
+  const bridges = soc.nodes.filter(n => n.is_bridge).sort((a, b) => b.betweenness - a.betweenness)
+  const hasCdc = soc.metrics.has_rejection_data
+
+  const footer = React.createElement(View, { style: pdfStyles.footer, fixed: true },
+    React.createElement(Text, { style: pdfStyles.footerText }, "ClassMixer · Informe de sociograma — uso interno"),
+    React.createElement(Text, {
+      style: pdfStyles.footerText,
+      render: ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) => `Pág. ${pageNumber} / ${totalPages}`,
+    }),
+  )
 
   return React.createElement(Document, null,
+
+    // ── PAGE 1: header + metrics cards + sociogram graph ──────────────────────
     React.createElement(Page, { size: "A4", style: pdfStyles.page },
       React.createElement(PdfLogoRow, { logoUrl }),
       React.createElement(View, { style: pdfStyles.header },
@@ -108,45 +136,79 @@ function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
         React.createElement(View, { style: pdfStyles.summaryCard },
           React.createElement(Text, { style: pdfStyles.summaryValue }, (soc.metrics.group_cohesion * 100).toFixed(1) + "%"),
           React.createElement(Text, { style: pdfStyles.summaryLabel }, "Cohesión grupal (IAg)")),
+        React.createElement(View, { style: pdfStyles.summaryCard },
+          React.createElement(Text, { style: pdfStyles.summaryValue }, String(bridges.length)),
+          React.createElement(Text, { style: pdfStyles.summaryLabel }, "Alumnos puente")),
       ),
+
+      // CDC distribution cards (only when rejection data exists)
+      hasCdc
+        ? React.createElement(React.Fragment, null,
+            React.createElement(Text, { style: pdfStyles.sectionTitle }, "Clasificación sociométrica CDC (Coie-Dodge)"),
+            React.createElement(View, { style: pdfStyles.summaryGrid },
+              ...(["popular", "rechazado", "ignorado", "controvertido", "promedio"] as const).map(s =>
+                React.createElement(View, {
+                  key: s,
+                  style: [pdfStyles.summaryCard, { borderTop: `3pt solid ${CDC_STATUS_COLOR[s]}` }],
+                },
+                  React.createElement(Text, {
+                    style: [pdfStyles.summaryValue, { color: CDC_STATUS_COLOR[s] }],
+                  }, String(s === "popular" ? soc.metrics.popular_count :
+                             s === "rechazado" ? soc.metrics.rejected_count :
+                             s === "ignorado" ? soc.metrics.neglected_count :
+                             s === "controvertido" ? soc.metrics.controversial_count :
+                             soc.metrics.average_count)),
+                  React.createElement(Text, { style: pdfStyles.summaryLabel }, CDC_STATUS_LABEL[s]),
+                )
+              )
+            ),
+          )
+        : null,
 
       React.createElement(Text, { style: pdfStyles.sectionTitle }, "Grafo de relaciones de amistad"),
       React.createElement(SociogramGraph, { soc }),
       React.createElement(Text, { style: { fontSize: 8, color: "#64748b", marginTop: 4 } },
-        "Línea azul = relación recíproca · Línea gris = elección unilateral · Borde naranja = alumno vulnerable · Nodo rojo = alumno aislado"),
+        "Línea azul = relación recíproca · Línea gris = elección unilateral · Borde amarillo = alumno puente · Borde naranja = alumno vulnerable · Nodo rojo = alumno aislado"),
 
-      React.createElement(View, { style: pdfStyles.footer, fixed: true },
-        React.createElement(Text, { style: pdfStyles.footerText }, "ClassMixer · Informe de sociograma — uso interno"),
-        React.createElement(Text, { style: pdfStyles.footerText, render: ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) => `Pág. ${pageNumber} / ${totalPages}` }),
-      )
+      footer,
     ),
 
+    // ── PAGE 2: legend + ranked lists + communities + alerts ──────────────────
     React.createElement(Page, { size: "A4", style: pdfStyles.page },
+
       React.createElement(Text, { style: pdfStyles.sectionTitle }, "Leyenda del grafo"),
       React.createElement(View, { style: pdfStyles.tableHeader },
         React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.5 }] }, "Nº"),
         React.createElement(Text, { style: [pdfStyles.thCell, { flex: 2.5 }] }, "Alumno"),
         React.createElement(Text, { style: [pdfStyles.thCell, { flex: 1 }] }, "Clase"),
-        React.createElement(Text, { style: [pdfStyles.thCell, { flex: 1 }] }, "Recibidas"),
+        React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.8 }] }, "Rec."),
+        React.createElement(Text, { style: [pdfStyles.thCell, { flex: 1 }] }, "Estado"),
       ),
       ...positions.map(p =>
-        React.createElement(View, { key: p.node.id, style: pdfStyles.tableRow },
+        React.createElement(View, { key: p.node.id, wrap: false, style: pdfStyles.tableRow },
           React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.5 }] }, String(p.index)),
           React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 2.5 }] }, p.node.label),
           React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 1 }] }, p.node.current_class ?? "—"),
-          React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 1 }] }, String(p.node.received_count)),
+          React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.8 }] }, String(p.node.received_count)),
+          React.createElement(Text, {
+            style: [pdfStyles.tdCell, { flex: 1, color: CDC_STATUS_COLOR[p.node.sociometric_status ?? ""] ?? "#334155" }],
+          }, CDC_STATUS_LABEL[p.node.sociometric_status ?? ""] ?? "—"),
         )
       ),
 
       React.createElement(Text, { style: pdfStyles.sectionTitle }, "Alumnos más elegidos"),
       ...mostChosen.map(n =>
-        React.createElement(Text, { key: n.id, style: { fontSize: 9, marginBottom: 3 } }, `· ${n.label} — ${n.received_count} elección(es) recibida(s)`)
+        React.createElement(Text, { key: n.id, style: { fontSize: 9, marginBottom: 3 } },
+          `· ${n.label} — ${n.received_count} elección(es) recibida(s)`)
       ),
 
-      React.createElement(Text, { style: pdfStyles.sectionTitle }, "Alumnos con menos elecciones"),
-      ...leastChosen.map(n =>
-        React.createElement(Text, { key: n.id, style: { fontSize: 9, marginBottom: 3 } }, `· ${n.label} — ${n.received_count} elección(es) recibida(s)`)
-      ),
+      React.createElement(Text, { style: pdfStyles.sectionTitle }, "Alumnos con menos elecciones (no aislados)"),
+      leastChosen.length > 0
+        ? leastChosen.map(n =>
+            React.createElement(Text, { key: n.id, style: { fontSize: 9, marginBottom: 3 } },
+              `· ${n.label} — ${n.received_count} elección(es) recibida(s)`)
+          )
+        : [React.createElement(Text, { key: "none", style: { fontSize: 9, color: "#64748b" } }, "Sin datos.")],
 
       React.createElement(Text, { style: pdfStyles.sectionTitle }, "Relaciones recíprocas"),
       reciprocalPairs.length > 0
@@ -172,11 +234,83 @@ function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
           ))
         : React.createElement(Text, { style: { fontSize: 9, color: "#64748b" } }, "No hay alertas activas."),
 
-      React.createElement(View, { style: pdfStyles.footer, fixed: true },
-        React.createElement(Text, { style: pdfStyles.footerText }, "ClassMixer · Informe de sociograma — uso interno"),
-        React.createElement(Text, { style: pdfStyles.footerText, render: ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) => `Pág. ${pageNumber} / ${totalPages}` }),
-      )
-    )
+      footer,
+    ),
+
+    // ── PAGE 3: bridge analysis ──────────────────────────────────────────────
+    React.createElement(Page, { size: "A4", style: pdfStyles.page },
+      React.createElement(PdfLogoRow, { logoUrl }),
+
+      React.createElement(Text, { style: pdfStyles.sectionTitle }, "Análisis de alumnos puente"),
+      React.createElement(Text, { style: { fontSize: 9, color: "#475569", marginBottom: 10 } },
+        "Los alumnos puente conectan comunidades distintas dentro del grupo. Su posición es estratégica: " +
+        "mantenerlos bien vinculados al mezclar clases evita la fragmentación social. " +
+        "Umbral aplicado: media + 1 desviación típica de intermediación (método Brandes dirigido)."),
+
+      bridges.length > 0
+        ? React.createElement(React.Fragment, null,
+            React.createElement(View, { style: pdfStyles.tableHeader },
+              React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.4 }] }, "Nº"),
+              React.createElement(Text, { style: [pdfStyles.thCell, { flex: 2.5 }] }, "Alumno"),
+              React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.9 }] }, "Clase"),
+              React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.7 }] }, "Rec."),
+              React.createElement(Text, { style: [pdfStyles.thCell, { flex: 1.1 }] }, "Intermediación"),
+              React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.7 }] }, "Comunidad"),
+              React.createElement(Text, { style: [pdfStyles.thCell, { flex: 1.1 }] }, "Estado CDC"),
+            ),
+            ...bridges.map((n, i) =>
+              React.createElement(View, { key: n.id, wrap: false, style: pdfStyles.tableRow },
+                React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.4 }] }, String(i + 1)),
+                React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 2.5 }] }, n.label),
+                React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.9 }] }, n.current_class ?? "—"),
+                React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.7 }] }, String(n.received_count)),
+                React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 1.1 }] },
+                  `${(n.betweenness * 100).toFixed(1)}%`),
+                React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.7 }] },
+                  `G${(n.community_id ?? 0) + 1}`),
+                React.createElement(Text, {
+                  style: [pdfStyles.tdCell, {
+                    flex: 1.1,
+                    color: CDC_STATUS_COLOR[n.sociometric_status ?? ""] ?? "#334155",
+                  }],
+                }, CDC_STATUS_LABEL[n.sociometric_status ?? ""] ?? "—"),
+              )
+            ),
+          )
+        : React.createElement(View, { style: { backgroundColor: "#f8fafc", border: "1pt solid #e2e8f0", borderRadius: 6, padding: 12, marginTop: 6 } },
+            React.createElement(Text, { style: { fontSize: 9, color: "#64748b" } },
+              "No se han detectado alumnos puente con el umbral estadístico aplicado (media + 1 SD de intermediación). " +
+              "Esto puede indicar que el grupo tiene una estructura social homogénea sin intermediarios claros, " +
+              "o que la tasa de respuesta al cuestionario es baja."),
+          ),
+
+      // Bridge interpretation guide
+      React.createElement(Text, { style: [pdfStyles.sectionTitle, { marginTop: 20 }] }, "Interpretación y recomendaciones"),
+      React.createElement(View, { style: { gap: 6 } },
+        React.createElement(View, { style: { backgroundColor: "#eff6ff", border: "1pt solid #bfdbfe", borderRadius: 5, padding: 8 } },
+          React.createElement(Text, { style: { fontSize: 9, fontWeight: "bold", color: "#1e40af", marginBottom: 3 } }, "Alumno puente rechazado (CDC)"),
+          React.createElement(Text, { style: { fontSize: 9, color: "#1e3a8a" } },
+            "Situación crítica: conecta comunidades pero es activamente rechazado. " +
+            "Su mezcla requiere supervisión especial para evitar que arrastre el rechazo al nuevo grupo. " +
+            "Se recomienda intervención de orientación antes de la mezcla."),
+        ),
+        React.createElement(View, { style: { backgroundColor: "#f0fdf4", border: "1pt solid #bbf7d0", borderRadius: 5, padding: 8 } },
+          React.createElement(Text, { style: { fontSize: 9, fontWeight: "bold", color: "#15803d", marginBottom: 3 } }, "Alumno puente popular (CDC)"),
+          React.createElement(Text, { style: { fontSize: 9, color: "#14532d" } },
+            "Recurso social valioso: situarle en la clase más heterogénea favorece la cohesión del nuevo grupo. " +
+            "Separar de todos sus vínculos actuales tiene riesgo bajo al tener capacidad natural de integración."),
+        ),
+        React.createElement(View, { style: { backgroundColor: "#fefce8", border: "1pt solid #fef08a", borderRadius: 5, padding: 8 } },
+          React.createElement(Text, { style: { fontSize: 9, fontWeight: "bold", color: "#854d0e", marginBottom: 3 } }, "Alumno puente ignorado (CDC)"),
+          React.createElement(Text, { style: { fontSize: 9, color: "#713f12" } },
+            "Perfil silencioso con función estructural: aunque no recibe elecciones, conecta grupos. " +
+            "Separar de sus pocas conexiones puede dejarlo aislado en el nuevo contexto. " +
+            "Se recomienda mantener al menos un vínculo del grupo actual."),
+        ),
+      ),
+
+      footer,
+    ),
   )
 }
 
@@ -216,7 +350,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .filter(r => !excludedIds.has(r.respondent_student_id) && !excludedIds.has(r.target_student_id))
 
   const studentMap = new Map(students.map((s: any) => [s.id, s]))
-  const soc = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
+  const soc = calculateSociogram(
+    students as any,
+    responses as any,
+    catalogIndex.scoringRoles.friendshipLike,
+    catalogIndex.excludedFromGraph,
+    catalogIndex.scoringRoles.negativeLike,
+  )
   const positions = layout(soc.nodes)
 
   const buffer = await renderToBuffer(React.createElement(SociogramaPDF, { process, soc, positions, studentMap, logoUrl }) as any)

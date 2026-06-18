@@ -20,7 +20,9 @@ export const pdfStyles = StyleSheet.create({
   summaryLabel: { fontSize: 8, color: "#64748b", marginTop: 2 },
   tableHeader: { flexDirection: "row", borderBottom: "1pt solid #e2e8f0", paddingBottom: 4, marginBottom: 4, marginTop: 6 },
   thCell: { fontSize: 8, fontWeight: "bold", color: "#64748b", textTransform: "uppercase" },
-  tableRow: { flexDirection: "row", paddingVertical: 3, borderBottom: "0.5pt solid #f1f5f9" },
+  // alignItems: "flex-start" ensures cells are top-aligned when one cell wraps
+  // to multiple lines (prevents the row-height misalignment / cell-merge bug)
+  tableRow: { flexDirection: "row", paddingVertical: 3, borderBottom: "0.5pt solid #f1f5f9", alignItems: "flex-start" },
   tdCell: { fontSize: 9, color: "#334155" },
   card: { marginBottom: 14, border: "1pt solid #e2e8f0", borderRadius: 6, padding: 12 },
   cardTitle: { fontSize: 11, fontWeight: "bold", color: "#1e293b", marginBottom: 6 },
