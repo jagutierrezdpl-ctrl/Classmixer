@@ -14,9 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Plus, Trash2, Shield, Search, X, Loader2, Pencil } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Shield, Search, X, Loader2, Pencil, Sparkles, CheckCircle2, XCircle, AlertTriangle, Users, ShieldAlert } from "lucide-react"
 import Link from "next/link"
 import type { Rule, Student } from "@/types"
+import type { ProposedRule } from "@/app/api/processes/[id]/sociogram/proposed-rules/route"
 
 const RULE_LABELS: Record<string, string> = {
   must_separate: "Separar obligatoriamente",
@@ -49,6 +50,14 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
   const [open, setOpen] = useState(false)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // AI proposals state
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [proposals, setProposals] = useState<ProposedRule[]>([])
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set())
+  const [applying, setApplying] = useState<Set<number>>(new Set())
+  const [applied, setApplied] = useState<Set<number>>(new Set())
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([])
   const [studentSearch, setStudentSearch] = useState("")
   const [studentDropdownOpen, setStudentDropdownOpen] = useState(false)
@@ -202,6 +211,58 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
     toast.success("Regla eliminada")
   }
 
+  async function openAiSuggestions() {
+    setAiOpen(true)
+    if (proposals.length > 0) return // already loaded
+    setAiLoading(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/proposed-rules`)
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error al cargar sugerencias")
+      setProposals(await res.json())
+      setDismissed(new Set())
+      setApplied(new Set())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al cargar sugerencias")
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  async function applyProposal(index: number) {
+    const p = proposals[index]
+    setApplying(prev => new Set([...prev, index]))
+    try {
+      const body: Record<string, unknown> = {
+        rule_type: p.rule_type,
+        priority: p.priority,
+        description: p.description,
+        student_ids: p.student_ids,
+        process_id: id,
+        ...(p.max_count != null ? { max_count: p.max_count } : {}),
+      }
+      const res = await fetch("/api/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      setApplied(prev => new Set([...prev, index]))
+      await loadRules()
+      toast.success("Regla creada")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al crear la regla")
+    } finally {
+      setApplying(prev => { const s = new Set(prev); s.delete(index); return s })
+    }
+  }
+
+  async function applyAllProposals() {
+    const pending = proposals
+      .map((_, i) => i)
+      .filter(i => !dismissed.has(i) && !applied.has(i))
+    for (const i of pending) await applyProposal(i)
+  }
+
   const filteredStudents = students.filter(s => {
     const q = studentSearch.toLowerCase()
     return !q || `${s.first_name} ${s.last_name}`.toLowerCase().includes(q)
@@ -221,10 +282,16 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
             <p className="text-muted-foreground text-sm">{rules.length} reglas configuradas</p>
           </div>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4" />
-          Nueva regla
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={openAiSuggestions}>
+            <Sparkles className="w-4 h-4" />
+            Aplicar reglas del análisis
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="w-4 h-4" />
+            Nueva regla
+          </Button>
+        </div>
       </div>
 
       {rules.length === 0 ? (
@@ -294,6 +361,142 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
           ))}
         </div>
       )}
+
+      {/* ── AI proposals dialog ── */}
+      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-500" />
+              Reglas sugeridas por el análisis sociométrico
+            </DialogTitle>
+            <DialogDescription>
+              Generadas automáticamente a partir del sociograma. Revisa cada una y aplica las que consideres oportunas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto min-h-0 py-1">
+            {aiLoading ? (
+              <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Analizando el sociograma…
+              </div>
+            ) : proposals.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No hay sugerencias disponibles</p>
+                <p className="text-sm mt-1">El sociograma no detecta situaciones que requieran reglas específicas, o el cuestionario aún no tiene respuestas suficientes.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 pr-1">
+                {proposals.map((p, i) => {
+                  const isDone = applied.has(i)
+                  const isDismissed = dismissed.has(i)
+                  const isApplying = applying.has(i)
+                  if (isDismissed) return null
+
+                  const icon = p.reason_type === "bullying_risk" || p.reason_type === "active_rejection"
+                    ? <ShieldAlert className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    : p.reason_type === "isolated_anchor" || p.reason_type === "vulnerable_anchor"
+                    ? <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    : p.reason_type === "bridge_protected"
+                    ? <ShieldAlert className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                    : <Users className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+
+                  const priorityColor: Record<string, string> = {
+                    obligatoria: "bg-red-100 text-red-800",
+                    alta: "bg-orange-100 text-orange-800",
+                    media: "bg-yellow-100 text-yellow-800",
+                    baja: "bg-slate-100 text-slate-600",
+                  }
+
+                  return (
+                    <div
+                      key={i}
+                      className={`rounded-lg border p-3 transition-all ${
+                        isDone ? "bg-green-50 border-green-200 opacity-70" : "bg-card border-border"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {icon}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-xs font-semibold">
+                              {RULE_LABELS[p.rule_type] ?? p.rule_type}
+                            </span>
+                            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${priorityColor[p.priority] ?? ""}`}>
+                              {p.priority}
+                            </span>
+                            {isDone && (
+                              <span className="text-[11px] text-green-700 font-medium flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> Aplicada
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-2">{p.description}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {p.students_info.map(s => (
+                              <span key={s.id} className="text-[11px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">
+                                {s.first_name} {s.last_name}
+                                {s.current_class && <span className="opacity-60 ml-1">({s.current_class})</span>}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {!isDone && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDismissed(prev => new Set([...prev, i]))}
+                              title="Ignorar"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => applyProposal(i)}
+                              disabled={isApplying}
+                            >
+                              {isApplying
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <><CheckCircle2 className="w-3 h-3" /> Aplicar</>
+                              }
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {proposals.length > 0 && !aiLoading && (
+            <div className="border-t pt-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                {applied.size} de {proposals.length - dismissed.size} reglas aplicadas
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setAiOpen(false)}>
+                  Cerrar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={applyAllProposals}
+                  disabled={proposals.every((_, i) => applied.has(i) || dismissed.has(i))}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Aplicar todas
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Create / Edit rule dialog */}
       <Dialog open={open} onOpenChange={v => { if (!v) closeDialog(); else setOpen(v) }}>
