@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
+import { pushNotification } from "@/lib/notifications"
 import { NextResponse } from "next/server"
 import { generateProposals, checkInfeasibility, DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
 import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
@@ -331,6 +332,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   await logAudit(profile.id, profile.center_id, "generate_proposals", "proposal", {
     processId: id,
     metadata: { count: savedIds.length, profile: "custom", numRequested: numProposals, solver: usedSolver },
+  })
+
+  await pushNotification({
+    centerId: profile.center_id,
+    type: "proposal_generated",
+    title: "Propuestas generadas",
+    message: `Se han generado ${savedIds.length} propuesta${savedIds.length !== 1 ? "s" : ""} para el proceso "${process.name}".`,
+    processId: id,
+    entityType: "process",
+    entityId: id,
   })
 
   return NextResponse.json({ generated: savedIds.length, ids: savedIds })

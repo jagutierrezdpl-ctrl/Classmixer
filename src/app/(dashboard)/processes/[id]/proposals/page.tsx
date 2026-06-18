@@ -9,7 +9,7 @@ import {
   ArrowLeft, Zap, Download, Users, Loader2,
   ChevronDown, ChevronUp, CheckCircle, Settings2,
   UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap, GitBranch,
-  Star, AlertTriangle, Printer, TrendingUp,
+  Star, AlertTriangle, Printer, TrendingUp, SplitSquareHorizontal,
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
@@ -138,6 +138,14 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
         <div className="flex gap-2">
+          {proposals.length >= 2 && (
+            <Button variant="outline" asChild>
+              <Link href={`/processes/${id}/proposals/compare`}>
+                <SplitSquareHorizontal className="w-4 h-4" />
+                Comparar lado a lado
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" asChild>
             <Link href={`/processes/${id}/algorithm`}>
               <Settings2 className="w-4 h-4" />

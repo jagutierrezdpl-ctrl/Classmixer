@@ -3,21 +3,26 @@ import { getUserProfile, logAudit, hasFullAccess, getTutorGroups } from "@/lib/a
 import { NextResponse } from "next/server"
 import { createProcessSchema } from "@/schemas"
 
-export async function GET() {
+export async function GET(request: Request) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const supabase = createServiceClient()
+  const { searchParams } = new URL(request.url)
+  const parentId = searchParams.get("parent_id")
 
   // Orientador and admin see all center processes
   if (hasFullAccess(profile.role)) {
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (supabase as any)
       .from("processes")
       .select("*")
       .eq("center_id", profile.center_id)
       .order("created_at", { ascending: false })
+    if (parentId) query = query.eq("parent_process_id", parentId)
+    const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data)
+    return NextResponse.json(parentId ? { processes: data } : data)
   }
 
   // Tutor: processes explicitly assigned OR whose source_groups overlap their groups

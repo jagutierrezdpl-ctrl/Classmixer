@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare, FileText, ArrowRight, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare, FileText, ArrowRight, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react"
 import ProcessActions from "./ProcessActions"
 import ProcessTeam from "./ProcessTeam"
 import { ProcessStepper } from "@/components/processes/ProcessStepper"
@@ -144,9 +144,18 @@ export default async function ProcessDetailPage({ params }: { params: Promise<{ 
                 <p className="text-xs text-green-700 mt-0.5">Puedes exportar las clases finales, los informes PDF y los listados para tutores.</p>
               </div>
             </div>
-            <Button size="sm" variant="outline" asChild className="shrink-0 border-green-400 text-green-800 hover:bg-green-100">
-              <Link href={`/processes/${id}/proposals`}>Ver propuesta <ArrowRight className="w-3 h-3 ml-1" /></Link>
-            </Button>
+            <div className="flex gap-2 shrink-0">
+              {isAdmin && (
+                <Button size="sm" variant="outline" asChild className="border-blue-300 text-blue-700 hover:bg-blue-50">
+                  <Link href={`/processes/${id}/followup`}>
+                    <RefreshCw className="w-3 h-3 mr-1" /> Cuestionario de seguimiento
+                  </Link>
+                </Button>
+              )}
+              <Button size="sm" variant="outline" asChild className="border-green-400 text-green-800 hover:bg-green-100">
+                <Link href={`/processes/${id}/proposals`}>Ver propuesta <ArrowRight className="w-3 h-3 ml-1" /></Link>
+              </Button>
+            </div>
           </div>
         )
         if ((studentCount ?? 0) === 0) return (

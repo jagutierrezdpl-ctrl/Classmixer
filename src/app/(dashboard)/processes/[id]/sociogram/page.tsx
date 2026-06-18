@@ -70,6 +70,13 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   }>(null)
   const [convivenciaVisible, setConvivenciaVisible] = useState(false)
   const [convivenciaLoading, setConvivenciaLoading] = useState(false)
+  // Annotations
+  type Annotation = { student_id: string; note: string; status: string; author?: { name: string } | null }
+  const [annotations, setAnnotations] = useState<Record<string, Annotation>>({})
+  const [annotationNote, setAnnotationNote] = useState("")
+  const [annotationStatus, setAnnotationStatus] = useState("sin_accion")
+  const [annotationSaving, setAnnotationSaving] = useState(false)
+  const [annotationPanelOpen, setAnnotationPanelOpen] = useState(false)
 
   function handlePrint() {
     if (!aiSummary) return
@@ -160,6 +167,17 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
         setData(d)
         setViewerRole(d.viewer_role ?? null)
         setCanSeeSensitive(d.can_see_sensitive ?? false)
+        // Load annotations for admin/orientador
+        if (["admin", "superadmin", "orientador"].includes(d.viewer_role ?? "")) {
+          fetch(`/api/processes/${id}/sociogram/annotations`)
+            .then(r => r.ok ? r.json() : [])
+            .then((anns: Annotation[]) => {
+              const map: Record<string, Annotation> = {}
+              for (const a of anns) map[a.student_id] = a
+              setAnnotations(map)
+            })
+            .catch(() => {})
+        }
       })
       .finally(() => setLoading(false))
   }, [id])
@@ -253,6 +271,24 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   }
 
   const nodeMap = data ? new Map(data.nodes.map(n => [n.id, n])) : new Map<string, SociogramNode>()
+
+  async function saveAnnotation(studentId: string) {
+    setAnnotationSaving(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/annotations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: studentId, note: annotationNote, status: annotationStatus }),
+      })
+      if (res.ok) {
+        const saved: Annotation = await res.json()
+        setAnnotations(prev => ({ ...prev, [studentId]: saved }))
+        setAnnotationPanelOpen(false)
+      }
+    } finally {
+      setAnnotationSaving(false)
+    }
+  }
 
   async function createSuggestedRule(key: string, ruleType: string, studentIds: string[], description: string) {
     setRuleCreating(key)
@@ -624,7 +660,15 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               colorBy={colorBy}
               layout={layout}
               filter={filter}
-              onNodeClick={setSelectedNode}
+              onNodeClick={(node) => {
+                setSelectedNode(node)
+                setAnnotationPanelOpen(false)
+                if (node) {
+                  const existing = annotations[node.id]
+                  setAnnotationNote(existing?.note ?? "")
+                  setAnnotationStatus(existing?.status ?? "sin_accion")
+                }
+              }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -765,6 +809,78 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                   )
                 })()}
               </div>
+
+              {/* Annotation panel — admin/orientador only */}
+              {canSeeSensitive && (
+                <div className="border-t px-3 py-2">
+                  {!annotationPanelOpen ? (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        {annotations[selectedNode.id] && annotations[selectedNode.id].status !== "sin_accion" ? (
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                            annotations[selectedNode.id].status === "intervencion_activa" ? "bg-red-100 text-red-700" :
+                            annotations[selectedNode.id].status === "en_seguimiento" ? "bg-amber-100 text-amber-700" :
+                            "bg-blue-100 text-blue-700"
+                          }`}>
+                            {annotations[selectedNode.id].status === "revisado" ? "Revisado" :
+                             annotations[selectedNode.id].status === "en_seguimiento" ? "En seguimiento" :
+                             "Intervención activa"}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Sin anotación</span>
+                        )}
+                        {annotations[selectedNode.id]?.note && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[160px]">
+                            &ldquo;{annotations[selectedNode.id].note}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setAnnotationPanelOpen(true)}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        {annotations[selectedNode.id] ? "Editar" : "+ Anotar"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground">Anotación del orientador</p>
+                      <select
+                        value={annotationStatus}
+                        onChange={e => setAnnotationStatus(e.target.value)}
+                        className="w-full text-xs border border-input rounded px-2 py-1 bg-background"
+                      >
+                        <option value="sin_accion">Sin acción</option>
+                        <option value="revisado">Revisado</option>
+                        <option value="en_seguimiento">En seguimiento</option>
+                        <option value="intervencion_activa">Intervención activa</option>
+                      </select>
+                      <textarea
+                        value={annotationNote}
+                        onChange={e => setAnnotationNote(e.target.value)}
+                        placeholder="Notas internas..."
+                        className="w-full text-xs border border-input rounded px-2 py-1 bg-background resize-none"
+                        rows={2}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => saveAnnotation(selectedNode.id)}
+                          disabled={annotationSaving}
+                          className="flex-1 text-[10px] bg-primary text-primary-foreground rounded px-2 py-1 hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          {annotationSaving ? "Guardando..." : "Guardar"}
+                        </button>
+                        <button
+                          onClick={() => setAnnotationPanelOpen(false)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -788,10 +904,20 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                 <TabsTrigger value="rankings" className="text-xs h-7 shrink-0">Rankings</TabsTrigger>
                 <TabsTrigger value="guide" className="text-xs h-7 shrink-0">Guía</TabsTrigger>
                 {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
-                  <TabsTrigger value="docs" className="text-xs h-7 shrink-0" onClick={fetchDocs}>
-                    Docs IA
-                    {docs.length > 0 && <span className="ml-1 bg-violet-100 text-violet-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">{docs.length}</span>}
-                  </TabsTrigger>
+                  <>
+                    <TabsTrigger value="docs" className="text-xs h-7 shrink-0" onClick={fetchDocs}>
+                      Docs IA
+                      {docs.length > 0 && <span className="ml-1 bg-violet-100 text-violet-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">{docs.length}</span>}
+                    </TabsTrigger>
+                    <TabsTrigger value="annotations" className="text-xs h-7 shrink-0">
+                      Anotaciones
+                      {Object.values(annotations).filter(a => a.status !== "sin_accion").length > 0 && (
+                        <span className="ml-1 bg-amber-100 text-amber-700 rounded-full text-xs w-4 h-4 flex items-center justify-center">
+                          {Object.values(annotations).filter(a => a.status !== "sin_accion").length}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                  </>
                 )}
               </TabsList>
 
@@ -1551,6 +1677,62 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
                   </p>
                 )}
               </TabsContent>
+
+              {/* Annotations tab */}
+              {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
+                <TabsContent value="annotations" className="flex-1 overflow-y-auto p-3 mt-0 space-y-2 text-xs">
+                  <p className="text-[10px] text-muted-foreground mb-2">
+                    Anotaciones internas del orientador. Solo visibles para admin y orientación.
+                  </p>
+                  {Object.values(annotations).length === 0 ? (
+                    <p className="text-muted-foreground text-[10px] italic">
+                      Sin anotaciones todavía. Haz clic en un alumno del sociograma para añadir una nota.
+                    </p>
+                  ) : (
+                    Object.values(annotations)
+                      .sort((a, b) => {
+                        const order = { intervencion_activa: 0, en_seguimiento: 1, revisado: 2, sin_accion: 3 }
+                        return (order[a.status as keyof typeof order] ?? 3) - (order[b.status as keyof typeof order] ?? 3)
+                      })
+                      .map(ann => {
+                        const node = data?.nodes.find(n => n.id === ann.student_id)
+                        if (!node) return null
+                        return (
+                          <div
+                            key={ann.student_id}
+                            className={`rounded-lg border p-2 cursor-pointer hover:bg-muted/30 transition-colors ${
+                              selectedNode?.id === ann.student_id ? "border-primary bg-primary/5" : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedNode(node)
+                              setAnnotationNote(ann.note ?? "")
+                              setAnnotationStatus(ann.status)
+                              setAnnotationPanelOpen(false)
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium">{node.first_name} {node.last_name}</span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                ann.status === "intervencion_activa" ? "bg-red-100 text-red-700" :
+                                ann.status === "en_seguimiento" ? "bg-amber-100 text-amber-700" :
+                                ann.status === "revisado" ? "bg-blue-100 text-blue-700" :
+                                "bg-gray-100 text-gray-500"
+                              }`}>
+                                {ann.status === "intervencion_activa" ? "Intervención" :
+                                 ann.status === "en_seguimiento" ? "Seguimiento" :
+                                 ann.status === "revisado" ? "Revisado" : "Sin acción"}
+                              </span>
+                            </div>
+                            <p className="text-muted-foreground text-[10px]">{node.current_class}</p>
+                            {ann.note && (
+                              <p className="text-[10px] text-gray-600 mt-1 line-clamp-2">{ann.note}</p>
+                            )}
+                          </div>
+                        )
+                      })
+                  )}
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         )}

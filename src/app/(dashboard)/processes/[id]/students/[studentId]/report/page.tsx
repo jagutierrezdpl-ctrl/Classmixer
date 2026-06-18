@@ -220,6 +220,14 @@ export default async function StudentReportPage({
           >
             ← Volver al alumno
           </Link>
+          {canSeeSensitive && (status === "rechazado" || status === "ignorado" || status === "controvertido") && (
+            <Link
+              href={`/processes/${processId}/students/${studentId}/intervention`}
+              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Ficha de Intervención
+            </Link>
+          )}
           <PrintButton />
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, hasFullAccess, tutorCanAccessProcess, logAudit } from "@/lib/auth"
+import { pushNotification } from "@/lib/notifications"
 import { NextResponse } from "next/server"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
@@ -63,6 +64,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sociogram = calculateSociogram(students as any, responses as any, catalogIndex.scoringRoles.friendshipLike, catalogIndex.excludedFromGraph)
+
+  // Fire bullying_risk notification for high-risk students (only for admin/orientador, non-blocking)
+  if (canSeeSensitive) {
+    const bullyingRisk = sociogram.nodes.filter(
+      n => n.sociometric_status === "rechazado" && (n.rejection_received_count ?? 0) >= 5
+    )
+    if (bullyingRisk.length > 0) {
+      pushNotification({
+        centerId: profile.center_id,
+        type: "bullying_risk",
+        title: "Alumnos con riesgo de acoso detectados",
+        message: `${bullyingRisk.length} alumno${bullyingRisk.length > 1 ? "s con" : " con"} ≥5 nominaciones de rechazo: ${bullyingRisk.map(n => `${n.first_name} ${n.last_name}`).join(", ")}.`,
+        processId: id,
+        entityType: "process",
+        entityId: id,
+      }).catch(() => {})
+    }
+  }
 
   return NextResponse.json({
     ...sociogram,
