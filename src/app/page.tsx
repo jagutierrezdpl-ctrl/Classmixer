@@ -3,7 +3,7 @@ import {
   GraduationCap, Network, BarChart3, Shield, Users, Zap,
   CheckCircle, ArrowRight, FileSpreadsheet,
   Brain, ClipboardList, Lock, Sparkles, AlertTriangle,
-  TableProperties, UserCheck, BookOpen, Eye,
+  TableProperties, UserCheck, BookOpen, Eye, FileText, ShieldAlert,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import SociogramIllustration from "@/components/landing/SociogramIllustration"
@@ -18,53 +18,53 @@ const FEATURES = [
   {
     icon: Network,
     title: "Sociograma interactivo",
-    desc: "Grafo visual con Cytoscape. Detecta aislados, líderes, puentes y subgrupos. Filtra por clase, género, nivel o comunidad detectada.",
+    desc: "Grafo visual con Cytoscape. Detecta aislados, líderes, puentes y subgrupos. Clasificación CDC automática con z-scores (zSP, zSI).",
   },
   {
     icon: Brain,
-    title: "Algoritmo de mezcla",
-    desc: "Genera varias propuestas equilibradas. Cada una incluye puntuación social, académica y de convivencia, con reglas cumplidas e incumplidas.",
+    title: "Análisis con IA",
+    desc: "El motor calcula métricas precisas (CIVSOC, CDC). La IA redacta diagnósticos clínicos, fichas individuales de riesgo y recomendaciones de mezcla con nombres reales.",
   },
   {
     icon: ClipboardList,
     title: "Motor de reglas pedagógicas",
-    desc: "9 tipos de reglas entre alumnos con prioridad configurable. El algoritmo las respeta y avisa si hay incompatibilidades.",
+    desc: "9 tipos de reglas con prioridad configurable. El análisis sociométrico propone reglas automáticamente — el docente las revisa y acepta con un clic.",
   },
   {
-    icon: BarChart3,
-    title: "Exportaciones completas",
-    desc: "Excel con clases finales, PDF de propuestas, sociograma en PNG e informes individuales por alumno para orientación y tutores.",
+    icon: FileText,
+    title: "4 informes PDF diferenciados",
+    desc: "Sociograma (con CDC y análisis de puentes), convivencia, orientación (con sociograma de rechazos) y tutores. Más informe individual por alumno.",
   },
   {
     icon: Shield,
     title: "Privacidad por diseño",
-    desc: "Acceso por rol diferenciado. Los alumnos nunca ven datos de otros. Toda acción sensible queda en el log de auditoría.",
+    desc: "Acceso por rol diferenciado. Los alumnos nunca ven datos de otros. Datos de rechazo visibles solo para orientación y dirección. Auditoría completa.",
   },
 ]
 
 const SOCIOGRAM_DETECTIONS = [
-  "Alumnos sin elecciones recibidas",
-  "Relaciones recíprocas y unilaterales",
-  "Líderes sociales por centralidad",
-  "Alumnos puente entre grupos",
-  "Subgrupos y comunidades detectadas",
-  "Dependencias de un único vínculo",
-  "Alumnos en riesgo de aislamiento",
+  "Clasificación CDC: Popular, Rechazado, Ignorado, Controvertido, Promedio",
+  "Riesgo de acoso — rechazo activo ≥5 nominaciones (alerta urgente)",
+  "Alumnos puente entre comunidades (betweenness Brandes dirigido)",
+  "Relaciones recíprocas y unilaterales por tipo",
+  "Subgrupos y comunidades detectados (Louvain)",
+  "Dependencias de un único vínculo afectivo",
+  "Índices CIVSOC: cohesión, disociación, coherencia, intensidad",
 ]
 
 const RULE_TYPES = [
-  "No juntar a dos alumnos",
-  "Mantener juntos a dos alumnos",
-  "Al menos uno del grupo",
+  "No juntar a dos alumnos (obligatoria o recomendada)",
+  "Mantener juntos — ancla afectiva de alumno vulnerable",
+  "Al menos uno del grupo de referencia",
   "Bloquear alumno en clase concreta",
-  "Máximo N de un grupo conflictivo",
-  "Proteger alumno vulnerable",
-  "Excluir de la mezcla",
+  "Máximo N de un subgrupo cerrado",
+  "Proteger alumno vulnerable o rechazado",
+  "Reglas propuestas automáticamente por el análisis",
 ]
 
 const STATS = [
-  { value: "9", label: "tipos de reglas pedagógicas" },
-  { value: "7", label: "patrones sociales detectados" },
+  { value: "5", label: "estatus CDC (Coie-Dodge, 1982)" },
+  { value: "4", label: "informes PDF diferenciados por rol" },
   { value: "4", label: "roles con permisos diferenciados" },
   { value: "100%", label: "supervisión humana en cada decisión" },
 ]
@@ -75,20 +75,24 @@ const BEFORE_AFTER = [
     after: "Sociograma interactivo con alertas automáticas",
   },
   {
+    before: "Alumno rechazado confundido con tímido o aislado",
+    after: "Diagnóstico CDC diferenciado: rechazado activo vs. ignorado pasivo",
+  },
+  {
     before: "Criterios subjetivos sin documentar",
-    after: "Reglas pedagógicas explícitas con prioridad",
+    after: "Reglas pedagógicas explícitas propuestas por el análisis",
   },
   {
     before: "Una propuesta de mezcla sin métricas",
-    after: "Varias propuestas comparadas con puntuación",
+    after: "Varias propuestas comparadas con puntuación multidimensional",
   },
   {
     before: "Alumnos aislados descubiertos semanas después",
-    after: "Detección automática antes de la mezcla",
+    after: "Detección automática antes de la mezcla con acción recomendada",
   },
   {
-    before: "Revisión manual sin saber el impacto",
-    after: "Editor con impacto en tiempo real al mover alumnos",
+    before: "Reglas de mezcla creadas a mano tras leer informes",
+    after: "Reglas sugeridas por el análisis — aplica todas con un clic",
   },
   {
     before: "Sin trazabilidad de las decisiones tomadas",
@@ -104,7 +108,7 @@ const ROLES = [
     benefits: [
       "Crea y supervisa todos los procesos de mezcla",
       "Aprueba la distribución final con un clic",
-      "Exporta informes ejecutivos en PDF",
+      "Exporta informe ejecutivo en PDF para dirección",
       "Ve el historial de decisiones del equipo",
     ],
   },
@@ -113,10 +117,10 @@ const ROLES = [
     role: "Orientador",
     color: "violet",
     benefits: [
-      "Acceso completo al sociograma con datos sensibles",
-      "Alertas de aislamiento y vulnerabilidad",
-      "Informe de convivencia por alumno",
-      "Registro automático de cada acceso",
+      "Diagnóstico CDC completo con z-scores por alumno",
+      "Alertas de rechazo activo y riesgo de acoso escolar",
+      "Informe de orientación con sociograma de rechazos",
+      "Registro automático de cada acceso a datos sensibles",
     ],
   },
   {
@@ -126,7 +130,7 @@ const ROLES = [
     benefits: [
       "Ve solo los alumnos de sus grupos",
       "Añade observaciones y reglas entre alumnos",
-      "Revisa las propuestas de su clase",
+      "Informe de tutoría con relaciones sociales por alumno",
       "Descarga el listado final con un clic",
     ],
   },
@@ -148,6 +152,7 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
             <a href="#como-funciona" className="hover:text-gray-900 transition-colors">Cómo funciona</a>
             <a href="#sociograma" className="hover:text-gray-900 transition-colors">Sociograma</a>
+            <a href="#ia" className="hover:text-gray-900 transition-colors">Análisis IA</a>
             <a href="#roles" className="hover:text-gray-900 transition-colors">Para quién</a>
           </nav>
           <div className="flex items-center gap-3">
@@ -172,7 +177,7 @@ export default function LandingPage() {
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-12 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 font-medium mb-8">
             <Sparkles className="w-3.5 h-3.5" />
-            Diseñado para equipos docentes, no para ingenieros
+            Análisis CDC + IA integrada · Diseñado para equipos docentes
           </div>
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 max-w-4xl mx-auto leading-[1.08] text-gray-900">
             Mezcla clases con{" "}
@@ -182,8 +187,9 @@ export default function LandingPage() {
             y supervisión docente
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            ClassMixer combina sociogramas interactivos, datos académicos y criterios pedagógicos
-            para distribuir el alumnado de forma equilibrada, transparente y revisable.
+            ClassMixer combina sociogramas científicos (CDC Coie-Dodge), análisis con IA
+            y criterios pedagógicos para distribuir el alumnado de forma equilibrada,
+            transparente y revisable.
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center mb-14">
             <Button size="lg" className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/20 border-0 h-12 px-8 text-base" asChild>
@@ -203,11 +209,12 @@ export default function LandingPage() {
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-amber-900 mb-1">
-                ¿Tu equipo sigue repartiendo alumnos en hojas de cálculo?
+                ¿Tu equipo confunde alumnos rechazados con alumnos tímidos?
               </p>
               <p className="text-sm text-amber-700 leading-relaxed">
-                Sin datos sociales, sin detección de alumnos aislados y sin forma de comparar
-                alternativas — hasta que llega ClassMixer.
+                Un alumno rechazado activamente (CDC) no es simplemente tímido o con pocos amigos:
+                recibe nominaciones explícitas de rechazo del grupo. Sin datos sociométricos,
+                esta diferencia clínica pasa desapercibida hasta que es tarde.
               </p>
             </div>
           </div>
@@ -238,9 +245,9 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {[
             { n: "01", title: "Importa tus alumnos", desc: "Sube el Excel del grupo. Valida errores, detecta duplicados y muestra la distribución antes de confirmar." },
-            { n: "02", title: "Lanza el cuestionario", desc: "Genera un enlace único por alumno. Compatible con Google Workspace. Envía recordatorios por email." },
-            { n: "03", title: "Analiza el sociograma", desc: "Visualiza relaciones, detecta aislados y subgrupos, y define reglas pedagógicas entre alumnos." },
-            { n: "04", title: "Genera y aprueba la mezcla", desc: "El algoritmo propone distribuciones con métricas detalladas. Revisas, ajustas y exportas." },
+            { n: "02", title: "Lanza el cuestionario", desc: "Genera un enlace único por alumno. Compatible con Google Workspace. Recoge elecciones positivas y negativas." },
+            { n: "03", title: "Analiza con IA y sociograma", desc: "El algoritmo clasifica CDC, detecta rechazados activos y propone reglas. La IA redacta el diagnóstico con nombres." },
+            { n: "04", title: "Genera y aprueba la mezcla", desc: "El algoritmo propone distribuciones respetando todas las reglas. Revisas, ajustas y exportas 4 informes PDF." },
           ].map(step => (
             <div key={step.n} className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 hover:shadow-md hover:border-indigo-100 transition-all duration-200">
               <div className="text-4xl font-black text-indigo-100 mb-4 leading-none">{step.n}</div>
@@ -291,22 +298,174 @@ export default function LandingPage() {
       {/* Sociogram illustration */}
       <section id="sociograma" className="max-w-4xl mx-auto px-6 py-14">
         <div className="text-center mb-8">
-          <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Sociograma</p>
+          <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Sociograma científico</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Entiende las relaciones antes de mezclar
+            Más allá del grafo — diagnóstico CDC
           </h2>
           <p className="text-gray-500 max-w-xl mx-auto">
-            El sociograma detecta automáticamente líderes, alumnos puente, subgrupos y
-            alumnos en riesgo de aislamiento — antes de tomar ninguna decisión.
+            El sociograma calcula z-scores de preferencia social (zSP) e impacto social (zSI)
+            para clasificar a cada alumno según el modelo Coie-Dodge de 1982 —
+            el estándar de referencia en psicología del desarrollo.
           </p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
           <SociogramIllustration />
         </div>
+
+        {/* CDC statuses explanation */}
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {[
+            { status: "Popular", color: "bg-green-50 border-green-200 text-green-800", desc: "Alto agrado, baja conflictividad" },
+            { status: "Rechazado", color: "bg-red-50 border-red-200 text-red-800", desc: "Nominaciones de rechazo activo" },
+            { status: "Ignorado", color: "bg-slate-50 border-slate-200 text-slate-700", desc: "Invisible para el grupo" },
+            { status: "Controvertido", color: "bg-amber-50 border-amber-200 text-amber-800", desc: "Alto impacto polarizador" },
+            { status: "Promedio", color: "bg-blue-50 border-blue-200 text-blue-700", desc: "Posición social estable" },
+          ].map(s => (
+            <div key={s.status} className={`rounded-xl border p-3 text-center text-xs ${s.color}`}>
+              <p className="font-bold mb-1">{s.status}</p>
+              <p className="opacity-80">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* AI Analysis section */}
+      <section id="ia" className="bg-gray-50 border-y py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Análisis con IA</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              El algoritmo calcula. La IA explica. El docente decide.
+            </h2>
+            <p className="text-gray-500 max-w-2xl mx-auto">
+              Un sistema de tres capas donde los datos matemáticos y la narrativa clínica
+              se combinan para producir recomendaciones accionables — no solo números.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+            {[
+              {
+                n: "1",
+                color: "indigo",
+                title: "Motor algorítmico",
+                icon: BarChart3,
+                items: [
+                  "z-scores CDC (zSP, zSI, zLM, zLL)",
+                  "Betweenness Brandes dirigido",
+                  "Detección de comunidades Louvain",
+                  "Índices CIVSOC del grupo",
+                  "Alertas de rechazo activo (≥5 nominaciones)",
+                ],
+              },
+              {
+                n: "2",
+                color: "violet",
+                title: "Capa de IA",
+                icon: Brain,
+                items: [
+                  "Diagnóstico cualitativo del clima social",
+                  "Fichas individuales de alumnos de riesgo",
+                  "Perfil reactivo vs. víctima pasiva",
+                  "Recomendaciones de mezcla con nombres",
+                  "Párrafo de contexto clínico para orientación",
+                ],
+              },
+              {
+                n: "3",
+                color: "emerald",
+                title: "Mezcla inteligente",
+                icon: Sparkles,
+                items: [
+                  "Restricciones duras y blandas por análisis",
+                  "Reglas propuestas automáticamente",
+                  "El docente aprueba con un clic",
+                  "Algoritmo ejecuta respetando las reglas",
+                  "Sociograma futuro simulado por propuesta",
+                ],
+              },
+            ].map(layer => {
+              const colorMap: Record<string, { bg: string; border: string; badge: string; icon: string; text: string }> = {
+                indigo: { bg: "bg-white", border: "border-indigo-100", badge: "bg-indigo-600 text-white", icon: "bg-indigo-50 text-indigo-600", text: "text-indigo-600" },
+                violet: { bg: "bg-white", border: "border-violet-100", badge: "bg-violet-600 text-white", icon: "bg-violet-50 text-violet-600", text: "text-violet-600" },
+                emerald: { bg: "bg-white", border: "border-emerald-100", badge: "bg-emerald-600 text-white", icon: "bg-emerald-50 text-emerald-600", text: "text-emerald-600" },
+              }
+              const c = colorMap[layer.color]
+              return (
+                <div key={layer.n} className={`rounded-2xl border ${c.border} ${c.bg} shadow-sm p-6`}>
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className={`w-7 h-7 rounded-full ${c.badge} flex items-center justify-center text-xs font-bold shrink-0`}>{layer.n}</span>
+                    <div className={`w-8 h-8 rounded-lg ${c.icon} flex items-center justify-center`}>
+                      <layer.icon className="w-4 h-4" />
+                    </div>
+                    <h3 className="font-bold text-gray-900">{layer.title}</h3>
+                  </div>
+                  <ul className="space-y-2">
+                    {layer.items.map(item => (
+                      <li key={item} className="flex items-start gap-2 text-sm text-gray-600">
+                        <CheckCircle className={`w-4 h-4 ${c.text} shrink-0 mt-0.5`} />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Reports highlight */}
+          <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <FileText className="w-5 h-5 text-indigo-600" />
+              <h3 className="font-bold text-gray-900">4 informes PDF diferenciados por rol</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                {
+                  title: "Informe de sociograma",
+                  audience: "Dirección / Admin",
+                  color: "border-indigo-200 bg-indigo-50",
+                  items: ["Métricas CIVSOC del grupo", "Clasificación CDC completa", "Análisis de alumnos puente", "Análisis de rechazo activo"],
+                },
+                {
+                  title: "Informe de orientación",
+                  audience: "Orientador",
+                  color: "border-violet-200 bg-violet-50",
+                  items: ["Sociograma de rechazos activos", "Fichas individuales de riesgo", "Alertas de bullying (≥5 rechazos)", "Datos muy sensibles restringidos"],
+                },
+                {
+                  title: "Informe de convivencia",
+                  audience: "Orientador / Admin",
+                  color: "border-rose-200 bg-rose-50",
+                  items: ["Subgrupos conflictivos detectados", "Relaciones de tensión entre alumnos", "Índices de disociación grupal", "Comparativa por clase de origen"],
+                },
+                {
+                  title: "Informe de tutoría",
+                  audience: "Tutor",
+                  color: "border-emerald-200 bg-emerald-50",
+                  items: ["Listado por clase asignada", "Nivel académico y conducta", "Relaciones sociales del alumno", "Solo datos de su grupo"],
+                },
+              ].map(report => (
+                <div key={report.title} className={`rounded-xl border p-4 ${report.color}`}>
+                  <p className="font-semibold text-sm text-gray-900 mb-0.5">{report.title}</p>
+                  <p className="text-xs text-muted-foreground mb-3">{report.audience}</p>
+                  <ul className="space-y-1.5">
+                    {report.items.map(item => (
+                      <li key={item} className="text-xs text-gray-600 flex items-start gap-1.5">
+                        <span className="mt-1 w-1 h-1 rounded-full bg-gray-400 shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Dashboard Preview Charts */}
-      <section className="bg-gray-50 border-y py-14">
+      <section className="py-14">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-8">
             <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Analítica</p>
@@ -323,52 +482,54 @@ export default function LandingPage() {
       </section>
 
       {/* For whom */}
-      <section id="roles" className="max-w-6xl mx-auto px-6 py-14">
-        <div className="text-center mb-10">
-          <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Para quién</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Cada rol, su propia experiencia
-          </h2>
-          <p className="text-gray-500 max-w-xl mx-auto">
-            Acceso diferenciado según el rol. Cada perfil ve lo que necesita y solo lo que puede ver.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {ROLES.map(r => {
-            const colorMap: Record<string, { bg: string; border: string; text: string; icon: string }> = {
-              indigo: { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-700", icon: "bg-indigo-100 text-indigo-600" },
-              violet: { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-700", icon: "bg-violet-100 text-violet-600" },
-              emerald: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", icon: "bg-emerald-100 text-emerald-600" },
-            }
-            const c = colorMap[r.color]
-            return (
-              <div key={r.role} className={`rounded-2xl border ${c.border} ${c.bg} p-6`}>
-                <div className={`w-10 h-10 rounded-xl ${c.icon} flex items-center justify-center mb-4`}>
-                  <r.icon className="w-5 h-5" />
+      <section id="roles" className="bg-gray-50 border-y py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Para quién</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              Cada rol, su propia experiencia
+            </h2>
+            <p className="text-gray-500 max-w-xl mx-auto">
+              Acceso diferenciado según el rol. Cada perfil ve lo que necesita y solo lo que puede ver.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {ROLES.map(r => {
+              const colorMap: Record<string, { bg: string; border: string; text: string; icon: string }> = {
+                indigo: { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-700", icon: "bg-indigo-100 text-indigo-600" },
+                violet: { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-700", icon: "bg-violet-100 text-violet-600" },
+                emerald: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", icon: "bg-emerald-100 text-emerald-600" },
+              }
+              const c = colorMap[r.color]
+              return (
+                <div key={r.role} className={`rounded-2xl border ${c.border} ${c.bg} p-6`}>
+                  <div className={`w-10 h-10 rounded-xl ${c.icon} flex items-center justify-center mb-4`}>
+                    <r.icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-bold text-gray-900 mb-4 text-lg">{r.role}</h3>
+                  <ul className="space-y-2.5">
+                    {r.benefits.map(b => (
+                      <li key={b} className="flex items-start gap-2.5 text-sm text-gray-600">
+                        <CheckCircle className={`w-4 h-4 ${c.text} shrink-0 mt-0.5`} />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <h3 className={`font-bold text-gray-900 mb-4 text-lg`}>{r.role}</h3>
-                <ul className="space-y-2.5">
-                  {r.benefits.map(b => (
-                    <li key={b} className="flex items-start gap-2.5 text-sm text-gray-600">
-                      <CheckCircle className={`w-4 h-4 ${c.text} shrink-0 mt-0.5`} />
-                      {b}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       </section>
 
       {/* Features grid */}
-      <section className="bg-gray-50 border-y py-14">
+      <section className="py-14">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-10">
             <p className="text-indigo-600 text-sm font-semibold tracking-widest uppercase mb-3">Funcionalidades</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">Todo lo que necesitas</h2>
             <p className="text-gray-500 max-w-xl mx-auto">
-              Una plataforma completa para análisis sociométrico y organización escolar.
+              Una plataforma completa para análisis sociométrico científico y organización escolar.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -386,49 +547,89 @@ export default function LandingPage() {
       </section>
 
       {/* Sociogram + Rules */}
-      <section className="max-w-6xl mx-auto px-6 py-14">
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 font-medium mb-6">
-              <Network className="w-3.5 h-3.5" />
-              Sociograma inteligente
+      <section className="bg-gray-50 border-y py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-6">
+            <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-8">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 font-medium mb-6">
+                <Network className="w-3.5 h-3.5" />
+                Sociograma científico
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                Diagnóstico clínico, no solo un grafo
+              </h3>
+              <p className="text-gray-500 text-sm leading-relaxed mb-8">
+                Más allá de visualizar relaciones, el sociograma aplica metodología
+                CDC (Coie, Dodge & Coppotelli, 1982) e índices CIVSOC para un
+                diagnóstico diferencial preciso de cada alumno.
+              </p>
+              <div className="space-y-2.5">
+                {SOCIOGRAM_DETECTIONS.map(d => (
+                  <div key={d} className="flex items-center gap-3 text-sm text-gray-600">
+                    <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
+                    {d}
+                  </div>
+                ))}
+              </div>
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
-              Entiende la dinámica social de tu grupo
-            </h3>
-            <p className="text-gray-500 text-sm leading-relaxed mb-8">
-              El sociograma calcula métricas de red, detecta patrones automáticamente
-              y genera alertas para que el orientador pueda actuar antes de la mezcla.
-            </p>
-            <div className="space-y-2.5">
-              {SOCIOGRAM_DETECTIONS.map(d => (
-                <div key={d} className="flex items-center gap-3 text-sm text-gray-600">
-                  <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
-                  {d}
-                </div>
-              ))}
+
+            <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-8">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-200 bg-violet-50 text-sm text-violet-700 font-medium mb-6">
+                <Lock className="w-3.5 h-3.5" />
+                Motor de reglas pedagógicas
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                El criterio docente siempre tiene la última palabra
+              </h3>
+              <p className="text-gray-500 text-sm leading-relaxed mb-8">
+                El análisis sociométrico propone reglas automáticamente basadas en los
+                datos. El docente las revisa, aprueba con un clic y el algoritmo las
+                aplica en todas las propuestas de mezcla.
+              </p>
+              <div className="space-y-2.5">
+                {RULE_TYPES.map(r => (
+                  <div key={r} className="flex items-center gap-3 text-sm text-gray-600">
+                    <CheckCircle className="w-4 h-4 text-violet-500 shrink-0" />
+                    {r}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-200 bg-violet-50 text-sm text-violet-700 font-medium mb-6">
-              <Lock className="w-3.5 h-3.5" />
-              Motor de reglas pedagógicas
+      {/* Bullying detection highlight */}
+      <section className="max-w-5xl mx-auto px-6 py-14">
+        <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-8">
+          <div className="flex items-start gap-5">
+            <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-6 h-6 text-red-600" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
-              El criterio docente siempre tiene la última palabra
-            </h3>
-            <p className="text-gray-500 text-sm leading-relaxed mb-8">
-              Define reglas entre alumnos con diferentes niveles de prioridad.
-              El algoritmo las respeta y avisa si hay reglas incompatibles.
-            </p>
-            <div className="space-y-2.5">
-              {RULE_TYPES.map(r => (
-                <div key={r} className="flex items-center gap-3 text-sm text-gray-600">
-                  <CheckCircle className="w-4 h-4 text-violet-500 shrink-0" />
-                  {r}
-                </div>
-              ))}
+            <div>
+              <p className="text-xs font-semibold tracking-widest uppercase text-red-600 mb-2">Prevención del acoso escolar</p>
+              <h3 className="text-2xl font-bold text-red-900 mb-3">
+                Detecta el rechazo activo antes de que escale
+              </h3>
+              <p className="text-gray-700 leading-relaxed mb-5 max-w-2xl">
+                ClassMixer diferencia entre el alumno <strong>tímido o aislado</strong> (CDC ignorado)
+                y el alumno <strong>activamente rechazado</strong> (CDC rechazado) —
+                una distinción clínica crítica que los métodos tradicionales no capturan.
+                Cuando un alumno acumula ≥5 nominaciones de rechazo, el sistema emite una
+                alerta de riesgo de exclusión severa con nombre y apellidos, antes de cualquier decisión de mezcla.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                {[
+                  { label: "CDC Ignorado", desc: "Baja visibilidad. Ni elegido ni rechazado. Riesgo de soledad crónica.", color: "bg-slate-100 text-slate-700" },
+                  { label: "CDC Rechazado", desc: "Nominaciones de rechazo explícitas. Riesgo de exclusión activa y acoso.", color: "bg-red-100 text-red-800" },
+                  { label: "Riesgo ≥5", desc: "Alerta urgente. Protocolo de convivencia antes de la mezcla.", color: "bg-red-200 text-red-900 font-medium" },
+                ].map(item => (
+                  <div key={item.label} className={`rounded-lg px-4 py-3 ${item.color}`}>
+                    <p className="font-semibold mb-1">{item.label}</p>
+                    <p className="text-xs opacity-80">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -447,9 +648,9 @@ export default function LandingPage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 text-left">
             {[
-              { icon: Shield, title: "Privacidad RGPD", desc: "Datos de menores con acceso restringido por rol. Los alumnos nunca ven datos de otros." },
-              { icon: Users, title: "Multi-rol", desc: "Director, jefe de estudios, tutor y orientador con permisos diferenciados y vistas adaptadas." },
-              { icon: Zap, title: "Auditoría completa", desc: "Toda acción sensible queda registrada con usuario, fecha y detalle." },
+              { icon: Shield, title: "Privacidad RGPD", desc: "Datos de menores con acceso restringido por rol. Los alumnos nunca ven datos de otros. Datos de rechazo solo para orientación." },
+              { icon: Users, title: "Multi-rol", desc: "Director, jefe de estudios, tutor y orientador con permisos diferenciados. Los datos sensibles tienen un nivel extra de restricción." },
+              { icon: Zap, title: "Auditoría completa", desc: "Toda acción sensible queda registrada con usuario, fecha y detalle. Trazabilidad total de cada decisión pedagógica." },
             ].map(p => (
               <div key={p.title} className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 hover:shadow-md transition-shadow">
                 <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center mb-4">
@@ -497,9 +698,9 @@ export default function LandingPage() {
               <GraduationCap className="w-3 h-3 text-white" />
             </div>
             <span className="font-semibold text-gray-700">ClassMixer</span>
-            <span>· Plataforma de organización escolar</span>
+            <span>· Plataforma de análisis sociométrico y organización escolar</span>
           </div>
-          <p>Diseñado para centros educativos · RGPD compliant</p>
+          <p>Metodología CDC (Coie-Dodge, 1982) · RGPD compliant</p>
         </div>
       </footer>
     </div>
