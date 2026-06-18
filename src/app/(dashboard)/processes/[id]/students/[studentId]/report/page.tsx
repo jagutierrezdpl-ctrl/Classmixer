@@ -67,6 +67,14 @@ export default async function StudentReportPage({
 
   if (!student || !process) notFound()
 
+  type StudentRecord = typeof student & {
+    external_id: string | null; gender: string | null; average_grade: number | null
+    academic_level: string | null; behavior_level: string | null
+    needs_type: string | null; observations: string | null
+    excluded_from_mix?: boolean
+  }
+  const st = student as StudentRecord
+
   // ── Live sociogram calculation ─────────────────────────────────────────────
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
   const visibleResponses = filterVisibleResponses(
@@ -74,7 +82,8 @@ export default async function StudentReportPage({
     profile.role as UserRole,
     catalogIndex.sensitivity,
   )
-  const students = (allStudents ?? []).filter((s: any) => !s.excluded_from_mix)
+  const students = (allStudents ?? []).filter((s) => !(s as StudentRecord).excluded_from_mix)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const soc = calculateSociogram(
     students as any,
     visibleResponses as any,
@@ -96,8 +105,9 @@ export default async function StudentReportPage({
   // All responses (for showing relation types)
   const givenByTarget = new Map<string, string[]>()
   const receivedByRespondent = new Map<string, string[]>()
+  type ResponseRow = { respondent_student_id: string; target_student_id: string; relation_type: string }
   for (const r of visibleResponses) {
-    const rr = r as any
+    const rr = r as ResponseRow
     if (rr.respondent_student_id === studentId) {
       if (!givenByTarget.has(rr.target_student_id)) givenByTarget.set(rr.target_student_id, [])
       givenByTarget.get(rr.target_student_id)!.push(rr.relation_type)
@@ -221,7 +231,7 @@ export default async function StudentReportPage({
               {student.first_name} {student.last_name}
             </h2>
             <p className="text-muted-foreground text-sm">
-              {student.current_class} · {(student as any).external_id ?? "Sin ID"}
+              {student.current_class} · {st.external_id ?? "Sin ID"}
             </p>
             <p className="text-sm text-muted-foreground mt-0.5">
               {process.name} · Curso {process.school_year}
@@ -320,11 +330,11 @@ export default async function StudentReportPage({
           <h3 className="text-base font-bold mb-3 pb-1 border-b">Datos académicos</h3>
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-4 text-sm">
             {[
-              { label: "Género", value: (student as any).gender ?? "—" },
-              { label: "Nota media", value: (student as any).average_grade ? String((student as any).average_grade) : "—" },
-              { label: "Nivel", value: (student as any).academic_level ?? "—" },
-              { label: "Conducta", value: (student as any).behavior_level ?? "—" },
-              { label: "Nec. educ.", value: (student as any).needs_type ?? "—" },
+              { label: "Género", value: st.gender ?? "—" },
+              { label: "Nota media", value: st.average_grade ? String(st.average_grade) : "—" },
+              { label: "Nivel", value: st.academic_level ?? "—" },
+              { label: "Conducta", value: st.behavior_level ?? "—" },
+              { label: "Nec. educ.", value: st.needs_type ?? "—" },
             ].map(({ label, value }) => (
               <div key={label} className="border rounded-lg px-3 py-2 text-center">
                 <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
@@ -332,9 +342,9 @@ export default async function StudentReportPage({
               </div>
             ))}
           </div>
-          {(student as any).observations && (
+          {st.observations && (
             <p className="mt-3 text-sm text-muted-foreground border rounded-lg px-3 py-2">
-              <span className="font-medium">Observaciones:</span> {(student as any).observations}
+              <span className="font-medium">Observaciones:</span> {st.observations}
             </p>
           )}
         </section>

@@ -51,6 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .eq("active", true),
   ])
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const students = ((allStudents ?? []) as any[]).filter(s => !s.excluded_from_mix)
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
   const responses = filterVisibleResponses(
@@ -59,6 +60,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     catalogIndex.sensitivity,
   )
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const soc = calculateSociogram(
     students as any,
     responses as any,
@@ -72,7 +74,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // Build a set of existing rule pairs to avoid duplicate proposals
   // Key: "rule_type::sortedStudentIds"
   const existingPairs = new Set<string>()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const rule of (existingRules ?? []) as any[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ids = (rule.rule_students ?? []).map((rs: any) => rs.student_id).sort().join(",")
     existingPairs.add(`${rule.rule_type}::${ids}`)
   }
