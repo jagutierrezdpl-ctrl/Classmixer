@@ -360,7 +360,7 @@ export interface SociogramEdge {
 }
 
 export interface SociogramAlert {
-  type: "isolated" | "vulnerable" | "conflict" | "closed_group" | "dominant_group" | "bridge"
+  type: "isolated" | "vulnerable" | "conflict" | "closed_group" | "dominant_group" | "bridge" | "rechazado_activo" | "bullying_risk"
   severity: "high" | "medium" | "low"
   student_ids: string[]
   message: string

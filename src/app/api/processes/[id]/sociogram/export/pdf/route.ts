@@ -48,13 +48,17 @@ function SociogramGraph({ soc }: { soc: ReturnType<typeof calculateSociogram> })
     }),
     ...positions.map(p => {
       const r = 7 + Math.min(p.node.received_count, 10) * 1.1
+      const isRechazado = p.node.sociometric_status === "rechazado"
       const color = COMMUNITY_COLORS[(p.node.community_id ?? 0) % COMMUNITY_COLORS.length]
+      // Node fill priority: isolated=red, rechazado=dark-red, default=community color
+      const fill = p.node.is_isolated ? "#f87171" : isRechazado ? "#7f1d1d" : color
+      // Border priority: bullying risk=bright red, bridge=yellow, vulnerable=orange
+      const isBullyingRisk = isRechazado && (p.node.rejection_received_count ?? 0) >= 5
+      const stroke = isBullyingRisk ? "#dc2626" : p.node.is_bridge ? "#f59e0b" : (p.node.is_vulnerable && !isRechazado) ? "#fb923c" : "#ffffff"
+      const strokeWidth = (isBullyingRisk || p.node.is_bridge || p.node.is_vulnerable) ? 2.5 : 1
       return React.createElement(React.Fragment, { key: p.node.id },
         React.createElement(Circle, {
-          cx: p.x, cy: p.y, r,
-          fill: p.node.is_isolated ? "#f87171" : color,
-          stroke: p.node.is_bridge ? "#f59e0b" : p.node.is_vulnerable ? "#fb923c" : "#ffffff",
-          strokeWidth: (p.node.is_bridge || p.node.is_vulnerable) ? 2 : 1,
+          cx: p.x, cy: p.y, r, fill, stroke, strokeWidth,
         } as any),
         React.createElement(Text, {
           x: p.x, y: p.y + 3,
@@ -96,6 +100,8 @@ function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
   const leastChosen = soc.nodes.filter(n => !n.is_isolated).sort((a, b) => a.received_count - b.received_count).slice(0, 8)
   const reciprocalPairs = soc.edges.filter(e => e.relation_type === "friendship" && e.is_reciprocal)
   const bridges = soc.nodes.filter(n => n.is_bridge).sort((a, b) => b.betweenness - a.betweenness)
+  const rechazados = soc.nodes.filter(n => n.sociometric_status === "rechazado").sort((a, b) => (b.rejection_received_count ?? 0) - (a.rejection_received_count ?? 0))
+  const bullyingRisk = rechazados.filter(n => (n.rejection_received_count ?? 0) >= 5)
   const hasCdc = soc.metrics.has_rejection_data
 
   const footer = React.createElement(View, { style: pdfStyles.footer, fixed: true },
@@ -165,10 +171,27 @@ function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
           )
         : null,
 
+      // Bullying risk URGENT alert — only when data exists and risk students detected
+      bullyingRisk.length > 0
+        ? React.createElement(View, {
+            style: { backgroundColor: "#fef2f2", border: "2pt solid #dc2626", borderRadius: 5, padding: 10, marginBottom: 8 },
+          },
+            React.createElement(Text, { style: { fontSize: 10, fontWeight: "bold", color: "#b91c1c", marginBottom: 4 } },
+              `⚠ RIESGO DE EXCLUSIÓN SEVERA — ${bullyingRisk.length} ALUMNO(S)`),
+            React.createElement(Text, { style: { fontSize: 9, color: "#7f1d1d", marginBottom: 5 } },
+              "Los siguientes alumnos reciben ≥5 nominaciones de rechazo activo (criterio de riesgo de acoso escolar). " +
+              "Su perfil es distinto al del alumno tímido o aislado: son activamente excluidos por el grupo. Ver análisis en pág. 3."),
+            ...bullyingRisk.map(n =>
+              React.createElement(Text, { key: n.id, style: { fontSize: 9, color: "#b91c1c", marginBottom: 2 } },
+                `· ${n.label} (${n.current_class ?? "—"}) — ${n.rejection_received_count} rechazos · ${n.received_count} positivo(s) · zSP=${n.social_preference_z?.toFixed(2) ?? "—"}`)
+            ),
+          )
+        : null,
+
       React.createElement(Text, { style: pdfStyles.sectionTitle }, "Grafo de relaciones de amistad"),
       React.createElement(SociogramGraph, { soc }),
       React.createElement(Text, { style: { fontSize: 8, color: "#64748b", marginTop: 4 } },
-        "Línea azul = relación recíproca · Línea gris = elección unilateral · Borde amarillo = alumno puente · Borde naranja = alumno vulnerable · Nodo rojo = alumno aislado"),
+        "Nodo burdeos = rechazado activo (CDC) · Nodo rojo claro = aislado · Borde rojo = riesgo acoso (≥5 rechazos) · Borde amarillo = puente · Borde naranja = vulnerable"),
 
       footer,
     ),
@@ -311,6 +334,85 @@ function SociogramaPDF({ process, soc, positions, studentMap, logoUrl }: {
 
       footer,
     ),
+
+    // ── PAGE 4: rechazado activo / bullying risk analysis (only when hasCdc) ──
+    hasCdc && rechazados.length > 0
+      ? React.createElement(Page, { size: "A4", style: pdfStyles.page },
+          React.createElement(PdfLogoRow, { logoUrl }),
+
+          React.createElement(View, { style: { backgroundColor: "#fef2f2", border: "2pt solid #dc2626", borderRadius: 6, padding: 10, marginBottom: 12 } },
+            React.createElement(Text, { style: { fontSize: 11, fontWeight: "bold", color: "#b91c1c", marginBottom: 4 } },
+              "Análisis de rechazo activo (CDC rechazado)"),
+            React.createElement(Text, { style: { fontSize: 9, color: "#7f1d1d" } },
+              "El rechazo activo (CDC rechazado) es cualitativamente distinto al aislamiento pasivo (CDC ignorado). " +
+              "Un alumno rechazado NO es simplemente tímido o con pocos amigos: " +
+              "recibe nominaciones negativas explícitas del grupo. " +
+              "Mezclarlo sin intervención puede trasladar la dinámica de rechazo al nuevo grupo. " +
+              "La escala de riesgo: ≥3 rechazos = atención, ≥5 rechazos = protocolo de convivencia."),
+          ),
+
+          React.createElement(Text, { style: pdfStyles.sectionTitle }, "Alumnos con rechazo activo (ordenados por número de rechazos)"),
+          React.createElement(View, { style: pdfStyles.tableHeader },
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.4 }] }, "Nº"),
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 2.5 }] }, "Alumno"),
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.9 }] }, "Clase"),
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.8 }] }, "Rechazos"),
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.8 }] }, "Positivos"),
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.7 }] }, "Recípr."),
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 0.8 }] }, "zSP"),
+            React.createElement(Text, { style: [pdfStyles.thCell, { flex: 1.1 }] }, "Riesgo"),
+          ),
+          ...rechazados.map((n, i) => {
+            const rej = n.rejection_received_count ?? 0
+            const riskLevel = rej >= 5 ? "ALTO ≥5" : rej >= 3 ? "Medio ≥3" : "Bajo"
+            const riskColor = rej >= 5 ? "#b91c1c" : rej >= 3 ? "#d97706" : "#64748b"
+            return React.createElement(View, { key: n.id, wrap: false, style: pdfStyles.tableRow },
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.4 }] }, String(i + 1)),
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 2.5 }] }, n.label),
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.9 }] }, n.current_class ?? "—"),
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.8, color: "#b91c1c", fontWeight: "bold" }] }, String(rej)),
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.8 }] }, String(n.received_count)),
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.7 }] }, String(n.reciprocal_count)),
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 0.8 }] }, String(n.social_preference_z?.toFixed(1) ?? "—")),
+              React.createElement(Text, { style: [pdfStyles.tdCell, { flex: 1.1, color: riskColor, fontWeight: "bold" }] }, riskLevel),
+            )
+          }),
+
+          React.createElement(Text, { style: [pdfStyles.sectionTitle, { marginTop: 18 }] }, "Clasificación Coie-Dodge (CDC) — criterios diagnósticos"),
+          React.createElement(View, { style: { gap: 5 } },
+            React.createElement(View, { style: { backgroundColor: "#fef2f2", border: "1pt solid #fecaca", borderRadius: 5, padding: 8 } },
+              React.createElement(Text, { style: { fontSize: 9, fontWeight: "bold", color: "#991b1b", marginBottom: 2 } },
+                "Rechazado — zSP < −1.0, zLM < 0, zLL > 0"),
+              React.createElement(Text, { style: { fontSize: 9, color: "#7f1d1d" } },
+                "Recibe pocas nominaciones positivas Y recibe nominaciones de rechazo activo. " +
+                "Subtipos: reactivo (conducta impulsiva) o pasivo (sumisión social). " +
+                "Indicador de riesgo de acoso o exclusión crónica."),
+            ),
+            React.createElement(View, { style: { backgroundColor: "#f8fafc", border: "1pt solid #e2e8f0", borderRadius: 5, padding: 8 } },
+              React.createElement(Text, { style: { fontSize: 9, fontWeight: "bold", color: "#334155", marginBottom: 2 } },
+                "Ignorado — zSP < −0.5, zSI < −1.0 (baja visibilidad positiva Y negativa)"),
+              React.createElement(Text, { style: { fontSize: 9, color: "#64748b" } },
+                "Alumno invisible para el grupo: ni elegido ni rechazado. " +
+                "Riesgo de soledad crónica pero sin conflicto activo. " +
+                "Perfil diferente al rechazado — necesita apoyo de integración, no de convivencia."),
+            ),
+            React.createElement(View, { style: { backgroundColor: "#fefce8", border: "1pt solid #fef08a", borderRadius: 5, padding: 8 } },
+              React.createElement(Text, { style: { fontSize: 9, fontWeight: "bold", color: "#854d0e", marginBottom: 2 } },
+                "Índices de grupo (CIVSOC)"),
+              React.createElement(View, { style: { flexDirection: "row", gap: 12, marginTop: 3 } },
+                React.createElement(Text, { style: { fontSize: 9, color: "#713f12", flex: 1 } },
+                  `DG (disociación): ${soc.metrics.group_dissociation.toFixed(3)}\nParejas de rechazo mutuo / pares posibles`),
+                React.createElement(Text, { style: { fontSize: 9, color: "#713f12", flex: 1 } },
+                  `CoG (coherencia): ${soc.metrics.group_coherence.toFixed(3)}\nNominaciones recíprocas / nominaciones totales`),
+                React.createElement(Text, { style: { fontSize: 9, color: "#713f12", flex: 1 } },
+                  `IG (intensidad): ${soc.metrics.group_intensity.toFixed(3)}\nNominaciones totales por alumno`),
+              ),
+            ),
+          ),
+
+          footer,
+        )
+      : null,
   )
 }
 

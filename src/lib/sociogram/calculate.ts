@@ -331,14 +331,21 @@ export function calculateSociogram(
   // ── Alerts ────────────────────────────────────────────────────────────────
   const alerts: SociogramAlert[] = []
   const isolated    = nodes.filter(n => n.is_isolated)
-  const vulnerable  = nodes.filter(n => n.is_vulnerable && !n.is_isolated)
+  // Rechazados (active rejection) are separated from passive vulnerability — they need a stronger alert
+  const rechazados  = nodes.filter(n => n.sociometric_status === "rechazado")
+  const vulnerable  = nodes.filter(n => n.is_vulnerable && !n.is_isolated && n.sociometric_status !== "rechazado")
+  const bullyingRisk = rechazados.filter(n => (n.rejection_received_count ?? 0) >= 5)
   const bridges     = nodes.filter(n => n.is_bridge)
   const closedGroups = communities.filter(c => c.is_closed && c.size >= 4)
 
+  if (bullyingRisk.length > 0)
+    alerts.push({ type: "bullying_risk", severity: "high", student_ids: bullyingRisk.map(n => n.id), message: `${bullyingRisk.length} alumno(s) con ≥5 nominaciones de rechazo — revisar protocolo de convivencia` })
   if (isolated.length > 0)
     alerts.push({ type: "isolated", severity: "high", student_ids: isolated.map(n => n.id), message: `${isolated.length} alumno(s) sin ninguna relación social detectada` })
+  if (rechazados.length > 0)
+    alerts.push({ type: "rechazado_activo", severity: "high", student_ids: rechazados.map(n => n.id), message: `${rechazados.length} alumno(s) con rechazo social activo (CDC rechazado) — diferente al aislamiento pasivo` })
   if (vulnerable.length > 0)
-    alerts.push({ type: "vulnerable", severity: "medium", student_ids: vulnerable.map(n => n.id), message: `${vulnerable.length} alumno(s) con posición social frágil (riesgo de exclusión)` })
+    alerts.push({ type: "vulnerable", severity: "medium", student_ids: vulnerable.map(n => n.id), message: `${vulnerable.length} alumno(s) con posición social frágil (pocos vínculos, sin rechazo activo)` })
   closedGroups.forEach(g =>
     alerts.push({ type: "closed_group", severity: "medium", student_ids: g.members, message: `Subgrupo cerrado de ${g.size} alumnos con escasas conexiones externas` })
   )
