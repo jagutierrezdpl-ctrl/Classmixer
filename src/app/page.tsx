@@ -4,6 +4,7 @@ import {
   CheckCircle, ArrowRight, FileSpreadsheet,
   Brain, ClipboardList, Lock, Sparkles, AlertTriangle,
   TableProperties, UserCheck, BookOpen, Eye, FileText, ShieldAlert,
+  SplitSquareHorizontal, RefreshCw, Bell, Pencil,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import LogoBrand from "@/components/ui/LogoBrand"
@@ -41,6 +42,21 @@ const FEATURES = [
     title: "Privacidad por diseño",
     desc: "Acceso por rol diferenciado. Los alumnos nunca ven datos de otros. Datos de rechazo visibles solo para orientación y dirección. Auditoría completa.",
   },
+  {
+    icon: SplitSquareHorizontal,
+    title: "Comparador de propuestas",
+    desc: "Compara dos distribuciones lado a lado: diferencias por clase, scores social y académico, alumnos movidos. Elige con criterio, no por intuición.",
+  },
+  {
+    icon: Pencil,
+    title: "Anotaciones y fichas de intervención",
+    desc: "El orientador añade notas privadas en el sociograma (sin acción, en seguimiento, intervención activa) y genera fichas de intervención imprimibles para alumnos de riesgo.",
+  },
+  {
+    icon: RefreshCw,
+    title: "Seguimiento post-mezcla",
+    desc: "Lanza un cuestionario sociométrico al curso siguiente sobre las mismas clases formadas. Verifica si la mezcla logró sus objetivos con datos reales.",
+  },
 ]
 
 const SOCIOGRAM_DETECTIONS = [
@@ -66,7 +82,7 @@ const RULE_TYPES = [
 const STATS = [
   { value: "5", label: "estatus CDC (Coie-Dodge, 1982)" },
   { value: "4", label: "informes PDF diferenciados por rol" },
-  { value: "4", label: "roles con permisos diferenciados" },
+  { value: "9", label: "módulos y funcionalidades integradas" },
   { value: "100%", label: "supervisión humana en cada decisión" },
 ]
 
@@ -99,6 +115,10 @@ const BEFORE_AFTER = [
     before: "Sin trazabilidad de las decisiones tomadas",
     after: "Auditoría completa de cada acción del equipo",
   },
+  {
+    before: "Sin forma de saber si la mezcla funcionó al año siguiente",
+    after: "Cuestionario de seguimiento post-mezcla para validar el impacto con datos reales",
+  },
 ]
 
 const ROLES = [
@@ -111,6 +131,7 @@ const ROLES = [
       "Aprueba la distribución final con un clic",
       "Exporta informe ejecutivo en PDF para dirección",
       "Ve el historial de decisiones del equipo",
+      "Notificaciones automáticas al generarse propuestas o detectarse riesgos",
     ],
   },
   {
@@ -122,6 +143,8 @@ const ROLES = [
       "Alertas de rechazo activo y riesgo de acoso escolar",
       "Informe de orientación con sociograma de rechazos",
       "Registro automático de cada acceso a datos sensibles",
+      "Anotaciones privadas en el sociograma con estado de seguimiento",
+      "Ficha de intervención imprimible para alumnos de riesgo",
     ],
   },
   {
@@ -477,6 +500,60 @@ export default function LandingPage() {
           </div>
           <ProposalPreviewChart />
           <p className="text-center text-xs text-gray-400 mt-4">Datos de muestra. En la plataforma se muestran los datos reales de tu centro.</p>
+        </div>
+      </section>
+
+      {/* Comparator + Follow-up callout */}
+      <section className="max-w-6xl mx-auto px-6 py-14">
+        <div className="grid lg:grid-cols-2 gap-5">
+          <div className="rounded-2xl border border-indigo-100 bg-white shadow-sm p-7 flex gap-5">
+            <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+              <SplitSquareHorizontal className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold tracking-widest uppercase text-indigo-600 mb-1">Comparador lado a lado</p>
+              <h3 className="font-bold text-gray-900 mb-2">Elige la propuesta con datos, no con intuición</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Selecciona dos propuestas y compara en paralelo: score social, score académico, alumnos movidos por clase y diferencias de asignación. La decisión final siempre es tuya.
+              </p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-emerald-100 bg-white shadow-sm p-7 flex gap-5">
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0">
+              <RefreshCw className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold tracking-widest uppercase text-emerald-600 mb-1">Seguimiento post-mezcla</p>
+              <h3 className="font-bold text-gray-900 mb-2">Valida el impacto un curso después</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Lanza un proceso de seguimiento sobre las clases ya formadas. Un nuevo cuestionario sociométrico muestra si las relaciones mejoraron y si los alumnos aislados se integraron.
+              </p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-violet-100 bg-white shadow-sm p-7 flex gap-5">
+            <div className="w-11 h-11 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center shrink-0">
+              <Pencil className="w-5 h-5 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold tracking-widest uppercase text-violet-600 mb-1">Anotaciones del orientador</p>
+              <h3 className="font-bold text-gray-900 mb-2">Capa privada sobre el sociograma</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                El orientador anota observaciones directamente sobre cada nodo del sociograma, asigna un estado de seguimiento y genera fichas de intervención imprimibles para alumnos de riesgo.
+              </p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-amber-100 bg-white shadow-sm p-7 flex gap-5">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold tracking-widest uppercase text-amber-600 mb-1">Notificaciones en tiempo real</p>
+              <h3 className="font-bold text-gray-900 mb-2">El equipo siempre al día</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Alertas automáticas cuando se generan propuestas, se detecta un riesgo de acoso o el cuestionario supera el 80% de participación. Sin necesidad de entrar a revisar manualmente.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
