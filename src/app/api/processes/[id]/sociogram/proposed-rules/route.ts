@@ -60,9 +60,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     catalogIndex.sensitivity,
   )
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const soc = calculateSociogram(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     students as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     responses as any,
     catalogIndex.scoringRoles.friendshipLike,
     catalogIndex.excludedFromGraph,

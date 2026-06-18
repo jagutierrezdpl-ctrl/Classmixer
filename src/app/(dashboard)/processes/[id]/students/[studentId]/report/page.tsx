@@ -83,9 +83,10 @@ export default async function StudentReportPage({
     catalogIndex.sensitivity,
   )
   const students = (allStudents ?? []).filter((s) => !(s as StudentRecord).excluded_from_mix)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const soc = calculateSociogram(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     students as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     visibleResponses as any,
     catalogIndex.scoringRoles.friendshipLike,
     catalogIndex.excludedFromGraph,
