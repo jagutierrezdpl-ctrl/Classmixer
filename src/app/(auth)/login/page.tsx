@@ -1,4 +1,5 @@
 "use client"
+import LogoBrand from "@/components/ui/LogoBrand"
 
 import { useState } from "react"
 import { useForm } from "react-hook-form"
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { GraduationCap, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
 function GoogleIcon() {
   return (
@@ -80,9 +81,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-3">
-            <GraduationCap className="w-7 h-7 text-white" />
-          </div>
+          <LogoBrand size="md" />
           <h1 className="text-2xl font-bold">ClassMixer</h1>
           <p className="text-muted-foreground text-sm mt-1">Mezcla inteligente de clases</p>
         </div>

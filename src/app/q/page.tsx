@@ -1,8 +1,9 @@
 "use client"
+import LogoBrand from "@/components/ui/LogoBrand"
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { GraduationCap, Loader2, AlertCircle } from "lucide-react"
+import { Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -58,9 +59,7 @@ export default function StudentLoginPage() {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-            <GraduationCap className="w-8 h-8 text-white" />
-          </div>
+          <LogoBrand size="lg" />
           <h1 className="text-2xl font-bold text-gray-900">Cuestionario escolar</h1>
           <p className="text-gray-500 mt-1 text-sm">Accede con tu cuenta del colegio</p>
         </div>

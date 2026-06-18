@@ -1,4 +1,5 @@
 "use client"
+import LogoBrand from "@/components/ui/LogoBrand"
 
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { GraduationCap, Loader2, Eye, EyeOff } from "lucide-react"
+import { Loader2, Eye, EyeOff } from "lucide-react"
 
 function SetPasswordForm() {
   const router = useRouter()
@@ -118,9 +119,7 @@ export default function SetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-3">
-            <GraduationCap className="w-7 h-7 text-white" />
-          </div>
+          <LogoBrand size="md" />
           <h1 className="text-2xl font-bold">ClassMixer</h1>
         </div>
 

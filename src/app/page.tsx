@@ -6,6 +6,7 @@ import {
   TableProperties, UserCheck, BookOpen, Eye, FileText, ShieldAlert,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import LogoBrand from "@/components/ui/LogoBrand"
 import SociogramIllustration from "@/components/landing/SociogramIllustration"
 import ProposalPreviewChart from "@/components/landing/ProposalPreviewChart"
 
@@ -144,9 +145,7 @@ export default function LandingPage() {
       <header className="border-b bg-white/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-md shadow-indigo-600/20">
-              <GraduationCap className="w-4 h-4 text-white" />
-            </div>
+            <LogoBrand size="sm" />
             <span className="font-bold text-lg tracking-tight">ClassMixer</span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
@@ -694,9 +693,7 @@ export default function LandingPage() {
       <footer className="border-t bg-white py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center">
-              <GraduationCap className="w-3 h-3 text-white" />
-            </div>
+            <LogoBrand size="xs" />
             <span className="font-semibold text-gray-700">ClassMixer</span>
             <span>· Plataforma de análisis sociométrico y organización escolar</span>
           </div>

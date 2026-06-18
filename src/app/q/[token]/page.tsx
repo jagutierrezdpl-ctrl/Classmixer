@@ -1,11 +1,12 @@
 "use client"
+import LogoBrand from "@/components/ui/LogoBrand"
 
 import { use, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { GraduationCap, Search, X, CheckCircle, Loader2, Heart, Briefcase, Users } from "lucide-react"
+import { Search, X, CheckCircle, Loader2, Heart, Briefcase, Users } from "lucide-react"
 import { toast } from "sonner"
 import AdvancedQuestionCard, { type AdvancedQuestionConfig } from "@/components/questionnaire/AdvancedQuestionCard"
 
@@ -271,9 +272,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
       {/* Sticky header */}
       <div className="sticky top-0 z-10 border-b bg-card/95 backdrop-blur-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-            <GraduationCap className="w-4 h-4 text-white" />
-          </div>
+          <LogoBrand size="sm" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm truncate">{processName}</p>
             <p className="text-xs text-muted-foreground">Hola, {studentName.split(" ")[0]}</p>

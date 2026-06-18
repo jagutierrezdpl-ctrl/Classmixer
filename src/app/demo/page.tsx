@@ -1,5 +1,6 @@
 import Link from "next/link"
-import { GraduationCap, ArrowRight, Users, Network, GitBranch, AlertTriangle, CheckCircle2, Star, Link2, ShieldAlert } from "lucide-react"
+import LogoBrand from "@/components/ui/LogoBrand"
+import { ArrowRight, Users, Network, GitBranch, AlertTriangle, CheckCircle2, Star, Link2, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { DEMO_NODES } from "./demo-data"
@@ -27,9 +28,7 @@ export default function DemoPage() {
       <header className="border-b bg-white/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-md shadow-indigo-600/20">
-              <GraduationCap className="w-4 h-4 text-white" />
-            </div>
+            <LogoBrand size="sm" />
             <span className="font-bold text-lg tracking-tight">ClassMixer</span>
             <Badge variant="secondary" className="text-xs">Demo</Badge>
           </Link>
@@ -345,9 +344,7 @@ export default function DemoPage() {
       <footer className="border-t bg-white py-6 mt-4">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-gray-400">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center">
-              <GraduationCap className="w-3 h-3 text-white" />
-            </div>
+            <LogoBrand size="xs" />
             <span className="font-semibold text-gray-600">ClassMixer</span>
             <span>· Demo pública — datos de muestra</span>
           </div>

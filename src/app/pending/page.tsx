@@ -1,9 +1,10 @@
 "use client"
+import LogoBrand from "@/components/ui/LogoBrand"
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { GraduationCap, Clock, LogOut, RefreshCw } from "lucide-react"
+import { Clock, LogOut, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export default function PendingPage() {
@@ -42,9 +43,7 @@ export default function PendingPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm text-center">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-3">
-            <GraduationCap className="w-7 h-7 text-white" />
-          </div>
+          <LogoBrand size="md" />
           <h1 className="text-2xl font-bold">ClassMixer</h1>
         </div>
 

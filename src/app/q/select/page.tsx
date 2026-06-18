@@ -1,8 +1,9 @@
 "use client"
+import LogoBrand from "@/components/ui/LogoBrand"
 
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import { GraduationCap, ClipboardList } from "lucide-react"
+import { ClipboardList } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
@@ -34,9 +35,7 @@ export default function SelectQuestionnairePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-          <GraduationCap className="w-8 h-8 text-white" />
-        </div>
+        <LogoBrand size="lg" />
         <h1 className="text-2xl font-bold mb-2">Elige tu cuestionario</h1>
         <p className="text-gray-500 text-sm mb-6">Tienes más de un cuestionario activo. Elige cuál quieres responder.</p>
         <Suspense fallback={<p className="text-gray-400 text-sm">Cargando...</p>}>
