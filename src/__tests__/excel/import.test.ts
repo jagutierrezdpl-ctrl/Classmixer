@@ -120,10 +120,10 @@ describe("parseExcelImport — validation errors", () => {
     expect(result.errors.some(e => e.field === "nota_media")).toBe(true)
   })
 
-  it("marks row as error when id_alumno is missing", () => {
+  it("allows missing id_alumno", () => {
     const buf = makeExcelBuffer([{ ...VALID_ROW, id_alumno: "" }])
     const result = parseExcelImport(buf)
-    expect(result.rows[0].status).toBe("error")
+    expect(result.rows[0].status).toBe("valid")
   })
 
   it("marks row as error when nombre is missing", () => {
@@ -149,8 +149,8 @@ describe("parseExcelImport — warnings", () => {
     ]
     const buf = makeExcelBuffer(rows)
     const result = parseExcelImport(buf)
-    // Second row with same ID should be an error (duplicate)
-    expect(result.errors.some(e => e.message.includes("duplicado"))).toBe(true)
+    // Second row with same ID should be a warning (duplicate)
+    expect(result.warnings.some(w => w.message.includes("duplicado"))).toBe(true)
   })
 
   it("warns on duplicate name+apellidos", () => {
