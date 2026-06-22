@@ -27,6 +27,7 @@ export const questionnaireSettingsSchema = z.object({
   emotional_min: z.number().min(0).max(10),
   emotional_max: z.number().min(1).max(10),
   negative_enabled: z.boolean(),
+  negative_min: z.number().min(0).max(5),
   negative_max: z.number().min(1).max(5),
   access_mode: z.enum(["token", "google", "open"]).optional(),
   deadline: z.string().optional(),

@@ -73,6 +73,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
         emotional_min: 0,
         emotional_max: 3,
         negative_enabled: false,
+        negative_min: 0,
         negative_max: 2,
         access_mode: "token",
       },
@@ -454,8 +455,10 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
               </div>
               {watchEmotional && (
                 <div className="flex items-center gap-2 text-sm shrink-0">
+                  <Label className="text-muted-foreground">Min</Label>
+                  <Input type="number" min="0" className="w-16 h-7 text-xs" {...register("emotional_min", { valueAsNumber: true })} />
                   <Label className="text-muted-foreground">Max</Label>
-                  <Input type="number" className="w-16 h-7 text-xs" {...register("emotional_max", { valueAsNumber: true })} />
+                  <Input type="number" min="1" className="w-16 h-7 text-xs" {...register("emotional_max", { valueAsNumber: true })} />
                 </div>
               )}
             </div>
@@ -477,8 +480,10 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
               </div>
               {watchNegative && (
                 <div className="flex items-center gap-2 text-sm shrink-0">
+                  <Label className="text-muted-foreground">Min</Label>
+                  <Input type="number" min="0" className="w-16 h-7 text-xs" {...register("negative_min", { valueAsNumber: true })} />
                   <Label className="text-muted-foreground">Max</Label>
-                  <Input type="number" className="w-16 h-7 text-xs" {...register("negative_max", { valueAsNumber: true })} />
+                  <Input type="number" min="1" className="w-16 h-7 text-xs" {...register("negative_max", { valueAsNumber: true })} />
                 </div>
               )}
             </div>

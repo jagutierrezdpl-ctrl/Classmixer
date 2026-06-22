@@ -78,6 +78,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     emotional_max: 3,
     emotional_min: 0,
     negative_enabled: false,
+    negative_min: 0,
     negative_max: 2,
   }
 
@@ -138,7 +139,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     friendship: { enabled: settings.friendship_enabled ?? true,  min: settings.friendship_min || 1, max: settings.friendship_max ?? 5 },
     work:       { enabled: settings.work_enabled ?? false,       min: settings.work_min ?? 0,       max: settings.work_max ?? 3 },
     emotional:  { enabled: settings.emotional_enabled ?? false,  min: settings.emotional_min ?? 0,  max: settings.emotional_max ?? 3 },
-    negative:   { enabled: settings.negative_enabled ?? false,   min: 0,                            max: settings.negative_max ?? 2 },
+    negative:   { enabled: settings.negative_enabled ?? false,   min: settings.negative_min ?? 0,   max: settings.negative_max ?? 2 },
   }
 
   // Enforce minimums server-side — token is NOT consumed if validation fails

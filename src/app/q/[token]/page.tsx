@@ -79,7 +79,7 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
           qs.push({ type: "emotional", label: "Apoyo", description: "Elige a compañeros con quienes te sientes cómodo o tranquilo.", max: data.settings.emotional_max, min: data.settings.emotional_min, icon: <Users className="w-5 h-5" />, color: "text-purple-500", bgColor: "bg-purple-50 border-purple-200" })
         }
         if (data.settings.negative_enabled) {
-          qs.push({ type: "negative", label: "Convivencia", description: "¿Con qué compañeros te resulta más difícil convivir o tienes más conflictos?", supportText: "Piensa en clase, recreo y actividades del colegio. No es para culpar a nadie, sino para ayudar a mejorar la convivencia.", max: data.settings.negative_max, min: 0, icon: <X className="w-5 h-5" />, color: "text-red-400", bgColor: "bg-red-50 border-red-200" })
+          qs.push({ type: "negative", label: "Convivencia", description: "¿Con qué compañeros te resulta más difícil convivir o tienes más conflictos?", supportText: "Piensa en clase, recreo y actividades del colegio. No es para culpar a nadie, sino para ayudar a mejorar la convivencia.", max: data.settings.negative_max, min: data.settings.negative_min ?? 0, icon: <X className="w-5 h-5" />, color: "text-red-400", bgColor: "bg-red-50 border-red-200" })
         }
         setQuestions(qs)
         const initial: Record<string, string[]> = {}
