@@ -6,11 +6,39 @@ async function getOwnedProcess(processId: string, centerId: string) {
   const supabase = createServiceClient()
   const { data: process } = await supabase
     .from("processes")
-    .select("center_id")
+    .select("center_id, source_groups, school_year")
     .eq("id", processId)
     .single()
   if (!process || process.center_id !== centerId) return null
   return process
+}
+
+// Auto-inserta en process_tutors los tutores de los grupos de origen
+// que aún no estén asignados. Se llama en silencio al cargar el equipo.
+async function syncGroupTutors(processId: string, sourceGroups: string[], schoolYear: string, centerId: string) {
+  if (!sourceGroups?.length) return
+  const supabase = createServiceClient()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: groupTutors } = await (supabase as any)
+    .from("group_tutors")
+    .select("user_id")
+    .eq("center_id", centerId)
+    .eq("school_year", schoolYear)
+    .in("group_name", sourceGroups)
+
+  if (!groupTutors?.length) return
+
+  const rows = groupTutors.map((gt: { user_id: string }) => ({
+    process_id: processId,
+    user_id: gt.user_id,
+  }))
+
+  // upsert: no falla si ya están asignados
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from("process_tutors")
+    .upsert(rows, { onConflict: "process_id,user_id", ignoreDuplicates: true })
 }
 
 export async function GET(
@@ -22,12 +50,16 @@ export async function GET(
 
   const { id } = await params
 
-  if (!(await getOwnedProcess(id, profile.center_id))) {
+  const process = await getOwnedProcess(id, profile.center_id)
+  if (!process) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   }
   if (!hasFullAccess(profile.role) && !(await tutorCanAccessProcess(profile.center_id, profile.id, id))) {
     return NextResponse.json({ error: "Sin acceso a este proceso" }, { status: 403 })
   }
+
+  // Auto-asignar tutores de los grupos de origen si aún no están en el equipo
+  await syncGroupTutors(id, process.source_groups ?? [], process.school_year ?? "", profile.center_id)
 
   const supabase = createServiceClient()
 
