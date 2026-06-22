@@ -11,7 +11,9 @@ import {
   ArrowLeft, AlertTriangle, Users, Network, Loader2,
   Download, ImageDown, Filter, X, Sparkles, FileText, ShieldAlert, ChevronDown,
   CheckCircle2, ArrowRight, RefreshCw, Upload, Trash2, FileUp, Printer,
+  Clock, History,
 } from "lucide-react"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -44,6 +46,7 @@ const SEVERITY_STYLES: Record<string, string> = {
 export default function SociogramPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const graphRef = useRef<SociogramGraphHandle>(null)
+  const confirmFn = useConfirm()
 
   const [data, setData] = useState<SociogramData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,6 +60,12 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [aiSummaryVisible, setAiSummaryVisible] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiReportDate, setAiReportDate] = useState<string | null>(null)
+  const [aiReportAuthor, setAiReportAuthor] = useState<string | null>(null)
+  const [aiHistory, setAiHistory] = useState<{ id: string; content: string; created_by_name: string | null; created_at: string }[]>([])
+  const [aiHistoryVisible, setAiHistoryVisible] = useState(false)
+  const [aiHistoryLoading, setAiHistoryLoading] = useState(false)
+  const [aiCachedLoaded, setAiCachedLoaded] = useState(false)
   const [ruleCreating, setRuleCreating] = useState<string | null>(null)
   const [rulesCreated, setRulesCreated] = useState<Set<string>>(new Set())
   const [docs, setDocs] = useState<{ id: string; name: string; original_filename: string; created_at: string }[]>([])
@@ -232,25 +241,84 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
 
   const hasActiveFilter = filter.classFilter || filter.showOnlyIsolated || filter.showOnlyReciprocal || (filter.relationType && filter.relationType !== "all")
 
+  async function loadCachedAIReport() {
+    if (aiCachedLoaded) return
+    setAiCachedLoaded(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/explain`)
+      if (!res.ok) return
+      const json = await res.json()
+      if (json.report) {
+        setAiSummary(json.report.content)
+        setAiReportDate(json.report.created_at)
+        setAiReportAuthor(json.report.created_by_name ?? null)
+      }
+    } catch {
+      // No cached report — that's fine
+    }
+  }
+
   async function handleAISummary(force = false) {
-    if (aiSummary && !force) {
+    if (!force) {
+      // First time: try to load cached, then show it
+      if (!aiCachedLoaded) {
+        setAiLoading(true)
+        await loadCachedAIReport()
+        setAiLoading(false)
+      }
       setAiSummaryVisible(v => !v)
       return
     }
+    // Force regenerate — confirm if there's already a cached report
+    if (aiSummary) {
+      const ok = await confirmFn({
+        title: "Generar nuevo análisis",
+        description: "Se generará un nuevo informe con los datos actuales del sociograma. El informe anterior quedará guardado en el historial.",
+        confirmLabel: "Generar nuevo",
+        variant: "default",
+      })
+      if (!ok) return
+    }
     setAiLoading(true)
-    setAiSummary(null)
-    setAiSummaryVisible(false)
     try {
       const res = await fetch(`/api/processes/${id}/sociogram/explain`, { method: "POST" })
       const json = await res.json()
-      if (res.ok) { setAiSummary(json.summary); setAiSummaryVisible(true) }
-      else { setAiSummary(`Error: ${json.error}`); setAiSummaryVisible(true) }
+      if (res.ok) {
+        setAiSummary(json.summary)
+        setAiReportDate(json.created_at ?? null)
+        setAiReportAuthor(json.created_by_name ?? null)
+        setAiSummaryVisible(true)
+        setAiCachedLoaded(true)
+        // Refresh history if it was open
+        if (aiHistoryVisible) loadAIHistory()
+      } else {
+        setAiSummary(`Error: ${json.error}`)
+        setAiSummaryVisible(true)
+      }
     } catch {
       setAiSummary("Error al conectar con la IA")
       setAiSummaryVisible(true)
     } finally {
       setAiLoading(false)
     }
+  }
+
+  async function loadAIHistory() {
+    setAiHistoryLoading(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/explain?history=true`)
+      if (res.ok) setAiHistory(await res.json())
+    } catch {
+      // ignore
+    } finally {
+      setAiHistoryLoading(false)
+    }
+  }
+
+  function toggleAIHistory() {
+    const next = !aiHistoryVisible
+    setAiHistoryVisible(next)
+    if (next && aiHistory.length === 0) loadAIHistory()
   }
 
   async function handleExportExcel() {
@@ -533,9 +601,12 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
           )}
 
           {(viewerRole === "admin" || viewerRole === "superadmin" || viewerRole === "orientador") && (
-            <Button size="sm" variant={aiSummary && aiSummaryVisible ? "secondary" : "outline"} className="h-7 text-xs gap-1.5" onClick={() => handleAISummary()} disabled={aiLoading}>
+            <Button size="sm" variant={aiSummary && aiSummaryVisible ? "secondary" : "outline"} className="h-7 text-xs gap-1.5 relative" onClick={() => handleAISummary()} disabled={aiLoading}>
               {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {aiSummary ? (aiSummaryVisible ? "Ocultar informe" : "Ver informe IA") : "Análisis IA"}
+              {aiReportDate && !aiSummaryVisible && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-violet-500 rounded-full" title={`Informe guardado ${new Date(aiReportDate).toLocaleDateString("es-ES")}`} />
+              )}
             </Button>
           )}
         </div>
@@ -611,26 +682,32 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
 
       {/* AI Summary panel */}
       {aiSummary && aiSummaryVisible && (
-        <div className="border-b bg-violet-50 shrink-0 max-h-72 overflow-y-auto">
-          <div className="flex items-start justify-between gap-3 px-4 py-3">
-            <div className="flex items-start gap-2 min-w-0 flex-1">
-              <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-violet-600" />
-              <div className="text-sm text-violet-900 leading-relaxed min-w-0 flex-1">
-                {aiSummary.split("\n").map((line, i) => {
-                  const isSection = /^(CONTEXTO|DIAGNÓSTICO|ALUMNOS (AISLADOS|CON|PRIORITARIOS)|GRUPOS CERRADOS|DISTRIBUCIÓN|CRITERIOS PARA)/i.test(line.trim())
-                  const clean = line.replace(/\*\*(.*?)\*\*/g, "$1").trim()
-                  if (!clean) return <div key={i} className="h-2" />
-                  if (isSection) return <p key={i} className="font-semibold text-violet-800 mt-3 mb-1 first:mt-0">{clean}</p>
-                  if (/^\d+\./.test(clean)) return <p key={i} className="ml-3">{clean}</p>
-                  if (clean.startsWith("•") || clean.startsWith("-")) return <p key={i} className="ml-3">{clean}</p>
-                  return <p key={i}>{clean}</p>
-                })}
-              </div>
+        <div className="border-b bg-violet-50 shrink-0">
+          {/* Header bar */}
+          <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-violet-200">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="w-3.5 h-3.5 shrink-0 text-violet-600" />
+              <span className="text-xs font-semibold text-violet-800">Informe IA</span>
+              {aiReportDate && (
+                <span className="text-xs text-violet-500 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {new Date(aiReportDate).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {aiReportAuthor && <span className="ml-0.5">· {aiReportAuthor}</span>}
+                </span>
+              )}
             </div>
-            <div className="flex flex-col gap-1 shrink-0 mt-0.5">
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2 text-violet-700"
+                title="Historial de informes"
+                onClick={toggleAIHistory}
+              >
+                <History className="w-3 h-3" />
+                Historial
+              </Button>
               <Button
                 variant="ghost" size="icon" className="h-6 w-6"
-                title="Regenerar informe"
+                title="Generar nuevo informe"
                 disabled={aiLoading}
                 onClick={() => handleAISummary(true)}
               >
@@ -642,6 +719,57 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAiSummaryVisible(false)}>
                 <X className="w-3.5 h-3.5" />
               </Button>
+            </div>
+          </div>
+
+          {/* History panel */}
+          {aiHistoryVisible && (
+            <div className="border-b border-violet-200 bg-violet-100 px-4 py-3 max-h-48 overflow-y-auto">
+              {aiHistoryLoading ? (
+                <div className="flex items-center gap-2 text-xs text-violet-600">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Cargando historial...
+                </div>
+              ) : aiHistory.length === 0 ? (
+                <p className="text-xs text-violet-500">Sin informes anteriores guardados.</p>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-violet-700 mb-2">Últimos {aiHistory.length} informes guardados</p>
+                  {aiHistory.map((h, i) => (
+                    <button
+                      key={h.id}
+                      onClick={() => {
+                        setAiSummary(h.content)
+                        setAiReportDate(h.created_at)
+                        setAiReportAuthor(h.created_by_name)
+                        setAiHistoryVisible(false)
+                      }}
+                      className="w-full text-left flex items-center justify-between px-2 py-1.5 rounded hover:bg-violet-200 transition-colors"
+                    >
+                      <span className="text-xs text-violet-800 flex items-center gap-1.5">
+                        <Clock className="w-3 h-3 text-violet-400 shrink-0" />
+                        {new Date(h.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {h.created_by_name && <span className="text-violet-500">· {h.created_by_name}</span>}
+                      </span>
+                      {i === 0 && <span className="text-xs bg-violet-600 text-white px-1.5 py-0.5 rounded-full">Último</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Content */}
+          <div className="max-h-64 overflow-y-auto px-4 py-3">
+            <div className="text-sm text-violet-900 leading-relaxed">
+              {aiSummary.split("\n").map((line, i) => {
+                const isSection = /^(CONTEXTO|DIAGNÓSTICO|ALUMNOS (AISLADOS|CON|PRIORITARIOS|SIN|RECHAZADOS)|GRUPOS CERRADOS|DISTRIBUCIÓN|CRITERIOS PARA)/i.test(line.trim())
+                const clean = line.replace(/\*\*(.*?)\*\*/g, "$1").trim()
+                if (!clean) return <div key={i} className="h-2" />
+                if (isSection) return <p key={i} className="font-semibold text-violet-800 mt-3 mb-1 first:mt-0">{clean}</p>
+                if (/^\d+\./.test(clean)) return <p key={i} className="ml-3">{clean}</p>
+                if (clean.startsWith("•") || clean.startsWith("-")) return <p key={i} className="ml-3">{clean}</p>
+                return <p key={i}>{clean}</p>
+              })}
             </div>
           </div>
         </div>

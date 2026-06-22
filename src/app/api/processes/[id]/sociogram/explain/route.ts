@@ -211,6 +211,49 @@ function buildReport(sg: SociogramData, proc: { name: string; school_year: strin
   return lines.join("\n")
 }
 
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const profile = await getUserProfile()
+  if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin", "orientador"].includes(profile.role)) {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
+  }
+
+  const { id } = await params
+  const supabase = createServiceClient()
+
+  const { data: proc } = await supabase
+    .from("processes")
+    .select("center_id")
+    .eq("id", id)
+    .single()
+  if (!proc || proc.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+
+  const url = new URL(request.url)
+  const history = url.searchParams.get("history") === "true"
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const query = (supabase as any)
+    .from("ai_reports")
+    .select("id, content, created_by_name, created_at")
+    .eq("process_id", id)
+    .eq("report_type", "sociogram")
+    .order("created_at", { ascending: false })
+
+  if (history) {
+    const { data: reports } = await query.limit(20)
+    return NextResponse.json(reports ?? [])
+  } else {
+    const { data: report } = await query.limit(1).single()
+    if (!report) return NextResponse.json({ report: null })
+    return NextResponse.json({ report })
+  }
+}
+
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -278,22 +321,23 @@ export async function POST(
   const centerData = center as { openrouter_api_key?: string | null; openrouter_model?: string | null } | null
   const apiKey = centerData?.openrouter_api_key
   const aiModel = centerData?.openrouter_model
+  let finalSummary = report
+
   if (apiKey) {
     try {
       const cohPct   = (sg.metrics.group_cohesion * 100).toFixed(1)
       const m        = sg.metrics
       const isolated = sg.nodes.filter(n => n.is_isolated)
       const rejected = sg.nodes.filter(n => n.sociometric_status === "rechazado")
-      const ignored  = sg.nodes.filter(n => n.sociometric_status === "ignorado")
       const popular  = sg.nodes.filter(n => n.sociometric_status === "popular")
       const controversial = sg.nodes.filter(n => n.sociometric_status === "controvertido")
 
       const cdcSummary = [
-        m.popular_count > 0     && `${m.popular_count} popular${m.popular_count > 1 ? "es" : ""}`,
-        m.rejected_count > 0    && `${m.rejected_count} rechazado${m.rejected_count > 1 ? "s" : ""}`,
-        m.neglected_count > 0   && `${m.neglected_count} ignorado${m.neglected_count > 1 ? "s" : ""}`,
+        m.popular_count > 0       && `${m.popular_count} popular${m.popular_count > 1 ? "es" : ""}`,
+        m.rejected_count > 0      && `${m.rejected_count} rechazado${m.rejected_count > 1 ? "s" : ""}`,
+        m.neglected_count > 0     && `${m.neglected_count} ignorado${m.neglected_count > 1 ? "s" : ""}`,
         m.controversial_count > 0 && `${m.controversial_count} controvertido${m.controversial_count > 1 ? "s" : ""}`,
-        isolated.length > 0     && `${isolated.length} sin ninguna nominación recibida`,
+        isolated.length > 0       && `${isolated.length} sin ninguna nominación recibida`,
       ].filter(Boolean).join(", ")
 
       const docNote = docs.length > 0
@@ -312,11 +356,30 @@ export async function POST(
         docNote + docContext
 
       const narrative = await generateAISummary(narrativePrompt, apiKey, undefined, aiModel)
-      return NextResponse.json({ summary: `CONTEXTO SOCIOMÉTRICO\n${narrative.trim()}\n\n${report}` })
+      finalSummary = `CONTEXTO SOCIOMÉTRICO\n${narrative.trim()}\n\n${report}`
     } catch {
-      // Fall through to return just the programmatic report
+      // Fall through to use just the programmatic report
     }
   }
 
-  return NextResponse.json({ summary: report })
+  // Persist the report so it survives page reloads and builds a history
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: saved } = await (supabase as any)
+    .from("ai_reports")
+    .insert({
+      process_id: id,
+      report_type: "sociogram",
+      content: finalSummary,
+      created_by: profile.id,
+      created_by_name: profile.name ?? profile.email,
+    })
+    .select("id, created_at")
+    .single()
+
+  return NextResponse.json({
+    summary: finalSummary,
+    report_id: saved?.id ?? null,
+    created_at: saved?.created_at ?? new Date().toISOString(),
+    created_by_name: profile.name ?? profile.email,
+  })
 }
