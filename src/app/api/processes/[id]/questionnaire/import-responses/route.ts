@@ -1,11 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
-import { randomBytes } from "crypto"
-
-function generateToken() {
-  return randomBytes(20).toString("hex")
-}
+import {
+  buildStudentLookup,
+  mapSourceToTarget,
+  remapResponses,
+  persistImport,
+} from "@/lib/services/response-import"
 
 /** GET — returns processes of the same center that have responses */
 export async function GET(
@@ -92,65 +93,23 @@ export async function POST(
 
   if (!targetStudents?.length) return NextResponse.json({ error: "El proceso destino no tiene alumnos" }, { status: 400 })
 
-  // Build lookup for target students
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const byProfileId = new Map<string, string>()
-  const byExternalId = new Map<string, string>()
-  const byName = new Map<string, string>()
-
-  for (const s of targetStudents) {
-    if (s.student_profile_id) byProfileId.set(s.student_profile_id, s.id)
-    if (s.external_id) byExternalId.set(s.external_id, s.id)
-    byName.set(`${(s.first_name ?? "").toLowerCase()} ${(s.last_name ?? "").toLowerCase()}`.trim(), s.id)
-  }
-
-  // Map each source student → target student id
-  const sourceToTarget = new Map<string, string>()
-  for (const s of (sourceStudents ?? [])) {
-    let targetId: string | undefined
-    if (s.student_profile_id) targetId = byProfileId.get(s.student_profile_id)
-    if (!targetId && s.external_id) targetId = byExternalId.get(s.external_id)
-    if (!targetId) targetId = byName.get(`${(s.first_name ?? "").toLowerCase()} ${(s.last_name ?? "").toLowerCase()}`.trim())
-    if (targetId) sourceToTarget.set(s.id, targetId)
-  }
-
+  // Build lookup and map students
+  const lookup = buildStudentLookup(targetStudents)
+  const sourceToTarget = mapSourceToTarget(sourceStudents ?? [], lookup)
   const matchedStudents = sourceToTarget.size
   const unmatchedStudents = (sourceStudents?.length ?? 0) - matchedStudents
 
-  // Load source responses
+  // Load source responses and remap to target IDs
   const { data: sourceResponses } = await supabase
     .from("responses")
     .select("respondent_student_id, target_student_id, relation_type, weight")
     .eq("process_id", sourceProcessId)
 
-  // Remap to target student IDs
-  type MappedResponse = {
-    process_id: string
-    respondent_student_id: string
-    target_student_id: string
-    relation_type: string
-    weight: number | null
-  }
-
-  const mapped: MappedResponse[] = []
-  for (const r of (sourceResponses ?? [])) {
-    const newRespondent = sourceToTarget.get(r.respondent_student_id)
-    const newTarget = sourceToTarget.get(r.target_student_id)
-    if (newRespondent && newTarget) {
-      mapped.push({
-        process_id: targetProcessId,
-        respondent_student_id: newRespondent,
-        target_student_id: newTarget,
-        relation_type: r.relation_type,
-        weight: r.weight,
-      })
-    }
-  }
+  const mapped = remapResponses(sourceResponses ?? [], sourceToTarget, targetProcessId)
 
   if (action === "preview") {
-    // Sample of matched student names for preview
-    const matchedNames = [...sourceToTarget.entries()].slice(0, 5).map(([srcId]) => {
-      const s = (sourceStudents ?? []).find(st => st.id === srcId)
+    const matchedNames = [...sourceToTarget.keys()].slice(0, 5).map(srcId => {
+      const s = (sourceStudents ?? []).find((st: { id: string }) => st.id === srcId)
       return s ? `${s.first_name} ${s.last_name}` : srcId
     })
 
@@ -170,69 +129,7 @@ export async function POST(
     return NextResponse.json({ error: "No hay respuestas importables (sin coincidencias de alumnos)" }, { status: 400 })
   }
 
-  // Delete existing responses in target process first (avoid duplicates)
-  await supabase.from("responses").delete().eq("process_id", targetProcessId)
-
-  // Insert remapped responses in batches of 500
-  const BATCH = 500
-  let inserted = 0
-  for (let i = 0; i < mapped.length; i += BATCH) {
-    const batch = mapped.slice(i, i + BATCH)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("responses").insert(batch)
-    if (!error) inserted += batch.length
-  }
-
-  // Ensure tokens exist for respondents (create if missing, mark all as used)
-  const respondentIds = [...new Set(mapped.map(r => r.respondent_student_id))]
-  if (respondentIds.length > 0) {
-    const now = new Date().toISOString()
-
-    // Load existing tokens for this process
-    const { data: existingTokens } = await supabase
-      .from("questionnaire_tokens")
-      .select("student_id")
-      .eq("process_id", targetProcessId)
-      .in("student_id", respondentIds)
-
-    const alreadyHaveToken = new Set((existingTokens ?? []).map(t => t.student_id))
-    const missingIds = respondentIds.filter(sid => !alreadyHaveToken.has(sid))
-
-    // Update existing tokens
-    if (alreadyHaveToken.size > 0) {
-      await supabase
-        .from("questionnaire_tokens")
-        .update({ used: true, completed_at: now })
-        .eq("process_id", targetProcessId)
-        .in("student_id", respondentIds)
-    }
-
-    // Create tokens for students that don't have one yet
-    if (missingIds.length > 0) {
-      await supabase.from("questionnaire_tokens").insert(
-        missingIds.map(sid => ({
-          process_id: targetProcessId,
-          student_id: sid,
-          token: generateToken(),
-          used: true,
-          completed_at: now,
-        }))
-      )
-    }
-  }
-
-  // Advance process status if still in early state
-  const { data: proc } = await supabase
-    .from("processes")
-    .select("status")
-    .eq("id", targetProcessId)
-    .single()
-  if (proc && ["borrador", "cuestionario_abierto"].includes(proc.status)) {
-    await supabase
-      .from("processes")
-      .update({ status: "cuestionario_cerrado" })
-      .eq("id", targetProcessId)
-  }
+  const inserted = await persistImport(supabase, targetProcessId, mapped)
 
   await logAudit(profile.id, profile.center_id, "import_responses_from_process", "process", {
     processId: targetProcessId,
