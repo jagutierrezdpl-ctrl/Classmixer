@@ -17,6 +17,7 @@ import {
 import Link from "next/link"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { useConfirm } from "@/components/ui/ConfirmDialog"
+import { toast } from "sonner"
 
 interface Center {
   id: string
@@ -236,7 +237,9 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
     setUserActionLoading(null)
     if (res.ok) {
       const msg = action === "resend_invite" ? "Invitación reenviada" : "Email de recuperación enviado"
-      alert(msg)
+      toast.success(msg)
+    } else {
+      toast.error("Error al realizar la acción")
     }
   }
 

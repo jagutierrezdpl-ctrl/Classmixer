@@ -18,6 +18,7 @@ import {
 import Link from "next/link"
 import { getCurrentSchoolYear, getSchoolYears } from "@/utils/school-year"
 import { useConfirm } from "@/components/ui/ConfirmDialog"
+import { toast } from "sonner"
 
 const SCHOOL_YEARS = getSchoolYears(1, 3)
 const DEFAULT_SCHOOL_YEAR = getCurrentSchoolYear()
@@ -280,8 +281,9 @@ export default function AlumnadoPage() {
     const res = await fetch(`/api/groups?name=${encodeURIComponent(name)}`, { method: "DELETE" })
     const data = await res.json()
     if (!res.ok) {
-      alert(data.error ?? "Error al eliminar el grupo")
+      toast.error(data.error ?? "Error al eliminar el grupo")
     } else {
+      toast.success(`Grupo "${name}" eliminado`)
       loadGroups()
     }
   }

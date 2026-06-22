@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { LEGACY_QUESTION_CODES } from "@/lib/questionnaire/catalog"
+import { rateLimit, getClientIp } from "@/lib/rate-limit"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getActiveAdvancedQuestions(supabase: any, processId: string) {
@@ -85,6 +86,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
+  // 15 submissions per 10 minutes per IP — enough for a student to retry, blocks bots
+  if (!rateLimit(getClientIp(request), 15, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Demasiadas peticiones. Espera unos minutos." }, { status: 429 })
+  }
+
   const { token } = await params
   const supabase = createServiceClient()
 
