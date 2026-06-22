@@ -55,7 +55,7 @@ export default async function StudentReportPage({
     { data: allResponses },
     { data: proposals },
   ] = await Promise.all([
-    supabase.from("processes").select("name, school_year, source_level, target_level").eq("id", processId).single(),
+    supabase.from("processes").select("name, school_year, source_level, target_level, center_id").eq("id", processId).single(),
     supabase.from("students").select("*").eq("id", studentId).eq("process_id", processId).single(),
     supabase.from("students").select("*").eq("process_id", processId).eq("active", true),
     supabase.from("responses").select("*").eq("process_id", processId),
@@ -65,7 +65,9 @@ export default async function StudentReportPage({
       .eq("proposal_assignments.student_id", studentId),
   ])
 
-  if (!student || !process) notFound()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!process || (process as any).center_id !== profile.center_id) notFound()
+  if (!student) notFound()
 
   type StudentRecord = typeof student & {
     external_id: string | null; gender: string | null; average_grade: number | null

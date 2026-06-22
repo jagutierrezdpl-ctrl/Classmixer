@@ -28,6 +28,7 @@ export default async function ReportPage({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const process = processRaw as any
+  if (process.center_id !== profile.center_id) notFound()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proposal = proposalRaw as any
 

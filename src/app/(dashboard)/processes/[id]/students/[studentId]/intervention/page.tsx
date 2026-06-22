@@ -63,7 +63,8 @@ export default async function InterventionPage({
     supabase.from("responses").select("*").eq("process_id", processId),
   ])
 
-  if (!student || !process) notFound()
+  if (!process || process.center_id !== profile.center_id) notFound()
+  if (!student) notFound()
 
   const catalogIndex = await getQuestionCatalogIndex(profile.center_id)
   const st = student as StudentRecord

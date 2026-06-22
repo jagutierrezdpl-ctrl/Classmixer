@@ -39,8 +39,9 @@ export default async function StudentDetailPage({
   const canSeeSensitive = ["admin", "superadmin", "orientador"].includes(profile.role)
   const supabase = createServiceClient()
 
-  // Load all data in parallel
+  // Load all data in parallel (process fetched to validate cross-tenant access)
   const [
+    { data: process },
     { data: student },
     { data: allStudents },
     { data: givenResponses },
@@ -48,6 +49,7 @@ export default async function StudentDetailPage({
     { data: metricsRaw },
     { data: proposals },
   ] = await Promise.all([
+    supabase.from("processes").select("center_id").eq("id", processId).single(),
     supabase.from("students").select("*").eq("id", studentId).eq("process_id", processId).single(),
     supabase.from("students").select("id, first_name, last_name, current_class").eq("process_id", processId).eq("active", true),
     supabase.from("responses").select("target_student_id, relation_type").eq("process_id", processId).eq("respondent_student_id", studentId),
@@ -60,6 +62,7 @@ export default async function StudentDetailPage({
       .eq("proposal_assignments.student_id", studentId),
   ])
 
+  if (!process || process.center_id !== profile.center_id) notFound()
   if (!student) notFound()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
