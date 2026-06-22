@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertTriangle, Heart, UserX, BookOpen, User, ChevronRight, Loader2 } from "lucide-react"
+import { AlertTriangle, Heart, UserX, BookOpen, User, ChevronRight, Loader2, ShieldAlert } from "lucide-react"
 import Link from "next/link"
 
 interface StudentSummary {
@@ -32,6 +32,21 @@ interface Overview {
     no_class: number
     inactive: number
   }
+}
+
+interface BullyingFlagged {
+  student_id: string
+  name: string
+  current_class: string
+  process_id: string
+  process_name: string
+  signals: number
+}
+
+interface ConvivenciaOverview {
+  flagged: BullyingFlagged[]
+  total_signals: number
+  processes_checked: number
 }
 
 const BEHAVIOR_COLORS: Record<string, string> = {
@@ -95,6 +110,8 @@ export default function OrientadorPage() {
   const [overview, setOverview] = useState<Overview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [convivencia, setConvivencia] = useState<ConvivenciaOverview | null>(null)
+  const [loadingConvivencia, setLoadingConvivencia] = useState(true)
 
   useEffect(() => {
     fetch("/api/orientador/overview")
@@ -105,6 +122,11 @@ export default function OrientadorPage() {
       })
       .catch(() => setError("Error al cargar datos"))
       .finally(() => setLoading(false))
+    fetch("/api/orientador/convivencia")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setConvivencia(d))
+      .catch(() => null)
+      .finally(() => setLoadingConvivencia(false))
   }, [])
 
   if (loading) {
@@ -131,7 +153,7 @@ export default function OrientadorPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <Card>
           <CardContent className="py-4 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-500" />
@@ -168,10 +190,19 @@ export default function OrientadorPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="py-4 flex items-center gap-3">
+            <ShieldAlert className="w-5 h-5 text-red-600" />
+            <div>
+              <p className="text-2xl font-bold text-red-700">{convivencia?.flagged.length ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">Alertas convivencia</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="behavior">
-        <TabsList className="mb-6">
+        <TabsList className="mb-6 flex-wrap h-auto">
           <TabsTrigger value="behavior">
             <AlertTriangle className="w-4 h-4 mr-2" />
             Conducta
@@ -198,6 +229,13 @@ export default function OrientadorPage() {
             Bajas
             {totals.inactive > 0 && (
               <Badge className="ml-2 h-5 px-1.5 text-xs bg-red-500">{totals.inactive}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="convivencia">
+            <ShieldAlert className="w-4 h-4 mr-2" />
+            Convivencia
+            {(convivencia?.flagged.length ?? 0) > 0 && (
+              <Badge className="ml-2 h-5 px-1.5 text-xs bg-red-600">{convivencia!.flagged.length}</Badge>
             )}
           </TabsTrigger>
         </TabsList>
@@ -240,6 +278,52 @@ export default function OrientadorPage() {
             ? <EmptyState label="No hay alumnos de baja" />
             : <div className="space-y-2">{overview.inactive.map(s => <StudentCard key={s.id} s={s} />)}</div>
           }
+        </TabsContent>
+
+        <TabsContent value="convivencia">
+          <p className="text-sm text-muted-foreground mb-4">
+            Alumnos con señales de riesgo en el módulo de convivencia/acoso de los cuestionarios activos.
+            Acceso restringido. Toda consulta queda registrada.
+          </p>
+          {loadingConvivencia ? (
+            <div className="flex items-center gap-2 py-6 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Cargando...
+            </div>
+          ) : !convivencia || convivencia.flagged.length === 0 ? (
+            <EmptyState label="Sin alumnos con señales de riesgo en convivencia detectadas" />
+          ) : (
+            <div className="space-y-2">
+              {convivencia.flagged.map(s => (
+                <Card key={`${s.process_id}:${s.student_id}`} className="hover:bg-muted/30 transition-colors border-red-100">
+                  <CardContent className="py-3 px-4">
+                    <Link
+                      href={`/processes/${s.process_id}/students/${s.student_id}/intervention`}
+                      className="flex items-center gap-3"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                        <ShieldAlert className="w-4 h-4 text-red-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{s.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {s.current_class && `${s.current_class} · `}{s.process_name}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline" className="text-red-700 border-red-300 text-xs font-bold">
+                          {s.signals} señales
+                        </Badge>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </Link>
+                  </CardContent>
+                </Card>
+              ))}
+              <p className="text-xs text-muted-foreground mt-2">
+                Total de {convivencia.total_signals} respuestas analizadas en {convivencia.processes_checked} procesos activos.
+              </p>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
+import { InterventionNotes } from "@/components/intervention/InterventionNotes"
 
 type StudentRecord = {
   id: string
@@ -428,26 +429,10 @@ export default async function InterventionPage({
         </section>
 
         {/* ── NOTAS DE SEGUIMIENTO ── */}
-        <section className="mb-8 p-5 border border-dashed border-gray-300 rounded-xl">
-          <h3 className="font-bold text-base text-gray-900 mb-3">Notas de seguimiento (uso del equipo)</h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Acuerdos del equipo:</p>
-              <div className="border-b border-gray-200 pb-6" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Actuaciones planificadas:</p>
-              <div className="border-b border-gray-200 pb-6" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Fecha de revisión:</p>
-              <div className="border-b border-gray-200 pb-4" />
-            </div>
-            <div className="flex justify-between text-xs text-gray-400 pt-2">
-              <span>Responsable: ___________________________</span>
-              <span>Firma: ___________________________</span>
-            </div>
-          </div>
+        <section className="mb-8 p-5 border border-dashed border-gray-300 rounded-xl print:hidden">
+          <h3 className="font-bold text-base text-gray-900 mb-1">Notas de seguimiento (uso del equipo)</h3>
+          <p className="text-xs text-gray-500 mb-4">Registro de acciones, acuerdos y actuaciones del equipo docente y de orientación. Confidencial.</p>
+          <InterventionNotes processId={processId} studentId={studentId} />
         </section>
 
         {/* Footer */}

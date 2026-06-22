@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare, FileText, ArrowRight, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react"
+import { ArrowLeft, Users, BookOpen, Network, Shield, LayoutGrid, Upload, Zap, CalendarDays, MessageSquare, FileText, ArrowRight, AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from "lucide-react"
 import ProcessActions from "./ProcessActions"
 import ProcessTeam from "./ProcessTeam"
 import { ProcessStepper } from "@/components/processes/ProcessStepper"
@@ -26,6 +26,7 @@ const SECTIONS_MEZCLA = [
   { href: "questionnaire", label: "Cuestionario", icon: BookOpen, description: "Configurar y lanzar el cuestionario sociométrico" },
   { href: "responses", label: "Respuestas", icon: MessageSquare, description: "Ver quién ha respondido y sus elecciones" },
   { href: "sociogram", label: "Sociograma", icon: Network, description: "Visualizar las relaciones sociales" },
+  { href: "convivencia", label: "Convivencia", icon: ShieldAlert, description: "Señales de riesgo y bullying (orientación)" },
   { href: "rules", label: "Reglas", icon: Shield, description: "Definir restricciones entre alumnos" },
   { href: "algorithm", label: "Algoritmo", icon: Zap, description: "Configurar criterios y ejecutar la mezcla" },
   { href: "proposals", label: "Propuestas", icon: LayoutGrid, description: "Comparar, editar y aprobar la distribución" },
@@ -36,6 +37,7 @@ const SECTIONS_SOCIOGRAMA = [
   { href: "questionnaire", label: "Cuestionario", icon: BookOpen, description: "Configurar y lanzar el cuestionario sociométrico" },
   { href: "responses", label: "Respuestas", icon: MessageSquare, description: "Ver quién ha respondido y sus elecciones" },
   { href: "sociogram", label: "Sociograma", icon: Network, description: "Visualizar las relaciones sociales e informes" },
+  { href: "convivencia", label: "Convivencia", icon: ShieldAlert, description: "Señales de riesgo y bullying (orientación)" },
 ]
 
 function formatDate(dateStr: string) {
