@@ -152,8 +152,48 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     }
   }
 
+  // Parse advanced input here — before the token claim — so we can validate minimums
+  // without consuming the token on bad requests.
+  const advancedInput = advanced && typeof advanced === "object" ? advanced : {}
+  const choices = advancedInput.choices && typeof advancedInput.choices === "object" ? advancedInput.choices : {}
+  const scales = advancedInput.scales && typeof advancedInput.scales === "object" ? advancedInput.scales : {}
+  const climateInput = advancedInput.climate && typeof advancedInput.climate === "object" ? advancedInput.climate : {}
+  const metadataByCode = advancedInput.metadata && typeof advancedInput.metadata === "object" ? advancedInput.metadata : {}
+
+  // Load active advanced questions once — reused for validation and for building responseRows.
+  const activeAdvanced = await getActiveAdvancedQuestions(supabase, tokenData.process_id)
+
+  // Enforce minimums for advanced questions server-side (token NOT consumed if validation fails)
+  for (const r of activeAdvanced) {
+    const qt = r.question_types
+    const min = r.min ?? 0
+    if (min === 0) continue
+
+    if (qt.input_mode === "choice" || qt.input_mode === "scale") {
+      const sent = Array.isArray((choices as Record<string, unknown>)[qt.code])
+        ? ((choices as Record<string, string[]>)[qt.code]).length
+        : 0
+      if (sent < min) {
+        return NextResponse.json(
+          { error: `Debes elegir al menos ${min} compañero(s) en "${qt.label}"` },
+          { status: 400 }
+        )
+      }
+    }
+
+    if (qt.input_mode === "climate") {
+      const val = Number((climateInput as Record<string, unknown>)[qt.code])
+      if (!Number.isInteger(val) || val < 1 || val > 5) {
+        return NextResponse.json(
+          { error: `Debes valorar "${qt.label}"` },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
   // Atomic claim: mark as used only if still unused — prevents double-submission race.
-  // Only reached after validation passes.
+  // Only reached after all validation passes.
   const { data: claimed } = await supabase
     .from("questionnaire_tokens")
     .update({ used: true, completed_at: new Date().toISOString() })
@@ -203,16 +243,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     }
   }
 
-  // Preguntas avanzadas (roles sociales, autopercepción, intensidad, convivencia) —
-  // capa adicional sobre las 4 de arriba, validada contra el catálogo activo del proceso.
-  const activeAdvanced = await getActiveAdvancedQuestions(supabase, tokenData.process_id)
+  // advancedInput, choices, scales, climateInput, metadataByCode, activeAdvanced — all parsed above before token claim.
   const advancedByCode = new Map(activeAdvanced.map((r) => [r.question_types.code, r]))
-
-  const advancedInput = advanced && typeof advanced === "object" ? advanced : {}
-  const choices = advancedInput.choices && typeof advancedInput.choices === "object" ? advancedInput.choices : {}
-  const scales = advancedInput.scales && typeof advancedInput.scales === "object" ? advancedInput.scales : {}
-  const climateInput = advancedInput.climate && typeof advancedInput.climate === "object" ? advancedInput.climate : {}
-  const metadataByCode = advancedInput.metadata && typeof advancedInput.metadata === "object" ? advancedInput.metadata : {}
 
   for (const [code, rawIds] of Object.entries(choices as Record<string, unknown>)) {
     const def = advancedByCode.get(code)

@@ -185,8 +185,12 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     }
 
     for (const q of advancedQuestions) {
-      if (q.input_mode === "choice" && q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min) {
+      if ((q.input_mode === "choice" || q.input_mode === "scale") && q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min) {
         toast.error(`Debes elegir al menos ${q.min} compañero(s) para "${q.label}"`)
+        return
+      }
+      if (q.input_mode === "climate" && q.min > 0 && typeof climateValues[q.code] !== "number") {
+        toast.error(`Debes valorar "${q.label}" antes de enviar`)
         return
       }
     }
@@ -265,11 +269,22 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
   const canSubmit =
     questions.length > 0 &&
     questions.every(q => !q.min || (selections[q.type]?.length ?? 0) >= q.min) &&
-    advancedQuestions.every(q => q.input_mode !== "choice" || !q.min || (advancedChoices[q.code]?.length ?? 0) >= q.min)
+    advancedQuestions.every(q => {
+      if (!q.min) return true
+      if (q.input_mode === "choice" || q.input_mode === "scale") {
+        return (advancedChoices[q.code]?.length ?? 0) >= q.min
+      }
+      if (q.input_mode === "climate") return typeof climateValues[q.code] === "number"
+      return true
+    })
 
   const pendingLabels = [
     ...questions.filter(q => !!q.min && (selections[q.type]?.length ?? 0) < q.min).map(q => q.label),
-    ...advancedQuestions.filter(q => q.input_mode === "choice" && !!q.min && (advancedChoices[q.code]?.length ?? 0) < q.min).map(q => q.label),
+    ...advancedQuestions.filter(q => {
+      if (!q.min) return false
+      if (q.input_mode === "climate") return typeof climateValues[q.code] !== "number"
+      return (advancedChoices[q.code]?.length ?? 0) < q.min
+    }).map(q => q.label),
   ]
 
   return (
