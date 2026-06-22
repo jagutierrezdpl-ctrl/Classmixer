@@ -107,7 +107,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tokenData = tokenDataRaw as any
 
-  // Atomic claim: mark as used only if still unused — prevents double-submission race
+  // Read and validate body BEFORE claiming the token, so a student who sends
+  // too few selections gets an error and can fix it without losing their token.
+  const body = await request.json().catch(() => null)
+  const { selections, advanced } = body ?? {}
+
+  if (!selections || typeof selections !== "object") {
+    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
+  }
+
+  const settings = tokenData.processes?.questionnaire_settings ?? {}
+
+  // Validate server-side limits per relation type
+  const limits: Record<string, { enabled: boolean; min: number; max: number }> = {
+    friendship: { enabled: settings.friendship_enabled ?? true,  min: settings.friendship_min ?? 1, max: settings.friendship_max ?? 5 },
+    work:       { enabled: settings.work_enabled ?? false,       min: settings.work_min ?? 0,       max: settings.work_max ?? 3 },
+    emotional:  { enabled: settings.emotional_enabled ?? false,  min: settings.emotional_min ?? 0,  max: settings.emotional_max ?? 3 },
+    negative:   { enabled: settings.negative_enabled ?? false,   min: 0,                            max: settings.negative_max ?? 2 },
+  }
+
+  // Enforce minimums server-side — token is NOT consumed if validation fails
+  for (const [relationType, limit] of Object.entries(limits)) {
+    if (!limit.enabled || limit.min === 0) continue
+    const sent = Array.isArray(selections[relationType]) ? (selections[relationType] as string[]).length : 0
+    if (sent < limit.min) {
+      const labels: Record<string, string> = { friendship: "Amistad", work: "Trabajo", emotional: "Apoyo", negative: "Convivencia" }
+      return NextResponse.json(
+        { error: `Debes elegir al menos ${limit.min} compañero(s) en "${labels[relationType] ?? relationType}"` },
+        { status: 400 }
+      )
+    }
+  }
+
+  // Atomic claim: mark as used only if still unused — prevents double-submission race.
+  // Only reached after validation passes.
   const { data: claimed } = await supabase
     .from("questionnaire_tokens")
     .update({ used: true, completed_at: new Date().toISOString() })
@@ -118,23 +151,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   if (!claimed) {
     return NextResponse.json({ error: "Ya completado" }, { status: 410 })
-  }
-
-  const body = await request.json()
-  const { selections, advanced } = body ?? {}
-
-  if (!selections || typeof selections !== "object") {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
-  }
-
-  const settings = tokenData.processes?.questionnaire_settings ?? {}
-
-  // Validate server-side limits per relation type
-  const limits: Record<string, { enabled: boolean; max: number }> = {
-    friendship: { enabled: settings.friendship_enabled ?? true,  max: settings.friendship_max ?? 5 },
-    work:       { enabled: settings.work_enabled ?? false,       max: settings.work_max ?? 3 },
-    emotional:  { enabled: settings.emotional_enabled ?? false,  max: settings.emotional_max ?? 3 },
-    negative:   { enabled: settings.negative_enabled ?? false,   max: settings.negative_max ?? 2 },
   }
 
   // Fetch valid student IDs for this process (to prevent injecting arbitrary IDs)
