@@ -13,35 +13,47 @@ async function getOwnedProcess(processId: string, centerId: string) {
   return process
 }
 
-// Auto-inserta en process_tutors los tutores de los grupos de origen
-// que aún no estén asignados. Se llama en silencio al cargar el equipo.
-// No filtra por school_year — coge todos los tutores asignados a esos grupos
-// (puede haber uno por curso) y deduplica por user_id.
+// Auto-inserta en process_tutors los tutores de los grupos de origen.
+// Si source_groups está vacío, infiere los grupos desde los alumnos del proceso.
+// No filtra por school_year para evitar desajustes de formato de año.
 async function syncGroupTutors(processId: string, sourceGroups: string[], centerId: string) {
-  if (!sourceGroups?.length) return
   const supabase = createServiceClient()
+
+  let groups = sourceGroups?.filter(Boolean) ?? []
+
+  // Fallback: inferir grupos desde current_class de los alumnos si source_groups está vacío
+  if (!groups.length) {
+    const { data: students } = await supabase
+      .from("students")
+      .select("current_class")
+      .eq("process_id", processId)
+      .eq("active", true)
+      .not("current_class", "is", null)
+
+    const inferred = [...new Set((students ?? []).map(s => s.current_class).filter(Boolean))] as string[]
+    groups = inferred
+  }
+
+  if (!groups.length) return
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: groupTutors } = await (supabase as any)
     .from("group_tutors")
     .select("user_id")
     .eq("center_id", centerId)
-    .in("group_name", sourceGroups)
+    .in("group_name", groups)
 
   if (!groupTutors?.length) return
 
-  // Dedup: un tutor puede aparecer en varios grupos o cursos
+  // Dedup: un tutor puede estar en varios grupos o cursos
   const uniqueUserIds = [...new Set((groupTutors as { user_id: string }[]).map(gt => gt.user_id))]
 
-  const rows = uniqueUserIds.map(user_id => ({
-    process_id: processId,
-    user_id,
-  }))
+  const rows = uniqueUserIds.map(user_id => ({ process_id: processId, user_id }))
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any)
     .from("process_tutors")
-    .upsert(rows, { onConflict: "process_id,user_id", ignoreDuplicates: true })
+    .upsert(rows, { onConflict: "process_id,user_id" })
 }
 
 export async function GET(
