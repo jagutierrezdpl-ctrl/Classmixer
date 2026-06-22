@@ -170,7 +170,7 @@ export default async function DashboardPage() {
       const acts: PriorityAction[] = []
 
       if (studs === 0) {
-        acts.push({ processId: p.id, processName: p.name, label: "Importar alumnos", sublabel: "Sin alumnos todavía", href: `/processes/${p.id}/import`, urgency: "info" })
+        acts.push({ processId: p.id, processName: p.name, label: "Importar alumnos", sublabel: "Sin alumnos todavía", href: `/processes/${p.id}/students`, urgency: "info" })
       } else if (tkStats.total === 0 && !["cerrado", "propuesta_seleccionada", "archivado"].includes(p.status)) {
         acts.push({ processId: p.id, processName: p.name, label: "Lanzar cuestionario", sublabel: `${studs} alumnos registrados`, href: `/processes/${p.id}/questionnaire`, urgency: "info" })
       } else if (p.status === "cuestionario_abierto" && pct < 60) {

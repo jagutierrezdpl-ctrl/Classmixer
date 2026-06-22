@@ -277,14 +277,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await supabase.from("proposals").delete().in("id", oldProposals.map(p => p.id))
   }
 
-  const savedIds: string[] = []
   const labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
 
-  for (let i = 0; i < proposals.length; i++) {
-    const p = proposals[i]
-    const { data: saved, error } = await supabase
-      .from("proposals")
-      .insert({
+  const { data: savedProposals } = await supabase
+    .from("proposals")
+    .insert(
+      proposals.map((p, i) => ({
         process_id: id,
         name: `Propuesta ${labels[i] ?? i + 1}`,
         score_total: p.score_total,
@@ -294,34 +292,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         score_behavior: p.score_behavior,
         status: "generada",
         created_by: profile.id,
-      })
-      .select()
-      .single()
-
-    if (error || !saved) continue
-
-    await supabase.from("proposal_assignments").insert(
-      p.assignments.map(a => ({
-        proposal_id: saved.id,
-        student_id: a.student_id,
-        target_class: a.target_class,
-        locked: false,
       }))
     )
+    .select("id")
 
-    const metricRows: { proposal_id: string; metric_key: string; metric_value: number; target_class: string | null }[] = [
-      { proposal_id: saved.id, metric_key: "use_sociogram", metric_value: useSociogram ? 1 : 0, target_class: null },
-    ]
+  if (!savedProposals || savedProposals.length === 0) {
+    return NextResponse.json({ error: "No se pudieron guardar propuestas" }, { status: 500 })
+  }
+
+  const savedIds = savedProposals.map(p => p.id)
+
+  const allAssignments = proposals.flatMap((p, i) => {
+    const proposalId = savedProposals[i]?.id
+    if (!proposalId) return []
+    return p.assignments.map(a => ({
+      proposal_id: proposalId,
+      student_id: a.student_id,
+      target_class: a.target_class,
+      locked: false,
+    }))
+  })
+  if (allAssignments.length > 0) {
+    await supabase.from("proposal_assignments").insert(allAssignments)
+  }
+
+  const allMetrics: { proposal_id: string; metric_key: string; metric_value: number; target_class: string | null }[] = []
+  proposals.forEach((p, i) => {
+    const proposalId = savedProposals[i]?.id
+    if (!proposalId) return
+    allMetrics.push({ proposal_id: proposalId, metric_key: "use_sociogram", metric_value: useSociogram ? 1 : 0, target_class: null })
     for (const [cls, metrics] of Object.entries(p.metrics)) {
       for (const [key, value] of Object.entries(metrics)) {
-        metricRows.push({ proposal_id: saved.id, metric_key: key, metric_value: value, target_class: cls })
+        allMetrics.push({ proposal_id: proposalId, metric_key: key, metric_value: value, target_class: cls })
       }
     }
-    if (metricRows.length > 0) {
-      await supabase.from("proposal_metrics").insert(metricRows)
-    }
-
-    savedIds.push(saved.id)
+  })
+  if (allMetrics.length > 0) {
+    await supabase.from("proposal_metrics").insert(allMetrics)
   }
 
   await supabase

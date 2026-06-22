@@ -101,7 +101,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tokenData = tokenDataRaw as any
 
-  if (tokenData.used) {
+  // Atomic claim: mark as used only if still unused — prevents double-submission race
+  const { data: claimed } = await supabase
+    .from("questionnaire_tokens")
+    .update({ used: true, completed_at: new Date().toISOString() })
+    .eq("token", token)
+    .eq("used", false)
+    .select("id")
+    .single()
+
+  if (!claimed) {
     return NextResponse.json({ error: "Ya completado" }, { status: 410 })
   }
 
@@ -262,11 +271,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     }
   }
 
-  // Mark token as used
-  await supabase
-    .from("questionnaire_tokens")
-    .update({ used: true, completed_at: new Date().toISOString() })
-    .eq("token", token)
+  // Token already marked used atomically at the start of this handler
 
   // Link to student_profile if not already linked
   // Ensures token-based responses are tracked historically, same as Google login

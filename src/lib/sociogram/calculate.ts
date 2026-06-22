@@ -212,13 +212,24 @@ export function calculateSociogram(
   const llArr = nodeIds.map(id => rejRecv.get(id) ?? 0)    // LL vector
 
   const zLMArr = toZScores(lmArr)
+  // When there is no rejection data, SP and SI would be identical (SP=SI=zLM),
+  // making zSP=zSI and collapsing the 2D space to a diagonal. In that case we
+  // can only meaningfully distinguish Popular (high zLM) and Ignorado (low zLM);
+  // all other students correctly fall as Promedio. We still compute zSP/zSI so
+  // cdcClassify can run normally — the thresholds simply produce fewer Rechazado
+  // or Controvertido (correct: we have no rejection evidence for those labels).
   const zLLArr = hasRejectionData ? toZScores(llArr) : lmArr.map(() => 0)
 
   const spArr = nodeIds.map((_, i) => zLMArr[i] - zLLArr[i])  // SP = zLM - zLL
   const siArr = nodeIds.map((_, i) => zLMArr[i] + zLLArr[i])  // SI = zLM + zLL
 
+  // When no rejection data, SP === zLM so z-scoring SP gives the same ordering
+  // as zLM — that is correct. SI === zLM too, so zSI === zSP. The Popular
+  // condition (zSP > 1, zLM > 0) fires for high-election students; Ignorado
+  // (zSI < -1, zLM < 0) fires for low-election students; everyone else is
+  // Promedio. This is the best possible 3-class degradation without rejection data.
   const zSPArr = toZScores(spArr)
-  const zSIArr = toZScores(siArr)
+  const zSIArr = hasRejectionData ? toZScores(siArr) : zSPArr.map(v => v) // avoid identical array ref
 
   // ── Bridge threshold (mean + 1 SD of betweenness) ────────────────────────
   // Using "mean + 1 SD" selects approximately the top 16% of nodes by

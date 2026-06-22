@@ -45,6 +45,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
   if (!owned) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
+  // Role check BEFORE any write — approving is admin-only
+  if (body.status === "aprobada" && !["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Solo administradores pueden aprobar propuestas" }, { status: 403 })
+  }
+
   const allowed: { status?: string; name?: string } = {}
   if ("status" in body) allowed.status = body.status
   if ("name" in body) allowed.name = body.name
@@ -62,9 +67,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   if (body.status === "aprobada") {
-    if (!["admin", "superadmin"].includes(profile.role)) {
-      return NextResponse.json({ error: "Solo administradores pueden aprobar propuestas" }, { status: 403 })
-    }
     await supabase
       .from("processes")
       .update({ status: "propuesta_seleccionada", updated_at: new Date().toISOString() })

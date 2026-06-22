@@ -2,6 +2,7 @@ import { getUserProfile } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const profile = await getUserProfile()
@@ -30,7 +31,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         userRole={profile.role as import("@/types").UserRole}
       />
       <main className="flex-1 overflow-auto bg-background">
-        {children}
+        <ConfirmProvider>
+          {children}
+        </ConfirmProvider>
       </main>
     </div>
   )

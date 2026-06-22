@@ -48,13 +48,19 @@ export function simulateFutureSociogram(
     })
 
     let reciprocalInClass = 0
+    // Count pairs that involve at least one student in this class (their "possible" preservation)
+    let reciprocalInvolvingClass = 0
     reciprocalPairs.forEach(pair => {
       const [a, b] = pair.split("_")
-      if (classSet.has(a) && classSet.has(b)) reciprocalInClass++
+      const aIn = classSet.has(a)
+      const bIn = classSet.has(b)
+      if (aIn && bIn) reciprocalInClass++
+      if (aIn || bIn) reciprocalInvolvingClass++
     })
 
+    // Denominator = pairs where at least one member is in this class (max preservable)
     const preservationPct =
-      totalReciprocal > 0 ? (reciprocalInClass / totalReciprocal) * 100 : 100
+      reciprocalInvolvingClass > 0 ? (reciprocalInClass / reciprocalInvolvingClass) * 100 : 100
 
     return {
       target_class: cls,

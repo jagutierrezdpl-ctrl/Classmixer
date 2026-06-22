@@ -61,9 +61,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await request.json()
   const supabase = createServiceClient()
 
+  // Allowlist of editable fields — never spread raw body to prevent overwriting center_id, created_by, etc.
+  const EDITABLE = [
+    "name", "school_year", "source_level", "target_level",
+    "source_groups", "target_groups", "status",
+    "open_at", "close_at", "max_students_per_class", "min_students_per_class",
+    "num_target_classes", "description",
+  ] as const
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  for (const key of EDITABLE) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (key in body) patch[key] = (body as any)[key]
+  }
+
   const { data, error } = await supabase
     .from("processes")
-    .update({ ...body, updated_at: new Date().toISOString() })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(patch as any)
     .eq("id", id)
     .eq("center_id", profile.center_id)
     .select()

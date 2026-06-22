@@ -14,6 +14,7 @@ import {
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
 import ProposalCharts from "@/components/proposals/ProposalCharts"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 function ScoreBar({ label, value, color = "bg-primary" }: { label: string; value: number; color?: string }) {
   return (
@@ -57,6 +58,7 @@ const COMPARATOR_METRICS: { key: string; label: string; higherIsBetter?: boolean
 export default function ProposalsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
+  const confirmFn = useConfirm()
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -87,7 +89,8 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   }
 
   async function handleApprove(proposalId: string) {
-    if (!confirm("¿Aprobar esta propuesta como distribución final? Esta acción quedará registrada.")) return
+    const ok = await confirmFn({ title: "Aprobar propuesta", description: "¿Aprobar esta propuesta como distribución final? Esta acción quedará registrada.", confirmLabel: "Aprobar", variant: "default" })
+    if (!ok) return
     const res = await fetch(`/api/proposals/${proposalId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

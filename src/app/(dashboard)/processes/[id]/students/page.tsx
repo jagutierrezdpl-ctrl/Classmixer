@@ -13,6 +13,7 @@ import {
 import Link from "next/link"
 import type { ImportPreview, Student } from "@/types"
 import LoadFromProfilesDialog from "@/components/students/LoadFromProfilesDialog"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,7 @@ function EditableBadge({
 export default function StudentsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
+  const confirmFn = useConfirm()
   const [view, setView] = useState<"list" | "import" | "preview" | "update-grades" | "update-grades-preview" | "bulk-update" | "bulk-update-preview">("list")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
@@ -416,7 +418,8 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
 
   async function handleBulkDelete() {
     if (selected.size === 0) return
-    if (!confirm(`¿Eliminar ${selected.size} alumno${selected.size > 1 ? "s" : ""} de este proceso? Esta acción no se puede deshacer.`)) return
+    const ok = await confirmFn({ title: "Eliminar alumnos", description: `¿Eliminar ${selected.size} alumno${selected.size > 1 ? "s" : ""} de este proceso? Esta acción no se puede deshacer.`, confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     setDeleting(true)
     try {
       const res = await fetch(`/api/processes/${id}/students`, {

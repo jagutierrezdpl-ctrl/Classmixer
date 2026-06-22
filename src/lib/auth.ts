@@ -101,6 +101,25 @@ export async function tutorCanAccessProcess(
   return tutorGroups.some(g => sourceGroups.includes(g))
 }
 
+/**
+ * Verify that a process belongs to the given center.
+ * Returns the process row or null if not found / wrong center.
+ * Use in API routes to replace the duplicated 5-line ownership check pattern.
+ */
+export async function verifyProcessAccess(
+  processId: string,
+  centerId: string
+): Promise<{ id: string; center_id: string } | null> {
+  const supabase = createServiceClient()
+  const { data } = await supabase
+    .from("processes")
+    .select("id, center_id")
+    .eq("id", processId)
+    .eq("center_id", centerId)
+    .single()
+  return data ?? null
+}
+
 export async function logAudit(
   userId: string,
   centerId: string,
@@ -108,7 +127,8 @@ export async function logAudit(
   entityType: string,
   options?: { processId?: string; entityId?: string; metadata?: Record<string, unknown> }
 ) {
-  const supabase = await createClient()
+  // Use service client: audit logs must always write regardless of session state in API routes
+  const supabase = createServiceClient()
   await supabase.from("audit_logs").insert({
     user_id: userId,
     center_id: centerId,

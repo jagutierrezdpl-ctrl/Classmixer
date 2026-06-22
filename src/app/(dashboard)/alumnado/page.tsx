@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { getCurrentSchoolYear, getSchoolYears } from "@/utils/school-year"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 const SCHOOL_YEARS = getSchoolYears(1, 3)
 const DEFAULT_SCHOOL_YEAR = getCurrentSchoolYear()
@@ -119,6 +120,7 @@ function InlineBadge({
 }
 
 export default function AlumnadoPage() {
+  const confirmFn = useConfirm()
   const [profiles, setProfiles] = useState<StudentProfile[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -273,7 +275,8 @@ export default function AlumnadoPage() {
   }
 
   async function handleDeleteGroup(name: string) {
-    if (!confirm(`¿Eliminar el grupo "${name}"? Solo es posible si no tiene alumnos asignados.`)) return
+    const ok = await confirmFn({ title: "Eliminar grupo", description: `¿Eliminar el grupo "${name}"? Solo es posible si no tiene alumnos asignados.`, confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     const res = await fetch(`/api/groups?name=${encodeURIComponent(name)}`, { method: "DELETE" })
     const data = await res.json()
     if (!res.ok) {

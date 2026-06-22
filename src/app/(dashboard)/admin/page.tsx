@@ -12,6 +12,7 @@ import {
   ChevronRight, Loader2, Download,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 interface GlobalStats {
   total_centers: number
@@ -78,6 +79,7 @@ function StatCard({ icon: Icon, label, value, color = "text-primary" }: {
 }
 
 export default function AdminPage() {
+  const confirmFn = useConfirm()
   const [stats, setStats] = useState<GlobalStats | null>(null)
   const [centers, setCenters] = useState<CenterRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -157,7 +159,8 @@ export default function AdminPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`¿Eliminar el centro "${name}"? Esta acción no se puede deshacer y eliminará todos sus datos.`)) return
+    const ok = await confirmFn({ title: "Eliminar centro", description: `¿Eliminar el centro "${name}"? Esta acción no se puede deshacer y eliminará todos sus datos.`, confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     await fetch(`/api/admin/centers/${id}`, { method: "DELETE" })
     loadData()
   }

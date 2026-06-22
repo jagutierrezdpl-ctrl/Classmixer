@@ -57,6 +57,9 @@ export async function POST(
 ) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Solo administradores pueden importar respuestas" }, { status: 403 })
+  }
 
   const { id: targetProcessId } = await params
   const url = new URL(request.url)

@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import ImportResponsesDialog from "@/components/questionnaire/ImportResponsesDialog"
 import AdvancedQuestionsCard from "@/components/questionnaire/AdvancedQuestionsCard"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 const QRCodeSVG = dynamic<{ value: string; size?: number }>(
   () => import("qrcode.react").then(m => m.QRCodeSVG as React.ComponentType<{ value: string; size?: number }>),
@@ -40,6 +41,7 @@ interface TokenInfo {
 export default function QuestionnairePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
+  const confirmFn = useConfirm()
   const [savedSettings, setSavedSettings] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [tokens, setTokens] = useState<TokenInfo[]>([])
@@ -176,7 +178,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   }
 
   async function resetStudent(studentId: string, name: string) {
-    if (!confirm(`¿Borrar las respuestas de ${name}? Podrá volver a responder el cuestionario.`)) return
+    const ok = await confirmFn({ title: "Reiniciar respuestas", description: `¿Borrar las respuestas de ${name}? Podrá volver a responder el cuestionario.`, confirmLabel: "Borrar", variant: "destructive" })
+    if (!ok) return
     setResettingId(studentId)
     try {
       const res = await fetch(`/api/processes/${id}/questionnaire/reset`, {
@@ -196,7 +199,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
   }
 
   async function resetAll() {
-    if (!confirm(`¿Borrar las respuestas de TODOS los alumnos? Esta acción no se puede deshacer.`)) return
+    const ok = await confirmFn({ title: "Reiniciar cuestionario", description: "¿Borrar las respuestas de TODOS los alumnos? Esta acción no se puede deshacer.", confirmLabel: "Borrar todo", variant: "destructive" })
+    if (!ok) return
     setResettingAll(true)
     try {
       const res = await fetch(`/api/processes/${id}/questionnaire/reset`, {

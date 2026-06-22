@@ -18,6 +18,7 @@ import { ArrowLeft, Plus, Trash2, Shield, Search, X, Loader2, Pencil, Sparkles, 
 import Link from "next/link"
 import type { Rule, Student } from "@/types"
 import type { ProposedRule } from "@/app/api/processes/[id]/sociogram/proposed-rules/route"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 const RULE_LABELS: Record<string, string> = {
   must_separate: "Separar obligatoriamente",
@@ -44,6 +45,7 @@ const PRIORITY_COLORS: Record<string, BadgeVariant> = {
 export default function RulesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
+  const confirmFn = useConfirm()
   const [rules, setRules] = useState<Rule[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [centerUsers, setCenterUsers] = useState<{ id: string; name: string; email: string; role: string }[]>([])
@@ -205,7 +207,8 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
   }
 
   async function deleteRule(ruleId: string) {
-    if (!confirm("¿Eliminar esta regla?")) return
+    const ok = await confirmFn({ title: "Eliminar regla", description: "¿Eliminar esta regla?", confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     await fetch(`/api/rules/${ruleId}`, { method: "DELETE" })
     setRules(prev => prev.filter(r => r.id !== ruleId))
     toast.success("Regla eliminada")

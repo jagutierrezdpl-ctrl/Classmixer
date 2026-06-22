@@ -161,15 +161,15 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
   }
 
   useEffect(() => {
-    fetch(`/api/processes/${id}/sociogram`)
+    const controller = new AbortController()
+    fetch(`/api/processes/${id}/sociogram`, { signal: controller.signal })
       .then(r => r.json())
       .then(d => {
         setData(d)
         setViewerRole(d.viewer_role ?? null)
         setCanSeeSensitive(d.can_see_sensitive ?? false)
-        // Load annotations for admin/orientador
         if (["admin", "superadmin", "orientador"].includes(d.viewer_role ?? "")) {
-          fetch(`/api/processes/${id}/sociogram/annotations`)
+          fetch(`/api/processes/${id}/sociogram/annotations`, { signal: controller.signal })
             .then(r => r.ok ? r.json() : [])
             .then((anns: Annotation[]) => {
               const map: Record<string, Annotation> = {}
@@ -179,7 +179,9 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
             .catch(() => {})
         }
       })
+      .catch(e => { if (e.name !== "AbortError") throw e })
       .finally(() => setLoading(false))
+    return () => controller.abort()
   }, [id])
 
   function fetchDocs() {

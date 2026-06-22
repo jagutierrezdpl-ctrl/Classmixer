@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Loader2, UserCheck, UserX, Trash2 } from "lucide-react"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 interface UserActionsProps {
   userId: string
@@ -25,6 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function UserActions({ userId, currentRole, isActive, currentUserRole }: UserActionsProps) {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const confirmFn = useConfirm()
 
   const canEdit = ["admin", "superadmin"].includes(currentUserRole)
   if (!canEdit) {
@@ -43,7 +45,8 @@ export default function UserActions({ userId, currentRole, isActive, currentUser
   }
 
   async function handleDelete() {
-    if (!confirm("¿Seguro que quieres eliminar este usuario? No se puede deshacer.")) return
+    const ok = await confirmFn({ title: "Eliminar usuario", description: "¿Seguro que quieres eliminar este usuario? No se puede deshacer.", confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     setLoading(true)
     await fetch(`/api/users/${userId}`, { method: "DELETE" })
     setLoading(false)

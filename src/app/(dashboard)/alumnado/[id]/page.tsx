@@ -17,6 +17,7 @@ import {
   ShieldAlert, Plus, Trash
 } from "lucide-react"
 import Link from "next/link"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 interface StudentProfile {
   id: string
@@ -90,6 +91,7 @@ const BEHAVIOR_COLORS: Record<string, string> = {
 export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const confirmFn = useConfirm()
   const [data, setData] = useState<{ profile: StudentProfile; trajectory: TrajectoryEntry[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,7 +169,8 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
   }
 
   async function handleDeleteNote(noteId: string) {
-    if (!confirm("¿Eliminar esta nota?")) return
+    const ok = await confirmFn({ title: "Eliminar nota", description: "¿Eliminar esta nota?", confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     await fetch(`/api/orientation-notes/${noteId}`, { method: "DELETE" })
     setNotes(prev => prev.filter(n => n.id !== noteId))
   }
@@ -177,7 +180,8 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
     const msg = isActive
       ? `¿Dar de baja a ${data?.profile.first_name} ${data?.profile.last_name}? Sus datos se conservarán.`
       : `¿Reactivar a ${data?.profile.first_name} ${data?.profile.last_name}?`
-    if (!confirm(msg)) return
+    const ok = await confirmFn({ title: isActive ? "Dar de baja" : "Reactivar alumno", description: msg, confirmLabel: isActive ? "Dar de baja" : "Reactivar", variant: isActive ? "destructive" : "default" })
+    if (!ok) return
     setDeleting(true)
     try {
       const res = await fetch(`/api/student-profiles/${id}`, {

@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
+import { useConfirm } from "@/components/ui/ConfirmDialog"
 
 interface Center {
   id: string
@@ -143,6 +144,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 export default function CenterDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const confirmFn = useConfirm()
   const [data, setData] = useState<DetailData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -214,7 +216,8 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
   }
 
   async function handleDeleteUser(userId: string, userName: string) {
-    if (!confirm(`¿Eliminar al usuario "${userName}"? Esta acción no se puede deshacer.`)) return
+    const ok = await confirmFn({ title: "Eliminar usuario", description: `¿Eliminar al usuario "${userName}"? Esta acción no se puede deshacer.`, confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     await fetch(`/api/admin/centers/${id}/users`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -255,7 +258,8 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
   }
 
   async function handleDeleteNote(noteId: string) {
-    if (!confirm("¿Eliminar esta nota?")) return
+    const ok = await confirmFn({ title: "Eliminar nota", description: "¿Eliminar esta nota?", confirmLabel: "Eliminar", variant: "destructive" })
+    if (!ok) return
     await fetch(`/api/admin/centers/${id}/notes/${noteId}`, { method: "DELETE" })
     setData(prev => prev ? { ...prev, notes: prev.notes.filter(n => n.id !== noteId) } : prev)
   }
