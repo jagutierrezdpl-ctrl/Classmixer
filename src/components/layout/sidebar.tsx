@@ -72,6 +72,94 @@ const processNavItems = [
   { href: "proposals", label: "Propuestas", icon: LayoutDashboard },
 ]
 
+const NOTIF_ICON: Record<string, React.ElementType> = {
+  bullying_risk: AlertTriangle,
+  proposal_generated: CheckCircle2,
+  questionnaire_complete: Zap,
+  rule_conflict: AlertTriangle,
+  process_status: CheckCircle2,
+}
+
+function NotificationBell({
+  inbox,
+  onMarkRead,
+}: {
+  inbox: AppNotification[]
+  onMarkRead: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const unread = inbox.filter(n => !n.read).length
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(val: boolean) => {
+        setOpen(val)
+        if (val && unread > 0) onMarkRead()
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          className="relative p-1.5 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+          title="Notificaciones"
+        >
+          <Bell className="w-4 h-4" />
+          {unread > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full leading-none">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="start" sideOffset={8} className="w-80 p-0 rounded-xl shadow-xl" onOpenAutoFocus={e => e.preventDefault()}>
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+          <p className="text-xs font-semibold">Notificaciones</p>
+          <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {inbox.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">Sin notificaciones</p>
+          ) : (
+            inbox.map(n => {
+              const Icon = NOTIF_ICON[n.type] ?? Bell
+              const isBullying = n.type === "bullying_risk"
+              return (
+                <div
+                  key={n.id}
+                  className={`px-3 py-2.5 border-b last:border-0 hover:bg-muted/20 transition-colors ${!n.read ? "bg-primary/5" : ""}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isBullying ? "text-red-500" : "text-primary"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-medium leading-tight ${isBullying ? "text-red-700" : ""}`}>{n.title}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{n.message}</p>
+                      {n.process_id && (
+                        <Link
+                          href={`/processes/${n.process_id}`}
+                          onClick={() => setOpen(false)}
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Ver proceso →
+                        </Link>
+                      )}
+                    </div>
+                    {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
+                  </div>
+                  <p className="text-[9px] text-muted-foreground/60 mt-1 text-right">
+                    {new Date(n.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 interface SidebarProps {
   processId?: string
   userName?: string
@@ -122,8 +210,6 @@ export function Sidebar({ processId, userName, centerName, userRole }: SidebarPr
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notifications | null>(null)
   const [inbox, setInbox] = useState<AppNotification[]>([])
-  const [inboxOpen, setInboxOpen] = useState(false)
-  const unreadCount = inbox.filter(n => !n.read).length
 
   useEffect(() => {
     async function fetchNotifications() {
@@ -148,14 +234,6 @@ export function Sidebar({ processId, userName, centerName, userRole }: SidebarPr
     setInbox(prev => prev.map(n => ({ ...n, read: true })))
   }
 
-  const NOTIF_ICON: Record<string, React.ElementType> = {
-    bullying_risk: AlertTriangle,
-    proposal_generated: CheckCircle2,
-    questionnaire_complete: Zap,
-    rule_conflict: AlertTriangle,
-    process_status: CheckCircle2,
-  }
-
   async function handleLogout() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -173,67 +251,7 @@ export function Sidebar({ processId, userName, centerName, userRole }: SidebarPr
               <p className="text-xs text-sidebar-foreground/60 truncate">{centerName}</p>
             )}
           </div>
-          {/* Notification bell — uses Popover portal to avoid sidebar overflow clipping */}
-          <Popover open={inboxOpen} onOpenChange={(open: boolean) => { setInboxOpen(open); if (open && unreadCount > 0) markAllRead() }}>
-            <PopoverTrigger asChild>
-              <button
-                className="relative p-1.5 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
-                title="Notificaciones"
-              >
-                <Bell className="w-4 h-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full leading-none">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent side="right" align="start" sideOffset={8} className="w-80 p-0 rounded-xl shadow-xl" onOpenAutoFocus={e => e.preventDefault()}>
-              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-                <p className="text-xs font-semibold">Notificaciones</p>
-                <button onClick={() => setInboxOpen(false)} className="text-muted-foreground hover:text-foreground">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="max-h-80 overflow-y-auto">
-                {inbox.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-6">Sin notificaciones</p>
-                ) : (
-                  inbox.map(n => {
-                    const Icon = NOTIF_ICON[n.type] ?? Bell
-                    const isBullying = n.type === "bullying_risk"
-                    return (
-                      <div
-                        key={n.id}
-                        className={`px-3 py-2.5 border-b last:border-0 hover:bg-muted/20 transition-colors ${!n.read ? "bg-primary/5" : ""}`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isBullying ? "text-red-500" : "text-primary"}`} />
-                          <div className="min-w-0 flex-1">
-                            <p className={`text-xs font-medium leading-tight ${isBullying ? "text-red-700" : ""}`}>{n.title}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{n.message}</p>
-                            {n.process_id && (
-                              <Link
-                                href={`/processes/${n.process_id}`}
-                                onClick={() => setInboxOpen(false)}
-                                className="text-[10px] text-primary hover:underline"
-                              >
-                                Ver proceso →
-                              </Link>
-                            )}
-                          </div>
-                          {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
-                        </div>
-                        <p className="text-[9px] text-muted-foreground/60 mt-1 text-right">
-                          {new Date(n.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <NotificationBell inbox={inbox} onMarkRead={markAllRead} />
 
           {onNavigate && (
             <button
