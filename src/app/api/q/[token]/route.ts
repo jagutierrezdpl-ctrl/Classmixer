@@ -39,7 +39,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
   const student = tokenData.students
   const process = tokenData.processes
-  const settings = process?.questionnaire_settings
+  // questionnaire_settings is a one-to-many join — Supabase returns an array.
+  // Normalize to single object so the frontend receives a plain settings object.
+  const rawSettings = process?.questionnaire_settings
+  const settings = Array.isArray(rawSettings) ? (rawSettings[0] ?? null) : (rawSettings ?? null)
 
   // Get all active students in the same process (excluding the respondent)
   const { data: allStudents } = await supabase
@@ -116,7 +119,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
   }
 
-  const settings = tokenData.processes?.questionnaire_settings ?? {}
+  // questionnaire_settings comes as an array from the join — normalize to single object
+  const rawSettings = tokenData.processes?.questionnaire_settings
+  const settings = (Array.isArray(rawSettings) ? (rawSettings[0] ?? {}) : (rawSettings ?? {}))
 
   // Validate server-side limits per relation type
   const limits: Record<string, { enabled: boolean; min: number; max: number }> = {

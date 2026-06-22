@@ -263,12 +263,13 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
   const progressPct = totalRequired > 0 ? Math.round((totalSelected / totalRequired) * 100) : 100
 
   const canSubmit =
-    questions.every(q => q.min === 0 || (selections[q.type]?.length ?? 0) >= q.min) &&
-    advancedQuestions.every(q => q.input_mode !== "choice" || q.min === 0 || (advancedChoices[q.code]?.length ?? 0) >= q.min)
+    questions.length > 0 &&
+    questions.every(q => !q.min || (selections[q.type]?.length ?? 0) >= q.min) &&
+    advancedQuestions.every(q => q.input_mode !== "choice" || !q.min || (advancedChoices[q.code]?.length ?? 0) >= q.min)
 
   const pendingLabels = [
-    ...questions.filter(q => q.min > 0 && (selections[q.type]?.length ?? 0) < q.min).map(q => q.label),
-    ...advancedQuestions.filter(q => q.input_mode === "choice" && q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min).map(q => q.label),
+    ...questions.filter(q => !!q.min && (selections[q.type]?.length ?? 0) < q.min).map(q => q.label),
+    ...advancedQuestions.filter(q => q.input_mode === "choice" && !!q.min && (advancedChoices[q.code]?.length ?? 0) < q.min).map(q => q.label),
   ]
 
   return (
