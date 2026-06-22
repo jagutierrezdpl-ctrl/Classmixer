@@ -317,9 +317,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
                 <div className="flex items-center gap-2">
                   <span className={q.color}>{q.icon}</span>
                   <CardTitle className="text-base">{q.label}</CardTitle>
-                  {q.type === "negative" ? (
-                    <Badge variant="outline" className="text-xs ml-auto">Opcional</Badge>
-                  ) : q.min > 0 && selected.length >= q.min ? (
+                  {q.type === "negative" || q.min === 0 ? (
+                    selected.length > 0
+                      ? <CheckCircle className="w-4 h-4 text-green-500 ml-auto shrink-0" />
+                      : <Badge variant="outline" className="text-xs ml-auto text-muted-foreground">Opcional</Badge>
+                  ) : selected.length >= q.min ? (
                     <CheckCircle className="w-4 h-4 text-green-500 ml-auto shrink-0" />
                   ) : (
                     <Badge variant="outline" className="text-xs ml-auto text-destructive border-destructive/40">Obligatoria</Badge>
