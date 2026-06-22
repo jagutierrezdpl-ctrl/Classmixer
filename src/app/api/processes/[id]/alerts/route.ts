@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, logAudit } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, logAudit, verifyProcessAccess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { calculateSociogram } from "@/lib/sociogram/calculate"
 import { getQuestionCatalogIndex } from "@/lib/questionnaire/catalog"
@@ -27,15 +27,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!hasFullAccess(profile.role)) return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
 
   const { id } = await params
-  const supabase = createServiceClient()
 
-  const { data: process } = await supabase
-    .from("processes")
-    .select("center_id, name")
-    .eq("id", id)
-    .eq("center_id", profile.center_id)
-    .single()
-  if (!process) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  if (!(await verifyProcessAccess(id, profile.center_id))) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+
+  const supabase = createServiceClient()
 
   const [{ data: allStudents }, { data: allResponses }, { data: existingCases }] = await Promise.all([
     supabase.from("students").select("*").eq("process_id", id).eq("active", true),

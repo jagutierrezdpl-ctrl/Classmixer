@@ -99,14 +99,17 @@ export async function persistImport(
   // 1. Delete existing responses to avoid duplicates
   await supabase.from("responses").delete().eq("process_id", targetProcessId)
 
-  // 2. Insert remapped responses in batches of 500
+  // 2. Insert remapped responses in batches of 500.
+  // Throw on the first failed batch so the caller gets a clear error and
+  // the audit log reflects the real inserted count, not a silent partial import.
   const BATCH = 500
   let inserted = 0
   for (let i = 0; i < mapped.length; i += BATCH) {
     const batch = mapped.slice(i, i + BATCH)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any).from("responses").insert(batch)
-    if (!error) inserted += batch.length
+    if (error) throw new Error(`Error insertando respuestas (lote ${Math.floor(i / BATCH) + 1}): ${error.message}`)
+    inserted += batch.length
   }
 
   // 3. Ensure questionnaire_tokens exist for respondents (create missing, mark all used)

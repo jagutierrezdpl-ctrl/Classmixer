@@ -185,7 +185,19 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     }
 
     for (const q of advancedQuestions) {
-      if ((q.input_mode === "choice" || q.input_mode === "scale") && q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min) {
+      if (q.input_mode === "scale") {
+        if (q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min) {
+          toast.error(`Debes elegir al menos ${q.min} compañero(s) para "${q.label}"`)
+          return
+        }
+        const unrated = (advancedChoices[q.code] ?? []).filter(sid => typeof advancedScaleValues[q.code]?.[sid] !== "number")
+        if (unrated.length > 0) {
+          toast.error(`Debes valorar a todos los compañeros seleccionados en "${q.label}"`)
+          return
+        }
+        continue
+      }
+      if (q.input_mode === "choice" && q.min > 0 && (advancedChoices[q.code]?.length ?? 0) < q.min) {
         toast.error(`Debes elegir al menos ${q.min} compañero(s) para "${q.label}"`)
         return
       }
@@ -270,10 +282,14 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
     questions.length > 0 &&
     questions.every(q => !q.min || (selections[q.type]?.length ?? 0) >= q.min) &&
     advancedQuestions.every(q => {
-      if (!q.min) return true
-      if (q.input_mode === "choice" || q.input_mode === "scale") {
-        return (advancedChoices[q.code]?.length ?? 0) >= q.min
+      if (q.input_mode === "scale") {
+        const selected = advancedChoices[q.code] ?? []
+        const hasMin = !q.min || selected.length >= q.min
+        const allRated = selected.every(sid => typeof advancedScaleValues[q.code]?.[sid] === "number")
+        return hasMin && allRated
       }
+      if (!q.min) return true
+      if (q.input_mode === "choice") return (advancedChoices[q.code]?.length ?? 0) >= q.min
       if (q.input_mode === "climate") return typeof climateValues[q.code] === "number"
       return true
     })
@@ -281,6 +297,11 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
   const pendingLabels = [
     ...questions.filter(q => !!q.min && (selections[q.type]?.length ?? 0) < q.min).map(q => q.label),
     ...advancedQuestions.filter(q => {
+      if (q.input_mode === "scale") {
+        const selected = advancedChoices[q.code] ?? []
+        return (!!q.min && selected.length < q.min) ||
+          selected.some(sid => typeof advancedScaleValues[q.code]?.[sid] !== "number")
+      }
       if (!q.min) return false
       if (q.input_mode === "climate") return typeof climateValues[q.code] !== "number"
       return (advancedChoices[q.code]?.length ?? 0) < q.min
