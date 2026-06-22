@@ -15,7 +15,9 @@ async function getOwnedProcess(processId: string, centerId: string) {
 
 // Auto-inserta en process_tutors los tutores de los grupos de origen
 // que aún no estén asignados. Se llama en silencio al cargar el equipo.
-async function syncGroupTutors(processId: string, sourceGroups: string[], schoolYear: string, centerId: string) {
+// No filtra por school_year — coge todos los tutores asignados a esos grupos
+// (puede haber uno por curso) y deduplica por user_id.
+async function syncGroupTutors(processId: string, sourceGroups: string[], centerId: string) {
   if (!sourceGroups?.length) return
   const supabase = createServiceClient()
 
@@ -24,17 +26,18 @@ async function syncGroupTutors(processId: string, sourceGroups: string[], school
     .from("group_tutors")
     .select("user_id")
     .eq("center_id", centerId)
-    .eq("school_year", schoolYear)
     .in("group_name", sourceGroups)
 
   if (!groupTutors?.length) return
 
-  const rows = groupTutors.map((gt: { user_id: string }) => ({
+  // Dedup: un tutor puede aparecer en varios grupos o cursos
+  const uniqueUserIds = [...new Set((groupTutors as { user_id: string }[]).map(gt => gt.user_id))]
+
+  const rows = uniqueUserIds.map(user_id => ({
     process_id: processId,
-    user_id: gt.user_id,
+    user_id,
   }))
 
-  // upsert: no falla si ya están asignados
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any)
     .from("process_tutors")
@@ -59,7 +62,7 @@ export async function GET(
   }
 
   // Auto-asignar tutores de los grupos de origen si aún no están en el equipo
-  await syncGroupTutors(id, process.source_groups ?? [], process.school_year ?? "", profile.center_id)
+  await syncGroupTutors(id, process.source_groups ?? [], profile.center_id)
 
   const supabase = createServiceClient()
 
