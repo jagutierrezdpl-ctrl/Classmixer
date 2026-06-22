@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { X, UserPlus } from "lucide-react"
+import { X, UserPlus, Loader2 } from "lucide-react"
 
 interface TutorUser {
   id: string
@@ -39,7 +39,9 @@ const ROLE_LABEL: Record<string, string> = {
 export default function ProcessTeam({ processId, isAdmin }: ProcessTeamProps) {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [centerUsers, setCenterUsers] = useState<CenterUser[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
   const [showSelect, setShowSelect] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState("")
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -51,20 +53,29 @@ export default function ProcessTeam({ processId, isAdmin }: ProcessTeamProps) {
 
   async function loadCenterUsers() {
     if (centerUsers.length > 0) return
+    setLoadingUsers(true)
     const res = await fetch("/api/users")
     if (res.ok) setCenterUsers(await res.json())
+    setLoadingUsers(false)
   }
 
-  async function handleAdd(userId: string) {
+  async function handleAdd() {
+    if (!selectedUserId) return
     setSaving(true)
     await fetch(`/api/processes/${processId}/tutors`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ user_id: selectedUserId }),
     })
     setSaving(false)
     setShowSelect(false)
+    setSelectedUserId("")
     load()
+  }
+
+  function handleCancel() {
+    setShowSelect(false)
+    setSelectedUserId("")
   }
 
   async function handleRemove(userId: string) {
@@ -105,26 +116,39 @@ export default function ProcessTeam({ processId, isAdmin }: ProcessTeamProps) {
 
       {isAdmin && (
         showSelect ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               className="text-sm border rounded-md px-2 py-1.5 bg-background flex-1 max-w-xs"
-              defaultValue=""
-              onChange={e => e.target.value && handleAdd(e.target.value)}
+              value={selectedUserId}
+              disabled={loadingUsers}
+              onChange={e => setSelectedUserId(e.target.value)}
             >
-              <option value="" disabled>Seleccionar usuario...</option>
+              <option value="">
+                {loadingUsers ? "Cargando usuarios..." : "Seleccionar usuario..."}
+              </option>
               {available.map(u => (
                 <option key={u.id} value={u.id}>
                   {u.name} ({ROLE_LABEL[u.role] ?? u.role})
                 </option>
               ))}
-              {available.length === 0 && (
+              {!loadingUsers && available.length === 0 && (
                 <option disabled>Sin usuarios disponibles</option>
               )}
             </select>
             <Button
+              size="sm"
+              disabled={!selectedUserId || saving}
+              onClick={handleAdd}
+              className="gap-1.5"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              Añadir
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowSelect(false)}
+              onClick={handleCancel}
+              disabled={saving}
             >
               Cancelar
             </Button>
