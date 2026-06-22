@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { X, UserPlus, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 interface TutorUser {
   id: string
@@ -62,15 +63,26 @@ export default function ProcessTeam({ processId, isAdmin }: ProcessTeamProps) {
   async function handleAdd() {
     if (!selectedUserId) return
     setSaving(true)
-    await fetch(`/api/processes/${processId}/tutors`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: selectedUserId }),
-    })
-    setSaving(false)
-    setShowSelect(false)
-    setSelectedUserId("")
-    load()
+    try {
+      const res = await fetch(`/api/processes/${processId}/tutors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selectedUserId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data?.error ?? "Error al añadir el miembro")
+        return
+      }
+      setShowSelect(false)
+      setSelectedUserId("")
+      await load()
+      toast.success("Miembro añadido al equipo")
+    } catch {
+      toast.error("Error de conexión al añadir el miembro")
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleCancel() {
@@ -80,9 +92,19 @@ export default function ProcessTeam({ processId, isAdmin }: ProcessTeamProps) {
 
   async function handleRemove(userId: string) {
     setSaving(true)
-    await fetch(`/api/processes/${processId}/tutors/${userId}`, { method: "DELETE" })
-    setSaving(false)
-    load()
+    try {
+      const res = await fetch(`/api/processes/${processId}/tutors/${userId}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data = await res.json()
+        toast.error(data?.error ?? "Error al eliminar el miembro")
+        return
+      }
+      await load()
+    } catch {
+      toast.error("Error de conexión al eliminar el miembro")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const assignedIds = new Set(assignments.map(a => a.user_id))
