@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx"
 import type { ImportPreview, ImportRow, ImportError, ImportWarning } from "@/types"
 
-const REQUIRED_COLUMNS = ["id_alumno", "nombre", "apellidos", "clase_actual", "genero", "nota_media"]
+const REQUIRED_COLUMNS = ["nombre", "apellidos", "clase_actual", "genero", "nota_media"]
 
 const VALID_GENDERS = ["F", "M", "Otro", "No especificado"]
 const VALID_LEVELS = ["Alto", "Medio-alto", "Medio", "Medio-bajo", "Bajo"]
@@ -75,14 +75,12 @@ export function parseExcelImport(buffer: ArrayBuffer): ImportPreview {
     const tutor = normalize("tutor")
     const email = normalize("email").toLowerCase() || undefined
 
-    if (!externalId) {
-      rowErrors.push("Falta id_alumno")
-      errors.push({ row: rowNum, field: "id_alumno", message: "Falta el ID del alumno" })
-    } else if (seenIds.has(externalId)) {
-      rowErrors.push(`ID duplicado: ${externalId}`)
-      errors.push({ row: rowNum, field: "id_alumno", message: `ID duplicado: ${externalId}` })
-    } else {
-      seenIds.add(externalId)
+    if (externalId) {
+      if (seenIds.has(externalId)) {
+        warnings.push({ row: rowNum, field: "id_alumno", message: `ID duplicado: ${externalId}` })
+      } else {
+        seenIds.add(externalId)
+      }
     }
 
     if (!firstName) {
@@ -193,7 +191,6 @@ export function parseExcelImport(buffer: ArrayBuffer): ImportPreview {
 export function generateTemplateExcel(): Buffer {
   const data = [
     {
-      id_alumno: "A001",
       nombre: "Marta",
       apellidos: "García López",
       clase_actual: "6A",
@@ -207,7 +204,6 @@ export function generateTemplateExcel(): Buffer {
       email: "marta.garcia@tucolegio.es",
     },
     {
-      id_alumno: "A002",
       nombre: "Lucas",
       apellidos: "Martínez Ruiz",
       clase_actual: "6B",
@@ -216,7 +212,7 @@ export function generateTemplateExcel(): Buffer {
       nivel_academico: "Medio",
       conducta: "Normal",
       necesidades: "No",
-      observaciones: "Conviene separar de A005",
+      observaciones: "Conviene separar de alumno anterior",
       tutor: "Carlos Gómez",
       email: "lucas.martinez@tucolegio.es",
     },
