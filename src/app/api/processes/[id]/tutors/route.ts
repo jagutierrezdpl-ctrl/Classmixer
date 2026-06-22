@@ -78,10 +78,12 @@ export async function GET(
 
   const supabase = createServiceClient()
 
+  // process_tutors has two FKs to users (user_id and assigned_by) — specify
+  // which one to use for the join with !user_id to avoid ambiguous-relationship error.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("process_tutors")
-    .select("*, users(id, name, email, role)")
+    .select("id, process_id, user_id, assigned_by, created_at, users!user_id(id, name, email, role)")
     .eq("process_id", id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
