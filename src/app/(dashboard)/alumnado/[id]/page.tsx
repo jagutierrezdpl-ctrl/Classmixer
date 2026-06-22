@@ -2,7 +2,13 @@
 
 import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+const LongitudinalHistorySection = dynamic(
+  () => import("@/components/students/LongitudinalHistory").then(m => ({ default: m.LongitudinalHistory })),
+  { ssr: false, loading: () => <div className="h-20 flex items-center justify-center text-muted-foreground text-sm">Cargando historial…</div> }
+)
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -627,6 +633,18 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Longitudinal sociometric history — only visible to orientador/admin */}
+      {["admin", "superadmin", "orientador"].includes(userRole ?? "") && profile && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-4 h-4 text-blue-600" />
+            <h2 className="font-semibold text-sm">Evolución sociométrica longitudinal</h2>
+            <span className="text-xs text-muted-foreground">(todos los cursos registrados)</span>
+          </div>
+          <LongitudinalHistorySection profileId={profile.id} />
         </div>
       )}
 

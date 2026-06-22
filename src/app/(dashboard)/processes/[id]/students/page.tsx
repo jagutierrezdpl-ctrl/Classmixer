@@ -527,8 +527,42 @@ export default function StudentsPage({ params }: { params: Promise<{ id: string 
 
           <Button variant="outline" className="w-full" onClick={downloadTemplate}>
             <Download className="w-4 h-4" />
-            Descargar plantilla Excel
+            Descargar plantilla ClassMixer
           </Button>
+
+          {/* SGE templates */}
+          <div className="border rounded-xl p-4 space-y-2">
+            <p className="text-sm font-medium">Plantillas por sistema escolar</p>
+            <p className="text-xs text-muted-foreground">Descarga la plantilla del sistema que usa tu centro para ver el formato exacto:</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "SÉNECA (Andalucía)", format: "seneca" },
+                { label: "Alexia", format: "alexia" },
+                { label: "Clickedu", format: "clickedu" },
+                { label: "RAÍCES (Madrid)", format: "raices" },
+              ].map(({ label, format }) => (
+                <Button
+                  key={format}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs justify-start"
+                  onClick={() => fetch(`/api/processes/${id}/students/sge-template?format=${format}`)
+                    .then(r => r.blob())
+                    .then(blob => {
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `plantilla-${format}.xlsx`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    })}
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     )

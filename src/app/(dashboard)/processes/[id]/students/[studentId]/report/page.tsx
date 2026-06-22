@@ -230,6 +230,24 @@ export default async function StudentReportPage({
               Ficha de Intervención
             </Link>
           )}
+          {canSeeSensitive && (
+            <Link
+              href={`/processes/${processId}/students/${studentId}/ai-report`}
+              className="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-1"
+            >
+              ✦ Informe IA
+            </Link>
+          )}
+          {canSeeSensitive && (
+            <a
+              href={`/api/processes/${processId}/students/${studentId}/evidence-bundle`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 bg-slate-700 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              Expediente PDF
+            </a>
+          )}
           <PrintButton />
         </div>
       </div>

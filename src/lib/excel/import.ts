@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx"
 import type { ImportPreview, ImportRow, ImportError, ImportWarning } from "@/types"
+import { detectSGEFormat, normalizeRow } from "./sge-detector"
 
 const REQUIRED_COLUMNS = ["nombre", "apellidos", "clase_actual", "genero", "nota_media"]
 
@@ -34,15 +35,36 @@ export function parseExcelImport(buffer: ArrayBuffer): ImportPreview {
     }
   }
 
-  const headers = Object.keys(raw[0]).map(h => h.toLowerCase().trim().replace(/\s+/g, "_"))
+  const originalHeaders = Object.keys(raw[0])
+  const headers = originalHeaders.map(h => h.toLowerCase().trim().replace(/\s+/g, "_"))
 
-  const missingRequired = REQUIRED_COLUMNS.filter(c => !headers.includes(c))
+  // Auto-detect SGE format and normalize columns if needed
+  const sgeProfile = detectSGEFormat(originalHeaders)
+  let processedRaw = raw as Record<string, string>[]
+  let detectedFormat = sgeProfile.format
+
+  if (sgeProfile.format !== "classmixer" && sgeProfile.format !== "generic" && sgeProfile.confidence > 0.4) {
+    processedRaw = raw.map(row =>
+      normalizeRow(row as Record<string, string>, sgeProfile.mapping, sgeProfile.genderMap)
+    )
+    detectedFormat = sgeProfile.format
+  }
+
+  const normalizedHeaders = processedRaw.length > 0
+    ? Object.keys(processedRaw[0]).map(h => h.toLowerCase().trim())
+    : headers
+
+  const missingRequired = REQUIRED_COLUMNS.filter(c => !normalizedHeaders.includes(c))
   if (missingRequired.length > 0) {
+    const hint = sgeProfile.format !== "generic" && sgeProfile.confidence < 0.4
+      ? ` (ClassMixer detectó un posible formato ${sgeProfile.label} con ${Math.round(sgeProfile.confidence * 100)}% confianza)`
+      : ""
     return {
       total: 0, valid: 0,
-      errors: [{ row: 0, field: "columnas", message: `Faltan columnas obligatorias: ${missingRequired.join(", ")}` }],
+      errors: [{ row: 0, field: "columnas", message: `Faltan columnas obligatorias: ${missingRequired.join(", ")}${hint}` }],
       warnings: [], detected_classes: [], gender_distribution: {},
       average_grade: 0, level_distribution: {}, rows: [],
+      sge_format: detectedFormat,
     }
   }
 
@@ -52,8 +74,8 @@ export function parseExcelImport(buffer: ArrayBuffer): ImportPreview {
   const seenIds = new Set<string>()
   const seenNames = new Set<string>()
 
-  for (let i = 0; i < raw.length; i++) {
-    const r = raw[i]
+  for (let i = 0; i < processedRaw.length; i++) {
+    const r = processedRaw[i]
     const rowNum = i + 2
     const rowErrors: string[] = []
 
@@ -185,6 +207,9 @@ export function parseExcelImport(buffer: ArrayBuffer): ImportPreview {
     average_grade: validRows.length > 0 ? Math.round((gradeSum / validRows.length) * 100) / 100 : 0,
     level_distribution: levelDist,
     rows,
+    sge_format: detectedFormat,
+    sge_label: sgeProfile.label,
+    sge_confidence: Math.round(sgeProfile.confidence * 100),
   }
 }
 

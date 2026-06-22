@@ -23,6 +23,7 @@ import {
   Bell,
   AlertTriangle,
   CheckCircle2,
+  Kanban,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -67,6 +68,8 @@ const processNavItems = [
   { href: "students", label: "Alumnos", icon: Users },
   { href: "questionnaire", label: "Cuestionario", icon: BookOpen },
   { href: "sociogram", label: "Sociograma", icon: Network },
+  { href: "alerts", label: "Alertas CDC", icon: AlertTriangle },
+  { href: "interventions", label: "Intervenciones", icon: Kanban },
   { href: "rules", label: "Reglas", icon: GraduationCap },
   { href: "algorithm", label: "Algoritmo", icon: Zap },
   { href: "proposals", label: "Propuestas", icon: LayoutDashboard },

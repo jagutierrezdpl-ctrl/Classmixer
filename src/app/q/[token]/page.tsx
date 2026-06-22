@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, X, CheckCircle, Loader2, Heart, Briefcase, Users } from "lucide-react"
+import { Search, X, CheckCircle, Loader2, Heart, Briefcase, Users, LayoutGrid, List } from "lucide-react"
 import { toast } from "sonner"
+import { StudentCardGrid } from "@/components/questionnaire/StudentCardGrid"
 import AdvancedQuestionCard, { type AdvancedQuestionConfig } from "@/components/questionnaire/AdvancedQuestionCard"
 
 interface Student {
@@ -49,6 +50,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
 
   // Preguntas avanzadas (capa adicional sobre las 4 de siempre) — estado en paralelo,
   // el de arriba no se toca para no arriesgar el comportamiento ya existente.
+  const [viewMode, setViewMode] = useState<"list" | "grid">("grid")  // grid = visual/gamified, list = classic
+
   const [advancedQuestions, setAdvancedQuestions] = useState<AdvancedQuestionConfig[]>([])
   const [advancedChoices, setAdvancedChoices] = useState<Record<string, string[]>>({})
   const [advancedScaleValues, setAdvancedScaleValues] = useState<Record<string, Record<string, number>>>({})
@@ -296,11 +299,29 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-        <div>
-          <h1 className="text-lg font-bold">Cuestionario sociométrico</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Tus respuestas son confidenciales. El <strong>primer compañero que elijas</strong> será tu preferencia principal.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-bold">Cuestionario sociométrico</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Tus respuestas son confidenciales. El <strong>primer compañero que elijas</strong> será tu preferencia principal.
+            </p>
+          </div>
+          <div className="flex gap-1 shrink-0 bg-muted rounded-lg p-1">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              title="Modo visual"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              title="Modo lista"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {questions.map(q => {
@@ -337,73 +358,88 @@ export default function QuestionnairePage({ params }: { params: Promise<{ token:
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
-
-                {/* Ordered selection list */}
-                {selected.length > 0 && (
-                  <div className={`rounded-lg border p-3 space-y-2 ${q.bgColor}`}>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Tus elecciones (en orden de preferencia):</p>
-                    {selected.map((sid, idx) => {
-                      const s = availableStudents.find(st => st.id === sid)
-                      return (
-                        <div key={sid} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2.5 shadow-sm">
-                          <span className="text-xs font-bold text-primary w-6 shrink-0">{ORDER_LABELS[idx]}</span>
-                          <span className="text-sm flex-1 font-medium">{s?.first_name} {s?.last_name}</span>
-                          <Badge variant="outline" className="text-xs shrink-0 hidden sm:inline-flex">{s?.current_class}</Badge>
-                          <button
-                            onClick={() => removeStudent(q.type, sid)}
-                            className="text-muted-foreground hover:text-destructive transition-colors p-2 -mr-1 touch-manipulation"
-                            aria-label={`Eliminar ${s?.first_name}`}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {selected.length < q.max && (
+                {/* GRID mode: visual card picker */}
+                {viewMode === "grid" ? (
+                  <StudentCardGrid
+                    students={availableStudents}
+                    selected={selected}
+                    max={q.max}
+                    color={q.type === "friendship" ? "pink" : q.type === "work" ? "blue" : q.type === "emotional" ? "purple" : "red"}
+                    onToggle={sid => {
+                      if (selected.includes(sid)) removeStudent(q.type, sid)
+                      else addStudent(q.type, sid, q.max)
+                    }}
+                  />
+                ) : (
                   <>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        placeholder={`Buscar y añadir ${selected.length === 0 ? "(1ª elección)" : `(${ORDER_LABELS[selected.length]} elección)`}...`}
-                        className="pl-9 h-11 text-base"
-                        value={search}
-                        onChange={e => setSearches(prev => ({ ...prev, [q.type]: e.target.value }))}
-                        autoComplete="off"
-                        autoCorrect="off"
-                      />
-                    </div>
+                    {/* LIST mode: classic ordered selection */}
+                    {selected.length > 0 && (
+                      <div className={`rounded-lg border p-3 space-y-2 ${q.bgColor}`}>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Tus elecciones (en orden de preferencia):</p>
+                        {selected.map((sid, idx) => {
+                          const s = availableStudents.find(st => st.id === sid)
+                          return (
+                            <div key={sid} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2.5 shadow-sm">
+                              <span className="text-xs font-bold text-primary w-6 shrink-0">{ORDER_LABELS[idx]}</span>
+                              <span className="text-sm flex-1 font-medium">{s?.first_name} {s?.last_name}</span>
+                              <Badge variant="outline" className="text-xs shrink-0 hidden sm:inline-flex">{s?.current_class}</Badge>
+                              <button
+                                onClick={() => removeStudent(q.type, sid)}
+                                className="text-muted-foreground hover:text-destructive transition-colors p-2 -mr-1 touch-manipulation"
+                                aria-label={`Eliminar ${s?.first_name}`}
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
 
-                    <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
-                      {filtered.map(s => (
-                        <button
-                          key={s.id}
-                          onClick={() => { addStudent(q.type, s.id, q.max); setSearches(prev => ({ ...prev, [q.type]: "" })) }}
-                          className="w-full flex items-center justify-between px-3 py-3 text-sm text-left hover:bg-muted/50 active:bg-muted transition-colors touch-manipulation"
-                        >
-                          <span className="font-medium">{s.first_name} {s.last_name}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Badge variant="outline" className="text-xs hidden sm:inline-flex">{s.current_class}</Badge>
-                            <span className="text-xs text-primary font-semibold">{ORDER_LABELS[selected.length]}</span>
-                          </div>
-                        </button>
-                      ))}
-                      {filtered.length === 0 && (
-                        <p className="text-center py-5 text-sm text-muted-foreground">
-                          {search ? "Sin resultados" : "Ya has seleccionado todos los disponibles"}
-                        </p>
-                      )}
-                    </div>
+                    {selected.length < q.max && (
+                      <>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            placeholder={`Buscar y añadir ${selected.length === 0 ? "(1ª elección)" : `(${ORDER_LABELS[selected.length]} elección)`}...`}
+                            className="pl-9 h-11 text-base"
+                            value={search}
+                            onChange={e => setSearches(prev => ({ ...prev, [q.type]: e.target.value }))}
+                            autoComplete="off"
+                            autoCorrect="off"
+                          />
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
+                          {filtered.map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => { addStudent(q.type, s.id, q.max); setSearches(prev => ({ ...prev, [q.type]: "" })) }}
+                              className="w-full flex items-center justify-between px-3 py-3 text-sm text-left hover:bg-muted/50 active:bg-muted transition-colors touch-manipulation"
+                            >
+                              <span className="font-medium">{s.first_name} {s.last_name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge variant="outline" className="text-xs hidden sm:inline-flex">{s.current_class}</Badge>
+                                <span className="text-xs text-primary font-semibold">{ORDER_LABELS[selected.length]}</span>
+                              </div>
+                            </button>
+                          ))}
+                          {filtered.length === 0 && (
+                            <p className="text-center py-5 text-sm text-muted-foreground">
+                              {search ? "Sin resultados" : "Ya has seleccionado todos los disponibles"}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {selected.length >= q.max && (
+                      <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-emerald-600 font-medium">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Máximo alcanzado ({q.max}). Toca la X para cambiar alguna elección.
+                      </div>
+                    )}
                   </>
-                )}
-
-                {selected.length >= q.max && (
-                  <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-emerald-600 font-medium">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Máximo alcanzado ({q.max}). Toca la X para cambiar alguna elección.
-                  </div>
                 )}
               </CardContent>
             </Card>

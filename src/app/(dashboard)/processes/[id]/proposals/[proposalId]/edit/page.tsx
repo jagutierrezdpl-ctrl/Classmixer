@@ -203,10 +203,29 @@ export default function EditProposalPage({
     const fromClass = prev.target_class
     const name = student ? `${student.first_name} ${student.last_name}` : studentId
 
-    setAssignments(old =>
-      old.map(a => a.student_id === studentId ? { ...a, target_class: toClass } : a)
-    )
-    setLastAction(`${name} movido de ${fromClass} → ${toClass}`)
+    const newAssignments = assignments.map(a => a.student_id === studentId ? { ...a, target_class: toClass } : a)
+    setAssignments(newAssignments)
+
+    // Real-time impact toast: compare from/to class stats before and after
+    const fromBefore = computeClassStats(fromClass, assignments, friendships)
+    const fromAfter  = computeClassStats(fromClass, newAssignments, friendships)
+    const toBefore   = computeClassStats(toClass, assignments, friendships)
+    const toAfter    = computeClassStats(toClass, newAssignments, friendships)
+
+    const impacts: string[] = []
+    const gradeDelta = toAfter.avgGrade - toBefore.avgGrade
+    if (Math.abs(gradeDelta) > 0.05) impacts.push(`Nota ${toClass}: ${gradeDelta > 0 ? "↑" : "↓"} ${Math.abs(gradeDelta).toFixed(1)}`)
+    if (toAfter.studentsIsolated !== toBefore.studentsIsolated) {
+      const delta = toAfter.studentsIsolated - toBefore.studentsIsolated
+      impacts.push(delta > 0 ? `${toClass}: +${delta} sin amigo` : `${toClass}: ${delta} menos aislados`)
+    }
+    if (fromAfter.studentsIsolated !== fromBefore.studentsIsolated) {
+      const delta = fromAfter.studentsIsolated - fromBefore.studentsIsolated
+      impacts.push(delta > 0 ? `${fromClass}: +${delta} sin amigo` : `${fromClass}: ${delta} menos aislados`)
+    }
+
+    const msg = `${name}: ${fromClass} → ${toClass}${impacts.length > 0 ? ` · ${impacts.join(" · ")}` : ""}`
+    setLastAction(msg)
     setDirty(true)
   }
 

@@ -433,6 +433,9 @@ export interface ImportPreview {
   average_grade: number
   level_distribution: Record<string, number>
   rows: ImportRow[]
+  sge_format?: string
+  sge_label?: string
+  sge_confidence?: number
 }
 
 export interface ImportRow {
