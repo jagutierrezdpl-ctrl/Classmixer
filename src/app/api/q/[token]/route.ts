@@ -131,9 +131,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const rawSettings = tokenData.processes?.questionnaire_settings
   const settings = (Array.isArray(rawSettings) ? (rawSettings[0] ?? {}) : (rawSettings ?? {}))
 
-  // Validate server-side limits per relation type
+  // Validate server-side limits per relation type.
+  // Use || instead of ?? for friendship_min: ?? only replaces null/undefined,
+  // not 0 — so a DB value of 0 would bypass the validation entirely.
   const limits: Record<string, { enabled: boolean; min: number; max: number }> = {
-    friendship: { enabled: settings.friendship_enabled ?? true,  min: settings.friendship_min ?? 1, max: settings.friendship_max ?? 5 },
+    friendship: { enabled: settings.friendship_enabled ?? true,  min: settings.friendship_min || 1, max: settings.friendship_max ?? 5 },
     work:       { enabled: settings.work_enabled ?? false,       min: settings.work_min ?? 0,       max: settings.work_max ?? 3 },
     emotional:  { enabled: settings.emotional_enabled ?? false,  min: settings.emotional_min ?? 0,  max: settings.emotional_max ?? 3 },
     negative:   { enabled: settings.negative_enabled ?? false,   min: 0,                            max: settings.negative_max ?? 2 },
