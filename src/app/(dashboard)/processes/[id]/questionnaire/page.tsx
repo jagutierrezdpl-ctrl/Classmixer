@@ -89,6 +89,8 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
       .then(data => {
         if (data) {
           if (data.deadline) data.deadline = data.deadline.slice(0, 16)
+          // friendship_min must be at least 1 — clamp legacy rows that stored 0
+          if ((data.friendship_min ?? 0) < 1) data.friendship_min = 1
           reset(data)
         }
       })
@@ -405,9 +407,9 @@ export default function QuestionnairePage({ params }: { params: Promise<{ id: st
               {watchFriendship && (
                 <div className="flex items-center gap-2 text-sm shrink-0">
                   <Label className="text-muted-foreground">Min</Label>
-                  <Input type="number" className="w-16 h-7 text-xs" {...register("friendship_min", { valueAsNumber: true })} />
+                  <Input type="number" min="1" className="w-16 h-7 text-xs" {...register("friendship_min", { valueAsNumber: true })} />
                   <Label className="text-muted-foreground">Max</Label>
-                  <Input type="number" className="w-16 h-7 text-xs" {...register("friendship_max", { valueAsNumber: true })} />
+                  <Input type="number" min="1" className="w-16 h-7 text-xs" {...register("friendship_max", { valueAsNumber: true })} />
                 </div>
               )}
             </div>

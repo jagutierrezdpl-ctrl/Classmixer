@@ -18,7 +18,7 @@ export type CreateProcessInput = z.infer<typeof createProcessSchema>
 
 export const questionnaireSettingsSchema = z.object({
   friendship_enabled: z.boolean(),
-  friendship_min: z.number().min(0).max(10),
+  friendship_min: z.number().min(1).max(10),
   friendship_max: z.number().min(1).max(10),
   work_enabled: z.boolean(),
   work_min: z.number().min(0).max(10),

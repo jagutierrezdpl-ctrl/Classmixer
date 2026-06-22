@@ -67,22 +67,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     max: r.max ?? 5,
   }))
 
+  const resolvedSettings = settings ?? {
+    friendship_enabled: true,
+    friendship_min: 1,
+    friendship_max: 5,
+    work_enabled: false,
+    work_max: 3,
+    work_min: 0,
+    emotional_enabled: false,
+    emotional_max: 3,
+    emotional_min: 0,
+    negative_enabled: false,
+    negative_max: 2,
+  }
+
+  // Guarantee minimums: if a question is enabled but min is 0/null, default to 1.
+  // This prevents the vacuous-truth canSubmit=true bug when friendship_min=0 is stored in DB.
+  if (resolvedSettings.friendship_enabled && (resolvedSettings.friendship_min ?? 0) < 1) {
+    resolvedSettings.friendship_min = 1
+  }
+
   return NextResponse.json({
     student_name: `${student.first_name} ${student.last_name}`,
     process_name: process.name,
-    settings: settings ?? {
-      friendship_enabled: true,
-      friendship_min: 1,
-      friendship_max: 5,
-      work_enabled: false,
-      work_max: 3,
-      work_min: 0,
-      emotional_enabled: false,
-      emotional_max: 3,
-      emotional_min: 0,
-      negative_enabled: false,
-      negative_max: 2,
-    },
+    settings: resolvedSettings,
     students: allStudents ?? [],
     advanced_questions,
   })
