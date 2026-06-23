@@ -5,11 +5,64 @@ import {
   Brain, ClipboardList, Lock, Sparkles, AlertTriangle,
   TableProperties, UserCheck, BookOpen, Eye, FileText, ShieldAlert,
   SplitSquareHorizontal, RefreshCw, Bell, Pencil,
+  KanbanSquare, TrendingUp, DatabaseZap, Gamepad2, Layers, AlertOctagon, Bot,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import LogoBrand from "@/components/ui/LogoBrand"
 import SociogramIllustration from "@/components/landing/SociogramIllustration"
 import ProposalPreviewChart from "@/components/landing/ProposalPreviewChart"
+
+const NEW_FEATURES = [
+  {
+    icon: KanbanSquare,
+    color: "violet",
+    title: "Workflow de Intervenciones",
+    badge: "Convivencia",
+    desc: "Tablero Kanban para gestionar casos activos de convivencia: sin acción, en seguimiento, intervención activa. Genera fichas de intervención imprimibles por alumno.",
+  },
+  {
+    icon: AlertOctagon,
+    color: "red",
+    title: "Centro de Alertas Tempranas CDC",
+    badge: "Alertas",
+    desc: "Panel centralizado de riesgos: bullying activo (≥5 rechazos), CDC rechazado, aislamiento total y dependencia de vínculo único, ordenados por severidad.",
+  },
+  {
+    icon: Bot,
+    color: "violet",
+    title: "Copiloto de IA para Orientadores",
+    badge: "IA",
+    desc: "Genera informes psicopedagógicos formales por alumno con datos CDC, vínculos y señales de alerta. Los informes se guardan en el historial del proceso.",
+  },
+  {
+    icon: TrendingUp,
+    color: "emerald",
+    title: "Historial Longitudinal",
+    badge: "Evolución",
+    desc: "Ficha inter-anual de cada alumno con evolución de estatus CDC, nivel académico y conducta entre cursos. Detecta tendencias antes de que escalen.",
+  },
+  {
+    icon: DatabaseZap,
+    color: "indigo",
+    title: "SGE Sync",
+    badge: "Importación",
+    desc: "Detección automática del sistema de gestión escolar (SÉNECA, Alexia, Raíces y otros). Mapea columnas sin configuración manual al importar.",
+  },
+  {
+    icon: Gamepad2,
+    color: "amber",
+    title: "Cuestionario Gamificado",
+    badge: "Primaria",
+    desc: "Modo visual con tarjetas de foto y emojis para alumnado de Primaria. Las elecciones se hacen tocando tarjetas, sin necesidad de escribir nombres.",
+  },
+  {
+    icon: Layers,
+    color: "indigo",
+    title: "Visual Sandbox",
+    badge: "Editor",
+    desc: "Mueve alumnos entre clases y ve al instante el impacto: cambio en nota media, equilibrio de género, amistades afectadas y reglas incumplidas.",
+  },
+]
 
 const FEATURES = [
   {
@@ -57,6 +110,41 @@ const FEATURES = [
     title: "Seguimiento post-mezcla",
     desc: "Lanza un cuestionario sociométrico al curso siguiente sobre las mismas clases formadas. Verifica si la mezcla logró sus objetivos con datos reales.",
   },
+  {
+    icon: KanbanSquare,
+    title: "Workflow de Intervenciones Kanban",
+    desc: "Tablero de casos activos de convivencia con estados y fichas imprimibles. El orientador avanza cada caso entre etapas y genera documentación accionable.",
+  },
+  {
+    icon: AlertOctagon,
+    title: "Centro de Alertas Tempranas CDC",
+    desc: "Panel centralizado de riesgos de exclusión y acoso ordenados por severidad urgente/alta/media, vinculados al estado de caso de intervención.",
+  },
+  {
+    icon: Bot,
+    title: "Copiloto de IA para Orientadores",
+    desc: "Informes psicopedagógicos formales por alumno bajo demanda, generados con datos CDC reales y guardados en el historial del proceso para consulta posterior.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Historial Longitudinal",
+    desc: "Evolución inter-anual del perfil sociométrico, académico y de conducta de cada alumno. Consulta tendencias entre cursos para anticipar situaciones de riesgo.",
+  },
+  {
+    icon: DatabaseZap,
+    title: "SGE Sync",
+    desc: "Detección automática de SÉNECA, Alexia, Raíces y 5 plataformas más. Mapea columnas sin configuración manual al importar el Excel del sistema de gestión.",
+  },
+  {
+    icon: Gamepad2,
+    title: "Cuestionario Gamificado",
+    desc: "Modo visual para Primaria con tarjetas de foto y emojis. Las elecciones se hacen tocando tarjetas, sin escribir nombres — ideal para alumnado de 6 a 10 años.",
+  },
+  {
+    icon: Layers,
+    title: "Visual Sandbox",
+    desc: "Editor visual de propuestas con impacto en tiempo real: mueve alumnos entre clases y ve al instante los cambios en nota media, género, amistades y reglas.",
+  },
 ]
 
 const SOCIOGRAM_DETECTIONS = [
@@ -82,7 +170,7 @@ const RULE_TYPES = [
 const STATS = [
   { value: "5", label: "estatus CDC (Coie-Dodge, 1982)" },
   { value: "4", label: "informes PDF diferenciados por rol" },
-  { value: "9", label: "módulos y funcionalidades integradas" },
+  { value: "16", label: "funcionalidades integradas" },
   { value: "100%", label: "supervisión humana en cada decisión" },
 ]
 
@@ -119,6 +207,22 @@ const BEFORE_AFTER = [
     before: "Sin forma de saber si la mezcla funcionó al año siguiente",
     after: "Cuestionario de seguimiento post-mezcla para validar el impacto con datos reales",
   },
+  {
+    before: "Casos de convivencia gestionados por email o cuaderno",
+    after: "Workflow Kanban de intervenciones: estado, ficha y seguimiento en un solo lugar",
+  },
+  {
+    before: "Riesgos de exclusión descubiertos en reunión de equipo",
+    after: "Centro de Alertas CDC: todos los riesgos priorizados, con estado de caso vinculado",
+  },
+  {
+    before: "Configurar manualmente columnas del Excel de SÉNECA o Alexia",
+    after: "SGE Sync detecta el formato automáticamente y mapea sin intervención manual",
+  },
+  {
+    before: "Cuestionario inapropiado para alumnado de Primaria",
+    after: "Modo gamificado con tarjetas visuales — adaptado para alumnado de 6 a 10 años",
+  },
 ]
 
 const ROLES = [
@@ -132,6 +236,7 @@ const ROLES = [
       "Exporta informe ejecutivo en PDF para dirección",
       "Ve el historial de decisiones del equipo",
       "Notificaciones automáticas al generarse propuestas o detectarse riesgos",
+      "Centro de Alertas Tempranas CDC: visión global de riesgos del grupo",
     ],
   },
   {
@@ -141,10 +246,12 @@ const ROLES = [
     benefits: [
       "Diagnóstico CDC completo con z-scores por alumno",
       "Alertas de rechazo activo y riesgo de acoso escolar",
+      "Copiloto de IA: informes psicopedagógicos formales bajo demanda",
+      "Centro de Alertas CDC con priorización urgente/alta/media",
+      "Workflow Kanban de intervenciones activas con fichas imprimibles",
       "Informe de orientación con sociograma de rechazos",
+      "Historial longitudinal del alumno entre cursos",
       "Registro automático de cada acceso a datos sensibles",
-      "Anotaciones privadas en el sociograma con estado de seguimiento",
-      "Ficha de intervención imprimible para alumnos de riesgo",
     ],
   },
   {
@@ -155,6 +262,7 @@ const ROLES = [
       "Ve solo los alumnos de sus grupos",
       "Añade observaciones y reglas entre alumnos",
       "Informe de tutoría con relaciones sociales por alumno",
+      "Visual Sandbox: revisa la propuesta antes de que el admin la apruebe",
       "Descarga el listado final con un clic",
     ],
   },
@@ -172,6 +280,7 @@ export default function LandingPage() {
             <span className="font-bold text-lg tracking-tight">ClassMixer</span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-500">
+            <a href="#novedades" className="hover:text-gray-900 transition-colors font-medium text-indigo-600">Novedades</a>
             <a href="#como-funciona" className="hover:text-gray-900 transition-colors">Cómo funciona</a>
             <a href="#sociograma" className="hover:text-gray-900 transition-colors">Sociograma</a>
             <a href="#ia" className="hover:text-gray-900 transition-colors">Análisis IA</a>
@@ -199,7 +308,7 @@ export default function LandingPage() {
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-12 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 font-medium mb-8">
             <Sparkles className="w-3.5 h-3.5" />
-            Análisis CDC + IA integrada · Diseñado para equipos docentes
+            7 nuevas funcionalidades · Análisis CDC + IA · Para equipos docentes
           </div>
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 max-w-4xl mx-auto leading-[1.08] text-gray-900">
             Mezcla clases con{" "}
@@ -277,6 +386,71 @@ export default function LandingPage() {
               <p className="text-sm text-gray-500 leading-relaxed">{step.desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* New Features */}
+      <section id="novedades" className="border-y border-indigo-100 bg-gradient-to-b from-indigo-50/60 to-white py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-100 text-sm text-indigo-700 font-semibold mb-4">
+              <Sparkles className="w-3.5 h-3.5" />
+              Lo último en ClassMixer
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">7 nuevas funcionalidades</h2>
+            <p className="text-gray-500 max-w-xl mx-auto">
+              Intervenciones Kanban, alertas tempranas CDC, copiloto de IA, historial longitudinal,
+              sincronización con SGE, cuestionario gamificado y editor visual con impacto en tiempo real.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            {NEW_FEATURES.slice(0, 4).map(f => {
+              const colorMap: Record<string, { border: string; bg: string; badge: string; icon: string }> = {
+                violet: { border: "border-violet-100", bg: "bg-white hover:border-violet-200", badge: "bg-violet-100 text-violet-700", icon: "bg-violet-50 text-violet-600" },
+                red: { border: "border-red-100", bg: "bg-white hover:border-red-200", badge: "bg-red-100 text-red-700", icon: "bg-red-50 text-red-600" },
+                emerald: { border: "border-emerald-100", bg: "bg-white hover:border-emerald-200", badge: "bg-emerald-100 text-emerald-700", icon: "bg-emerald-50 text-emerald-600" },
+                indigo: { border: "border-indigo-100", bg: "bg-white hover:border-indigo-200", badge: "bg-indigo-100 text-indigo-700", icon: "bg-indigo-50 text-indigo-600" },
+                amber: { border: "border-amber-100", bg: "bg-white hover:border-amber-200", badge: "bg-amber-100 text-amber-700", icon: "bg-amber-50 text-amber-600" },
+              }
+              const c = colorMap[f.color]
+              return (
+                <div key={f.title} className={`rounded-2xl border ${c.border} ${c.bg} shadow-sm p-5 transition-all duration-200`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className={`w-9 h-9 rounded-lg ${c.icon} flex items-center justify-center`}>
+                      <f.icon className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.badge}`}>{f.badge}</span>
+                  </div>
+                  <h3 className="font-semibold text-gray-900 mb-2 text-sm leading-snug">{f.title}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{f.desc}</p>
+                </div>
+              )
+            })}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {NEW_FEATURES.slice(4).map(f => {
+              const colorMap: Record<string, { border: string; bg: string; badge: string; icon: string }> = {
+                violet: { border: "border-violet-100", bg: "bg-white hover:border-violet-200", badge: "bg-violet-100 text-violet-700", icon: "bg-violet-50 text-violet-600" },
+                red: { border: "border-red-100", bg: "bg-white hover:border-red-200", badge: "bg-red-100 text-red-700", icon: "bg-red-50 text-red-600" },
+                emerald: { border: "border-emerald-100", bg: "bg-white hover:border-emerald-200", badge: "bg-emerald-100 text-emerald-700", icon: "bg-emerald-50 text-emerald-600" },
+                indigo: { border: "border-indigo-100", bg: "bg-white hover:border-indigo-200", badge: "bg-indigo-100 text-indigo-700", icon: "bg-indigo-50 text-indigo-600" },
+                amber: { border: "border-amber-100", bg: "bg-white hover:border-amber-200", badge: "bg-amber-100 text-amber-700", icon: "bg-amber-50 text-amber-600" },
+              }
+              const c = colorMap[f.color]
+              return (
+                <div key={f.title} className={`rounded-2xl border ${c.border} ${c.bg} shadow-sm p-5 transition-all duration-200`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className={`w-9 h-9 rounded-lg ${c.icon} flex items-center justify-center`}>
+                      <f.icon className="w-[18px] h-[18px]" />
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.badge}`}>{f.badge}</span>
+                  </div>
+                  <h3 className="font-semibold text-gray-900 mb-2 text-sm leading-snug">{f.title}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{f.desc}</p>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </section>
 
@@ -387,10 +561,10 @@ export default function LandingPage() {
                 icon: Brain,
                 items: [
                   "Diagnóstico cualitativo del clima social",
-                  "Fichas individuales de alumnos de riesgo",
-                  "Perfil reactivo vs. víctima pasiva",
-                  "Recomendaciones de mezcla con nombres",
-                  "Párrafo de contexto clínico para orientación",
+                  "Informe psicopedagógico formal por alumno bajo demanda",
+                  "Perfil reactivo vs. víctima pasiva (CDC diferenciado)",
+                  "Recomendaciones de mezcla con nombres reales",
+                  "Historial de informes por proceso — consulta posterior",
                 ],
               },
               {
