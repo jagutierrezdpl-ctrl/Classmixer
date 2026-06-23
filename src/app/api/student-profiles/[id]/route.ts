@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -79,12 +79,53 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return NextResponse.json({ success: true })
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const { id } = await params
   const supabase = createServiceClient()
+  const url = new URL(request.url)
+  const permanent = url.searchParams.get("permanent") === "true"
+
+  // Verify the profile belongs to this center before any operation
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: existing } = await (supabase as any)
+    .from("student_profiles")
+    .select("id, first_name, last_name, center_id, active")
+    .eq("id", id)
+    .eq("center_id", profile.center_id)
+    .single()
+
+  if (!existing) return NextResponse.json({ error: "Perfil no encontrado" }, { status: 404 })
+
+  if (permanent) {
+    // Only allow permanent delete of inactive profiles — safety guard
+    if (existing.active !== false) {
+      return NextResponse.json({ error: "Solo se pueden eliminar definitivamente perfiles ya dados de baja" }, { status: 400 })
+    }
+    // Nullify student_profile_id references in the students table first to avoid FK violations
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("students")
+      .update({ student_profile_id: null })
+      .eq("student_profile_id", id)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
+      .from("student_profiles")
+      .delete()
+      .eq("id", id)
+      .eq("center_id", profile.center_id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    await logAudit(profile.id, profile.center_id, "delete_student_profile_permanent", "student", {
+      entityId: id,
+      metadata: { name: `${existing.first_name} ${existing.last_name}` },
+    })
+    return NextResponse.json({ success: true, permanent: true })
+  }
 
   // Soft delete — preserves all data and history
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -95,5 +136,5 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     .eq("center_id", profile.center_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, permanent: false })
 }

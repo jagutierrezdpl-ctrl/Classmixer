@@ -207,6 +207,29 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
     }
   }
 
+  async function handlePermanentDelete() {
+    const name = `${data?.profile.first_name} ${data?.profile.last_name}`
+    const ok = await confirmFn({
+      title: "Eliminar definitivamente",
+      description: `¿Eliminar a ${name} de la base de datos de forma permanente? Se eliminarán todos sus datos históricos. Esta acción NO se puede deshacer.`,
+      confirmLabel: "Eliminar definitivamente",
+      variant: "destructive",
+    })
+    if (!ok) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/student-profiles/${id}?permanent=true`, { method: "DELETE" })
+      const result = await res.json()
+      if (result.error) {
+        setError(result.error)
+      } else {
+        router.push("/alumnado")
+      }
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function handleSave() {
     setSaving(true)
     try {
@@ -319,6 +342,18 @@ export default function AlumnoTrajectoryPage({ params }: { params: Promise<{ id:
                   : <Trash2 className="w-4 h-4 mr-1" />}
                 {data?.profile.active !== false ? "Dar de baja" : "Reactivar"}
               </Button>
+              {data?.profile.active === false && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handlePermanentDelete}
+                  disabled={deleting}
+                  title="Eliminar permanentemente de la base de datos"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4 mr-1" />}
+                  Eliminar definitivamente
+                </Button>
+              )}
             </>
           )}
         </div>
