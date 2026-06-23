@@ -5,6 +5,54 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
+// Fallback: translates unknown snake_case action names into readable Spanish
+function formatActionFallback(action: string): { label: string; icon: string; color: string } {
+  const prefixMap: [string, string][] = [
+    ["view_",        "Ver"],
+    ["create_",      "Crear"],
+    ["delete_",      "Eliminar"],
+    ["update_",      "Actualizar"],
+    ["export_",      "Exportar"],
+    ["import_",      "Importar"],
+    ["generate_",    "Generar"],
+    ["assign_",      "Asignar"],
+    ["unassign_",    "Quitar"],
+    ["send_",        "Enviar"],
+    ["approve_",     "Aprobar"],
+    ["add_",         "Añadir"],
+    ["edit_",        "Editar"],
+    ["duplicate_",   "Duplicar"],
+    ["bulk_",        "Masivo —"],
+    ["upsert_",      "Guardar"],
+    ["upload_",      "Subir"],
+    ["calculate_",   "Calcular"],
+    ["recalculate_", "Recalcular"],
+  ]
+  const iconMap: [string, string][] = [
+    ["view_",    "👁️"],
+    ["delete_",  "🗑️"],
+    ["export_",  "📄"],
+    ["import_",  "📥"],
+    ["create_",  "📁"],
+    ["generate_","⚡"],
+    ["approve_", "✅"],
+    ["send_",    "📧"],
+  ]
+  let label = action
+  let icon = "•"
+  for (const [prefix, spanish] of prefixMap) {
+    if (action.startsWith(prefix)) {
+      const rest = action.slice(prefix.length).replace(/_/g, " ")
+      label = `${spanish} ${rest}`
+      break
+    }
+  }
+  for (const [prefix, ic] of iconMap) {
+    if (action.startsWith(prefix)) { icon = ic; break }
+  }
+  return { label, icon, color: "secondary" }
+}
+
 const ACTION_LABELS: Record<string, { label: string; icon: string; color: string; important?: boolean }> = {
   // Procesos
   create_process:           { label: "Crear proceso",             icon: "📁", color: "default",     important: true },
@@ -59,6 +107,8 @@ const ACTION_LABELS: Record<string, { label: string; icon: string; color: string
   delete_center_logo:       { label: "Eliminar logo",            icon: "🗑️", color: "secondary" },
   update_openrouter_key:    { label: "Actualizar clave IA",      icon: "🔑", color: "warning",     important: true },
   update_ai_model:          { label: "Cambiar modelo IA",        icon: "🤖", color: "secondary",   important: true },
+  // Perfiles alumnos
+  delete_student_profile_permanent: { label: "Eliminar perfil permanente", icon: "🗑️", color: "destructive", important: true },
   // Vistas (menos relevantes en auditoría)
   view_sociogram:           { label: "Ver sociograma",           icon: "👁️", color: "secondary" },
   view_sociogram_ai:        { label: "Ver análisis IA",          icon: "👁️", color: "secondary" },
@@ -229,7 +279,7 @@ export default async function AuditPage({
             <div className="divide-y">
               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {(logs as any[] ?? []).map((log: any) => {
-                const meta = ACTION_LABELS[log.action] ?? { label: log.action, icon: "•", color: "secondary" }
+                const meta = ACTION_LABELS[log.action] ?? formatActionFallback(log.action)
                 return (
                   <div key={log.id} className="flex items-start gap-4 px-4 py-3 hover:bg-muted/20 transition-colors">
                     <span className="text-lg leading-none mt-0.5 shrink-0">{meta.icon}</span>
