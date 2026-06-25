@@ -862,6 +862,51 @@ export function generateProposals(
       }
     }
 
+    // 4.5 Rebalancing pass: when enforce_equal_size is on, other active constraints (origin_mix,
+    // gender_balance) can force fallback placements that break the snake's rhythm and create
+    // classes that differ by > 1. Move non-locked students from over-full to under-full classes.
+    if (constraints.enforce_equal_size) {
+      let rebalanced = true
+      while (rebalanced) {
+        rebalanced = false
+        let bigClass = targetClasses[0]
+        let smallClass = targetClasses[0]
+        targetClasses.forEach(c => {
+          if ((classCounts.get(c) ?? 0) > (classCounts.get(bigClass) ?? 0)) bigClass = c
+          if ((classCounts.get(c) ?? 0) < (classCounts.get(smallClass) ?? 0)) smallClass = c
+        })
+        if ((classCounts.get(bigClass) ?? 0) - (classCounts.get(smallClass) ?? 0) <= 1) break
+
+        const movable = assignments.filter(
+          a =>
+            a.target_class === bigClass &&
+            !lockedStudents.has(a.student_id) &&
+            !mustTogetherLockedClass.has(a.student_id)
+        )
+        let moved = false
+        for (const candidate of movable) {
+          const sepOk = !separationRules.some(r => {
+            const rIds = new Set((r.students ?? []).map(rs => rs.student_id))
+            if (!rIds.has(candidate.student_id)) return false
+            return assignments.some(
+              a => a.target_class === smallClass && a.student_id !== candidate.student_id && rIds.has(a.student_id)
+            )
+          })
+          if (!sepOk) continue
+          if (forbiddenClassMap.get(candidate.student_id)?.has(smallClass)) continue
+          const idx = assignments.findIndex(a => a.student_id === candidate.student_id)
+          if (idx === -1) continue
+          assignments[idx].target_class = smallClass
+          classCounts.set(bigClass, (classCounts.get(bigClass) ?? 1) - 1)
+          classCounts.set(smallClass, (classCounts.get(smallClass) ?? 0) + 1)
+          moved = true
+          rebalanced = true
+          break
+        }
+        if (!moved) break
+      }
+    }
+
     // 5. Local search: satisfy keep_at_least_one, protect_vulnerable, and auto-detected fragile pairs
     const assignMut = new Map(assignments.map(a => [a.student_id, a]))
     const combinedNeeds = [
