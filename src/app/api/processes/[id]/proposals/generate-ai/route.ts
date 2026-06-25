@@ -45,8 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     supabase.from("responses").select("*").eq("process_id", id),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from("rules").select("*, rule_students(student_id, students(first_name, last_name))").eq("process_id", id).eq("active", true),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any).from("center_settings").select("openrouter_api_key, openrouter_model").eq("center_id", profile.center_id).maybeSingle(),
+    supabase.from("centers").select("openrouter_api_key, openrouter_model").eq("id", profile.center_id).single(),
   ])
 
   if (!students?.length) return NextResponse.json({ error: "Sin alumnos en este proceso" }, { status: 400 })
