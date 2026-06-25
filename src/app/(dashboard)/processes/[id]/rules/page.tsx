@@ -633,11 +633,15 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
                 }
               </div>
             )}
-            {ruleType === "with_tutor" && (
+            {(ruleType === "with_tutor" || ruleType === "avoid_tutor") && (
               <div className="space-y-1.5">
-                <Label>Clase destino *</Label>
+                <Label>Clase {ruleType === "with_tutor" ? "destino *" : "a evitar *"}</Label>
                 <Input placeholder="Ej: 1A" {...register("target_class")} />
-                <p className="text-xs text-muted-foreground">Clase que impartirá el tutor seleccionado</p>
+                <p className="text-xs text-muted-foreground">
+                  {ruleType === "with_tutor"
+                    ? "Clase que impartirá el tutor seleccionado"
+                    : "Clase asignada al tutor que estos alumnos deben evitar"}
+                </p>
               </div>
             )}
 

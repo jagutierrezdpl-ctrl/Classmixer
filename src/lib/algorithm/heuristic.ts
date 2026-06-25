@@ -212,8 +212,7 @@ function computeSubScores(
     (needsCounts.length || 1)
   const specialNeedsScore = Math.max(0, 100 - needsVariance * 10)
 
-  // conflicts: violations of must_separate rules + negative nomination pairs in same class
-  // Hard separation rules count 4× more than soft negative nominations.
+  // conflicts: must_separate violations (×4) + negative nominations in same class + avoid_tutor violations (×3)
   const separationRules = rules.filter(r => r.rule_type === "must_separate" && r.active)
   let violatedSeparations = 0
   separationRules.forEach(r => {
@@ -238,8 +237,22 @@ function computeSubScores(
     }
   })
 
-  const totalViolations = violatedSeparations * 4 + rejectionViolations
-  const totalDenom = separationRules.length * 4 + negativeNoms.length
+  const avoidTutorRules = rules.filter(r => r.rule_type === "avoid_tutor" && r.active && r.target_class)
+  let avoidTutorViolations = 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  avoidTutorRules.forEach((r: any) => {
+    const forbidden = r.target_class as string
+    ;(r.students ?? []).forEach((rs: { student_id: string }) => {
+      if (assignMap.get(rs.student_id) === forbidden) avoidTutorViolations++
+    })
+  })
+  const totalAvoidTutorStudents = avoidTutorRules.reduce(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (n: number, r: any) => n + (r.students ?? []).length, 0
+  )
+
+  const totalViolations = violatedSeparations * 4 + rejectionViolations + avoidTutorViolations * 3
+  const totalDenom = separationRules.length * 4 + negativeNoms.length + totalAvoidTutorStudents * 3
   const conflictsScore = totalDenom > 0
     ? Math.max(0, 100 - (totalViolations / totalDenom) * 100)
     : 100
@@ -536,6 +549,9 @@ export function generateProposals(
     }
   })
 
+  // Pre-compute friendship responses — needed by protectMap expansion and autoProtect
+  const friendshipResps = responses.filter(r => relationTypes.friendshipLike.includes(r.relation_type))
+
   // keep_at_least_one: main student → list of friend options
   const atLeastOneMap = new Map<string, string[]>()
   atLeastOneRules.forEach(r => {
@@ -543,18 +559,41 @@ export function generateProposals(
     if (ids.length >= 2) atLeastOneMap.set(ids[0], ids.slice(1))
   })
 
-  // protect_vulnerable: same structure
+  // protect_vulnerable: main student → companion options.
+  // 1-student rules (the common AI-generated case) expand their sociometric choices as options
+  // so the local search can still keep them with someone they elected or who elected them.
   const protectMap = new Map<string, string[]>()
   protectVulnerableRules.forEach(r => {
     const ids = (r.students ?? []).map(rs => rs.student_id)
-    if (ids.length >= 2) protectMap.set(ids[0], ids.slice(1))
+    if (ids.length >= 2) {
+      protectMap.set(ids[0], ids.slice(1))
+    } else if (ids.length === 1) {
+      const sid = ids[0]
+      const options = friendshipResps
+        .filter(resp => resp.respondent_student_id === sid || resp.target_student_id === sid)
+        .map(resp => resp.respondent_student_id === sid ? resp.target_student_id : resp.respondent_student_id)
+      const unique = [...new Set(options)]
+      if (unique.length > 0) protectMap.set(sid, unique)
+    }
   })
+
+  // avoid_tutor: student must not go to the tutor's specific class
+  const forbiddenClassMap = new Map<string, Set<string>>()
+  rules
+    .filter(r => r.rule_type === "avoid_tutor" && r.active && r.target_class)
+    .forEach(r => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(r.students ?? []).forEach((rs: any) => {
+        const set = forbiddenClassMap.get(rs.student_id) ?? new Set<string>()
+        set.add(r.target_class!)
+        forbiddenClassMap.set(rs.student_id, set)
+      })
+    })
 
   // Auto-detect fragile anchor pairs from response data without requiring explicit admin rules.
   // A student with exactly 1 reciprocal friendship partner and ≤3 received nominations
   // becomes isolated if separated from their only anchor — the algorithm must preserve that bond.
   // Explicit rules (protectMap / atLeastOneMap) always take precedence.
-  const friendshipResps = responses.filter(r => relationTypes.friendshipLike.includes(r.relation_type))
   const receivedNomCount = new Map<string, number>()
   friendshipResps.forEach(r => {
     receivedNomCount.set(r.target_student_id, (receivedNomCount.get(r.target_student_id) ?? 0) + 1)
@@ -739,9 +778,6 @@ export function generateProposals(
           const rIds = new Set((rule.students ?? []).map(rs => rs.student_id))
           const unitInRule = unit.ids.some(sid => rIds.has(sid))
           if (!unitInRule) continue
-          const conflictPartners = unit.ids.flatMap(sid =>
-            [...rIds].filter(pid => pid !== sid && rIds.has(sid))
-          )
           const allConflicts = unit.ids
             .filter(sid => rIds.has(sid))
             .flatMap(sid => [...rIds].filter(pid => pid !== sid))
@@ -752,7 +788,6 @@ export function generateProposals(
           ) {
             blocked = true
           }
-          void conflictPartners
         }
 
         // max_from_group check
@@ -781,6 +816,11 @@ export function generateProposals(
 
         // equal size constraint: don't exceed Math.ceil(N/K)
         if (!blocked && (classCounts.get(bestClass) ?? 0) + unit.ids.length > maxClassSize) {
+          blocked = true
+        }
+
+        // avoid_tutor: no unit member may go to their forbidden class
+        if (!blocked && unit.ids.some(sid => forbiddenClassMap.get(sid)?.has(bestClass))) {
           blocked = true
         }
 
@@ -857,7 +897,28 @@ export function generateProposals(
             return false
           })
 
-          if (swapOk) {
+          const maxGroupOk = swapOk && ![...maxFromGroupMap.entries()].some(([groupKey, maxCount]) => {
+            const groupIds = new Set(groupKey.split(","))
+            if (groupIds.has(fid)) {
+              const afterCount = assignments.filter(
+                a => a.target_class === myClass && a.student_id !== candidate.student_id && groupIds.has(a.student_id)
+              ).length + 1
+              if (afterCount > maxCount) return true
+            }
+            if (groupIds.has(candidate.student_id)) {
+              const afterCount = assignments.filter(
+                a => a.target_class === friendClass && a.student_id !== fid && groupIds.has(a.student_id)
+              ).length + 1
+              if (afterCount > maxCount) return true
+            }
+            return false
+          })
+
+          const forbiddenOk = maxGroupOk &&
+            !forbiddenClassMap.get(fid)?.has(myClass) &&
+            !forbiddenClassMap.get(candidate.student_id)?.has(friendClass)
+
+          if (forbiddenOk) {
             // Swap: friend → myClass, candidate → friendClass
             const fidIdx = assignments.findIndex(a => a.student_id === fid)
             const candIdx = assignments.findIndex(a => a.student_id === candidate.student_id)
@@ -914,6 +975,30 @@ export function generateProposals(
       })
 
       if (!swapOk) continue
+
+      // max_from_group: ensure swap doesn't push a group over its cap in either class
+      const maxGroupOk = ![...maxFromGroupMap.entries()].some(([groupKey, maxCount]) => {
+        const groupIds = new Set(groupKey.split(","))
+        if (groupIds.has(a1.student_id)) {
+          const afterInOrig2 = assignments.filter(
+            a => a.target_class === orig2 && a.student_id !== a2.student_id && groupIds.has(a.student_id)
+          ).length + 1
+          if (afterInOrig2 > maxCount) return true
+        }
+        if (groupIds.has(a2.student_id)) {
+          const afterInOrig1 = assignments.filter(
+            a => a.target_class === orig1 && a.student_id !== a1.student_id && groupIds.has(a.student_id)
+          ).length + 1
+          if (afterInOrig1 > maxCount) return true
+        }
+        return false
+      })
+
+      if (!maxGroupOk) continue
+
+      // avoid_tutor: neither student may land in their forbidden class
+      if (forbiddenClassMap.get(a1.student_id)?.has(orig2)) continue
+      if (forbiddenClassMap.get(a2.student_id)?.has(orig1)) continue
 
       a1.target_class = orig2
       a2.target_class = orig1
