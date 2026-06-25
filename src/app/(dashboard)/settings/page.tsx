@@ -10,7 +10,7 @@ import Image from "next/image"
 import { ArrowLeft, Check, Loader2, Sparkles, Trash2, ImageIcon } from "lucide-react"
 
 const OPENROUTER_MODELS = [
-  { id: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — rápido, económico (por defecto)" },
+  { id: "anthropic/claude-haiku-4-5", label: "Claude Haiku 4.5 — rápido, económico (por defecto)" },
   { id: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6 — equilibrado, alta calidad" },
   { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8 — máxima calidad" },
   { id: "openai/gpt-4o-mini", label: "GPT-4o Mini — rápido, económico" },

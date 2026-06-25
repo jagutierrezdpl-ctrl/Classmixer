@@ -1,7 +1,7 @@
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001"
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "anthropic/claude-haiku-4-5-20251001"
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "anthropic/claude-haiku-4-5"
 
 // Scientific framework embedded as system context so every AI call is grounded
 // in sociometric methodology (CDC + CIVSOC) without requiring document uploads.
