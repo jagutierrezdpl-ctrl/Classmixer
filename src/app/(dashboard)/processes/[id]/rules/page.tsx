@@ -374,22 +374,10 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
       <Dialog open={aiOpen} onOpenChange={setAiOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <div className="flex items-start justify-between gap-2">
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-blue-500" />
-                Reglas sugeridas por el análisis sociométrico
-              </DialogTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 h-7 text-xs"
-                onClick={loadAiSuggestions}
-                disabled={aiLoading}
-              >
-                {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                Regenerar
-              </Button>
-            </div>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-500" />
+              Reglas sugeridas por el análisis sociométrico
+            </DialogTitle>
             <DialogDescription>
               Generadas automáticamente a partir del sociograma. Revisa cada una y aplica las que consideres oportunas.
             </DialogDescription>
@@ -495,15 +483,28 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
             )}
           </div>
 
-          {proposals.length > 0 && !aiLoading && (
-            <div className="border-t pt-3 flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">
-                {applied.size} de {proposals.length - dismissed.size} reglas aplicadas
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setAiOpen(false)}>
-                  Cerrar
-                </Button>
+          <div className="border-t pt-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {proposals.length > 0 && !aiLoading && (
+                <p className="text-xs text-muted-foreground">
+                  {applied.size} de {proposals.length - dismissed.size} reglas aplicadas
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadAiSuggestions}
+                disabled={aiLoading}
+              >
+                {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                Regenerar
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setAiOpen(false)}>
+                Cerrar
+              </Button>
+              {proposals.length > 0 && !aiLoading && (
                 <Button
                   size="sm"
                   onClick={applyAllProposals}
@@ -512,9 +513,9 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
                   <Sparkles className="w-3 h-3" />
                   Aplicar todas
                 </Button>
-              </div>
+              )}
             </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
 
