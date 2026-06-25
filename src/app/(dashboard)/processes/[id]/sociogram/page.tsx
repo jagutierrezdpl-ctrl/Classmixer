@@ -241,44 +241,27 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
 
   const hasActiveFilter = filter.classFilter || filter.showOnlyIsolated || filter.showOnlyReciprocal || (filter.relationType && filter.relationType !== "all")
 
-  async function loadCachedAIReport() {
-    if (aiCachedLoaded) return
+  // Returns true if a cached report was found and loaded into state
+  async function loadCachedAIReport(): Promise<boolean> {
+    if (aiCachedLoaded) return false
     setAiCachedLoaded(true)
     try {
       const res = await fetch(`/api/processes/${id}/sociogram/explain`)
-      if (!res.ok) return
+      if (!res.ok) return false
       const json = await res.json()
       if (json.report) {
         setAiSummary(json.report.content)
         setAiReportDate(json.report.created_at)
         setAiReportAuthor(json.report.created_by_name ?? null)
+        return true
       }
+      return false
     } catch {
-      // No cached report — that's fine
+      return false
     }
   }
 
-  async function handleAISummary(force = false) {
-    if (!force) {
-      // First time: try to load cached, then show it
-      if (!aiCachedLoaded) {
-        setAiLoading(true)
-        await loadCachedAIReport()
-        setAiLoading(false)
-      }
-      setAiSummaryVisible(v => !v)
-      return
-    }
-    // Force regenerate — confirm if there's already a cached report
-    if (aiSummary) {
-      const ok = await confirmFn({
-        title: "Generar nuevo análisis",
-        description: "Se generará un nuevo informe con los datos actuales del sociograma. El informe anterior quedará guardado en el historial.",
-        confirmLabel: "Generar nuevo",
-        variant: "default",
-      })
-      if (!ok) return
-    }
+  async function generateAIReport() {
     setAiLoading(true)
     try {
       const res = await fetch(`/api/processes/${id}/sociogram/explain`, { method: "POST" })
@@ -289,7 +272,6 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
         setAiReportAuthor(json.created_by_name ?? null)
         setAiSummaryVisible(true)
         setAiCachedLoaded(true)
-        // Refresh history if it was open
         if (aiHistoryVisible) loadAIHistory()
       } else {
         setAiSummary(`Error: ${json.error}`)
@@ -301,6 +283,45 @@ export default function SociogramPage({ params }: { params: Promise<{ id: string
     } finally {
       setAiLoading(false)
     }
+  }
+
+  async function handleAISummary(force = false) {
+    // Toggle off if panel is already visible and not forcing
+    if (!force && aiSummaryVisible && aiSummary) {
+      setAiSummaryVisible(false)
+      return
+    }
+
+    // Confirm before regenerating an existing report
+    if (force && aiSummary) {
+      const ok = await confirmFn({
+        title: "Generar nuevo análisis",
+        description: "Se generará un nuevo informe con los datos actuales del sociograma. El informe anterior quedará guardado en el historial.",
+        confirmLabel: "Generar nuevo",
+        variant: "default",
+      })
+      if (!ok) return
+    }
+
+    // Try to show existing report (toggle on) or load from cache
+    if (!force) {
+      if (aiSummary) {
+        // Already in state — just show it
+        setAiSummaryVisible(true)
+        return
+      }
+      // Try cache first — if found, show it and stop
+      setAiLoading(true)
+      const found = await loadCachedAIReport()
+      setAiLoading(false)
+      if (found) {
+        setAiSummaryVisible(true)
+        return
+      }
+      // No cache found — fall through and generate a new report
+    }
+
+    await generateAIReport()
   }
 
   async function loadAIHistory() {
