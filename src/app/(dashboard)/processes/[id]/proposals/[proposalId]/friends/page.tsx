@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Loader2, Heart, Briefcase, Printer, Users, UserX, UserCheck } from "lucide-react"
+import { ArrowLeft, Loader2, Heart, Briefcase, Printer, Users, UserX, UserCheck, HandHeart, ThumbsDown } from "lucide-react"
 import Link from "next/link"
 
 interface FriendEntry {
@@ -23,6 +23,8 @@ interface StudentRow {
   target_class: string
   friendship_choices: FriendEntry[]
   work_choices: FriendEntry[]
+  emotional_choices: FriendEntry[]
+  negative_choices: FriendEntry[]
   has_friend_in_class: boolean
   answered_questionnaire: boolean
 }
@@ -159,13 +161,19 @@ export default function FriendsPage({
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
                 <span className="flex items-center gap-1"><Briefcase className="w-3 h-3 text-blue-400" /> Trabajo</span>
               </th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
+                <span className="flex items-center gap-1"><HandHeart className="w-3 h-3 text-purple-400" /> Apoyo emocional</span>
+              </th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
+                <span className="flex items-center gap-1"><ThumbsDown className="w-3 h-3 text-red-400" /> Rechazo</span>
+              </th>
               <th className="px-4 py-2.5 w-8" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {visible.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
+                <td colSpan={8} className="text-center py-10 text-muted-foreground text-sm">
                   No hay alumnos con este filtro
                 </td>
               </tr>
@@ -227,6 +235,52 @@ export default function FriendsPage({
                     </div>
                   )}
                 </td>
+                <td className="px-4 py-2.5">
+                  {s.emotional_choices.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {s.emotional_choices.map(f => (
+                        <span
+                          key={f.id}
+                          className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full border ${
+                            f.same_class
+                              ? "bg-purple-50 text-purple-700 border-purple-200"
+                              : "bg-muted text-muted-foreground border-border"
+                          }`}
+                        >
+                          {f.same_class ? "✓" : "·"} {f.first_name} {f.last_name}
+                          {!f.same_class && f.target_class && (
+                            <span className="opacity-60 text-[10px]">→{f.target_class}</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2.5">
+                  {s.negative_choices.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {s.negative_choices.map(f => (
+                        <span
+                          key={f.id}
+                          className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full border ${
+                            f.same_class
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-muted text-muted-foreground border-border"
+                          }`}
+                        >
+                          {f.same_class ? "!" : "·"} {f.first_name} {f.last_name}
+                          {!f.same_class && f.target_class && (
+                            <span className="opacity-60 text-[10px]">→{f.target_class}</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-2.5 text-center">
                   {!s.answered_questionnaire ? (
                     <span title="Sin respuesta"><Users className="w-3.5 h-3.5 text-muted-foreground mx-auto" /></span>
@@ -243,7 +297,7 @@ export default function FriendsPage({
       </div>
 
       <p className="text-xs text-muted-foreground mt-4 print:hidden">
-        Verde = compañero elegido en la misma clase nueva · Gris = en clase diferente
+        Verde = amistad en la misma clase · Azul = trabajo en la misma clase · Morado = apoyo emocional en la misma clase · Rojo = rechazo en la misma clase · Gris = en clase diferente
       </p>
     </div>
   )

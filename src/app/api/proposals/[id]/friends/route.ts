@@ -33,15 +33,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
   }
 
-  // Load friendship responses for the process
+  // Load all response types for the process
   const { data: responses } = await supabase
     .from("responses")
     .select("respondent_student_id, target_student_id, relation_type")
     .eq("process_id", proposal.process_id)
-    .in("relation_type", ["friendship", "work"])
+    .in("relation_type", ["friendship", "work", "emotional", "negative"])
 
   const friendshipResponses = (responses ?? []).filter(r => r.relation_type === "friendship")
   const workResponses = (responses ?? []).filter(r => r.relation_type === "work")
+  const emotionalResponses = (responses ?? []).filter(r => r.relation_type === "emotional")
+  const negativeResponses = (responses ?? []).filter(r => r.relation_type === "negative")
 
   // Build class map from assignments
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,19 +77,24 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         }
       })
 
-    const workChoices = workResponses
-      .filter(r => r.respondent_student_id === a.student_id)
-      .map(r => {
-        const friend = studentMap.get(r.target_student_id)
-        const friendClass = classMap.get(r.target_student_id)
-        return {
-          id: r.target_student_id,
-          first_name: friend?.first_name ?? "—",
-          last_name: friend?.last_name ?? "—",
-          target_class: friendClass ?? null,
-          same_class: friendClass === myClass,
-        }
-      })
+    const mapChoices = (list: typeof responses, respondentId: string) =>
+      (list ?? [])
+        .filter(r => r.respondent_student_id === respondentId)
+        .map(r => {
+          const friend = studentMap.get(r.target_student_id)
+          const friendClass = classMap.get(r.target_student_id)
+          return {
+            id: r.target_student_id,
+            first_name: friend?.first_name ?? "—",
+            last_name: friend?.last_name ?? "—",
+            target_class: friendClass ?? null,
+            same_class: friendClass === myClass,
+          }
+        })
+
+    const workChoices = mapChoices(workResponses, a.student_id)
+    const emotionalChoices = mapChoices(emotionalResponses, a.student_id)
+    const negativeChoices = mapChoices(negativeResponses, a.student_id)
 
     const hasAnyFriendInClass = friendChoices.some(f => f.same_class)
 
@@ -100,8 +107,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       target_class: myClass,
       friendship_choices: friendChoices,
       work_choices: workChoices,
+      emotional_choices: emotionalChoices,
+      negative_choices: negativeChoices,
       has_friend_in_class: hasAnyFriendInClass,
-      answered_questionnaire: friendChoices.length > 0 || workChoices.length > 0,
+      answered_questionnaire:
+        friendChoices.length > 0 || workChoices.length > 0 ||
+        emotionalChoices.length > 0 || negativeChoices.length > 0,
     }
   })
 
