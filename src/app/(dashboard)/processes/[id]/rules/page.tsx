@@ -214,21 +214,26 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
     toast.success("Regla eliminada")
   }
 
-  async function openAiSuggestions() {
-    setAiOpen(true)
-    if (proposals.length > 0) return // already loaded
+  async function loadAiSuggestions() {
     setAiLoading(true)
+    setProposals([])
+    setDismissed(new Set())
+    setApplied(new Set())
     try {
       const res = await fetch(`/api/processes/${id}/sociogram/proposed-rules`)
       if (!res.ok) throw new Error((await res.json()).error ?? "Error al cargar sugerencias")
       setProposals(await res.json())
-      setDismissed(new Set())
-      setApplied(new Set())
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al cargar sugerencias")
     } finally {
       setAiLoading(false)
     }
+  }
+
+  async function openAiSuggestions() {
+    setAiOpen(true)
+    if (proposals.length > 0) return // already loaded; user can force refresh via button
+    await loadAiSuggestions()
   }
 
   async function applyProposal(index: number) {
@@ -369,10 +374,22 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
       <Dialog open={aiOpen} onOpenChange={setAiOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-blue-500" />
-              Reglas sugeridas por el análisis sociométrico
-            </DialogTitle>
+            <div className="flex items-start justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-500" />
+                Reglas sugeridas por el análisis sociométrico
+              </DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 h-7 text-xs"
+                onClick={loadAiSuggestions}
+                disabled={aiLoading}
+              >
+                {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                Regenerar
+              </Button>
+            </div>
             <DialogDescription>
               Generadas automáticamente a partir del sociograma. Revisa cada una y aplica las que consideres oportunas.
             </DialogDescription>
