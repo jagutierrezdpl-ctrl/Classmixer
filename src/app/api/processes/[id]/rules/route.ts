@@ -2,6 +2,29 @@ import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, hasFullAccess, tutorCanAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const profile = await getUserProfile()
+  if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!hasFullAccess(profile.role)) return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
+
+  const { id } = await params
+  const supabase = createServiceClient()
+
+  const { data: process } = await supabase
+    .from("processes")
+    .select("center_id")
+    .eq("id", id)
+    .single()
+
+  if (!process || process.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+
+  const { error } = await supabase.from("rules").delete().eq("process_id", id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })

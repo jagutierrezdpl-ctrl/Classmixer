@@ -214,6 +214,34 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
     toast.success("Regla eliminada")
   }
 
+  async function deleteAllRules() {
+    const ok = await confirmFn({
+      title: "Eliminar todas las reglas",
+      description: `Se eliminarán las ${rules.length} reglas configuradas. Esta acción no se puede deshacer.`,
+      confirmLabel: "Eliminar todas",
+      variant: "destructive",
+    })
+    if (!ok) return
+    const res = await fetch(`/api/processes/${id}/rules`, { method: "DELETE" })
+    if (!res.ok) { toast.error("Error al eliminar las reglas"); return }
+    setRules([])
+    toast.success("Todas las reglas eliminadas")
+  }
+
+  async function resetAndRegenerate() {
+    const ok = await confirmFn({
+      title: "Limpiar y regenerar reglas",
+      description: `Se eliminarán las ${rules.length} reglas actuales y se generarán nuevas sugerencias con los datos actuales del sociograma.`,
+      confirmLabel: "Limpiar y regenerar",
+      variant: "destructive",
+    })
+    if (!ok) return
+    const res = await fetch(`/api/processes/${id}/rules`, { method: "DELETE" })
+    if (!res.ok) { toast.error("Error al eliminar las reglas"); return }
+    setRules([])
+    await loadAiSuggestions()
+  }
+
   async function loadAiSuggestions() {
     setAiLoading(true)
     setProposals([])
@@ -291,6 +319,12 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {rules.length > 0 && (
+            <Button variant="outline" className="text-destructive hover:text-destructive" onClick={deleteAllRules}>
+              <Trash2 className="w-4 h-4" />
+              Eliminar todas
+            </Button>
+          )}
           <Button variant="outline" onClick={openAiSuggestions}>
             <Sparkles className="w-4 h-4" />
             Aplicar reglas del análisis
@@ -491,7 +525,19 @@ export default function RulesPage({ params }: { params: Promise<{ id: string }> 
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap justify-end">
+              {rules.length > 0 && !aiLoading && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={resetAndRegenerate}
+                  disabled={aiLoading}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Limpiar y regenerar
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
