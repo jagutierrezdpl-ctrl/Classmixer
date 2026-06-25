@@ -51,7 +51,7 @@ export async function generateAISummary(
   return generateWithAnthropic(prompt, system)
 }
 
-async function generateWithAnthropic(prompt: string, system: string): Promise<string> {
+async function generateWithAnthropic(prompt: string, system: string, maxTokens = 800): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     throw new Error("IA no disponible: configura una clave de OpenRouter en Configuración del centro, o ANTHROPIC_API_KEY en el servidor")
@@ -66,7 +66,7 @@ async function generateWithAnthropic(prompt: string, system: string): Promise<st
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
-      max_tokens: 800,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -81,7 +81,7 @@ async function generateWithAnthropic(prompt: string, system: string): Promise<st
   return json.content?.[0]?.text ?? ""
 }
 
-async function generateWithOpenRouter(prompt: string, apiKey: string, system: string, model?: string | null): Promise<string> {
+async function generateWithOpenRouter(prompt: string, apiKey: string, system: string, model?: string | null, maxTokens = 800): Promise<string> {
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
     headers: {
@@ -90,7 +90,7 @@ async function generateWithOpenRouter(prompt: string, apiKey: string, system: st
     },
     body: JSON.stringify({
       model: model ?? OPENROUTER_MODEL,
-      max_tokens: 800,
+      max_tokens: maxTokens,
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
@@ -105,4 +105,136 @@ async function generateWithOpenRouter(prompt: string, apiKey: string, system: st
 
   const json = await response.json()
   return json.choices?.[0]?.message?.content ?? ""
+}
+
+// ── AI-based class mixing ────────────────────────────────────────────────────
+
+export interface StudentInfoForMix {
+  id: string
+  name: string
+  current_class: string
+  gender: string
+  average_grade: number
+  behavior_level?: string
+  needs_type?: string
+}
+
+export interface ChoiceInfoForMix {
+  from_name: string
+  to_name: string
+  relation_type: string
+}
+
+export interface RuleInfoForMix {
+  rule_type: string
+  description?: string
+  student_names: string[]
+  target_class?: string
+  max_count?: number
+}
+
+export interface AIMixProposal {
+  name: string
+  assignments: Record<string, string>
+  rationale: string
+}
+
+function buildMixPrompt(
+  students: StudentInfoForMix[],
+  choices: ChoiceInfoForMix[],
+  rules: RuleInfoForMix[],
+  targetClasses: string[],
+  numProposals: number,
+  instructions?: string
+): string {
+  const studentLines = students.map(s =>
+    `${s.id} | ${s.name} | ${s.current_class} | ${s.gender} | ${s.average_grade.toFixed(1)} | ${s.behavior_level ?? "Normal"} | ${s.needs_type ?? "No"}`
+  ).join("\n")
+
+  const typeLabel: Record<string, string> = { friendship: "amistad", work: "trabajo", emotional: "apoyo emocional" }
+  const choiceLines = choices
+    .map(c => `${c.from_name} → ${c.to_name} (${typeLabel[c.relation_type] ?? c.relation_type})`)
+    .join("\n")
+
+  const ruleTypeLabel: Record<string, string> = {
+    must_separate: "SEPARAR OBLIGATORIAMENTE",
+    must_keep_together: "JUNTAR OBLIGATORIAMENTE",
+    should_keep_together: "INTENTAR JUNTAR",
+    lock_student_to_class: "FIJAR EN CLASE",
+    max_from_group: "MÁXIMO POR CLASE",
+    protect_vulnerable: "PROTEGER (garantizar un amigo)",
+    avoid_tutor: "EVITAR TUTOR EN CLASE",
+  }
+  const ruleLines = rules.map(r => {
+    const label = ruleTypeLabel[r.rule_type] ?? r.rule_type
+    const names = r.student_names.join(", ")
+    const extra = r.target_class ? ` → ${r.target_class}` : r.max_count ? ` (máx. ${r.max_count})` : ""
+    const reason = r.description ? ` [${r.description}]` : ""
+    return `${label}: ${names}${extra}${reason}`
+  }).join("\n")
+
+  return `Crea ${numProposals} propuesta${numProposals > 1 ? "s DISTINTAS" : ""} de distribución de ${students.length} alumnos en ${targetClasses.length} clases (${targetClasses.join(", ")}).
+Responde SOLO con JSON válido, sin texto adicional fuera del JSON.
+
+ALUMNOS (ID | nombre | clase_origen | género | nota | conducta | NEE):
+${studentLines}
+
+ELECCIONES SOCIOMÉTRICAS:
+${choiceLines || "Sin datos de cuestionario"}
+
+REGLAS${rules.length ? "" : ": Ninguna"}:
+${ruleLines || ""}
+${instructions ? `\nINSTRUCCIONES DEL EQUIPO DOCENTE:\n${instructions}\n` : ""}
+CRITERIOS:
+- Respetar ESTRICTAMENTE las reglas "SEPARAR" y "FIJAR"
+- Equilibrar nota media entre clases
+- Equilibrar género entre clases
+- Mezclar clases de origen (evitar que toda una clase vaya junta)
+- Mantener al menos un amigo elegido por alumno cuando sea posible
+- Distribuir alumnos con NEE y conducta de seguimiento entre clases
+${numProposals > 1 ? `- Las ${numProposals} propuestas deben ser DIFERENTES entre sí\n` : ""}
+Todos los alumnos deben aparecer asignados a una clase. Usa exactamente estos nombres de clase: ${targetClasses.join(", ")}.
+
+JSON de respuesta:
+{
+  "proposals": [
+    {
+      "name": "Propuesta A",
+      "assignments": { "ID_ALUMNO": "CLASE", ... },
+      "rationale": "Explicación breve en español (máx. 120 palabras)"
+    }
+  ]
+}`
+}
+
+export async function generateAIMixProposals(
+  students: StudentInfoForMix[],
+  choices: ChoiceInfoForMix[],
+  rules: RuleInfoForMix[],
+  targetClasses: string[],
+  numProposals: number,
+  instructions?: string,
+  openrouterApiKey?: string | null,
+  model?: string | null
+): Promise<AIMixProposal[]> {
+  const MAX_TOKENS = 6000
+  const prompt = buildMixPrompt(students, choices, rules, targetClasses, numProposals, instructions)
+  const system = "Eres un experto en distribución y mezcla de clases escolares. Responde SIEMPRE con JSON válido y sin ningún texto fuera del JSON."
+
+  const raw = openrouterApiKey
+    ? await generateWithOpenRouter(prompt, openrouterApiKey, system, model, MAX_TOKENS)
+    : await generateWithAnthropic(prompt, system, MAX_TOKENS)
+
+  const jsonMatch = raw.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error("La IA no devolvió un JSON válido")
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parsed: { proposals?: any[] } = JSON.parse(jsonMatch[0])
+  if (!parsed.proposals || !Array.isArray(parsed.proposals)) throw new Error("Formato de respuesta IA inválido")
+
+  return parsed.proposals.map((p, i) => ({
+    name: typeof p.name === "string" ? p.name : `Propuesta ${String.fromCharCode(65 + i)}`,
+    assignments: p.assignments && typeof p.assignments === "object" ? p.assignments : {},
+    rationale: typeof p.rationale === "string" ? p.rationale : "",
+  }))
 }

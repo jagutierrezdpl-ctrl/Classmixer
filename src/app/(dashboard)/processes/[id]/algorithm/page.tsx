@@ -7,10 +7,11 @@ import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash, SlidersHorizontal, RotateCcw, Network } from "lucide-react"
+import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash, SlidersHorizontal, RotateCcw, Network, Sparkles, Bot } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { Textarea } from "@/components/ui/textarea"
 import type { AlgorithmProfile, AlgorithmWeights } from "@/types"
 import { WEIGHT_PROFILES, DEFAULT_WEIGHTS, WEIGHT_LABELS, WEIGHT_TOOLTIPS } from "@/lib/algorithm/weights"
 import { DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
@@ -51,11 +52,14 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   const { id } = use(params)
   const router = useRouter()
 
+  const [mode, setMode] = useState<"algorithm" | "ai">("algorithm")
   const [profile, setProfile] = useState<AlgorithmProfile>("equilibrado")
   const [baseProfile, setBaseProfile] = useState<Exclude<AlgorithmProfile, "personalizado">>("equilibrado")
   const [weights, setWeights] = useState<AlgorithmWeights>(DEFAULT_WEIGHTS)
   const [constraints, setConstraints] = useState<AlgorithmConstraints>(DEFAULT_CONSTRAINTS)
   const [numProposals, setNumProposals] = useState(3)
+  const [aiNumProposals, setAiNumProposals] = useState(1)
+  const [aiInstructions, setAiInstructions] = useState("")
   const [useSociogram, setUseSociogram] = useState(true)
   const [running, setRunning] = useState(false)
   const [infeasibility, setInfeasibility] = useState<{ blocking_rules: string[]; explanation: string[] } | null>(null)
@@ -87,14 +91,27 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   async function handleRun() {
     setRunning(true)
     setInfeasibility(null)
-    const effectiveWeights = useSociogram ? weights : {
-      ...weights,
-      avoid_isolation: 0,
-      reciprocal_friendships: 0,
-      chosen_friendships: 0,
-      work_relations: 0,
-    }
     try {
+      if (mode === "ai") {
+        const res = await fetch(`/api/processes/${id}/proposals/generate-ai`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ num_proposals: aiNumProposals, instructions: aiInstructions }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+        toast.success(`${data.generated} propuesta${data.generated !== 1 ? "s" : ""} generadas con IA`)
+        router.push(`/processes/${id}/proposals`)
+        return
+      }
+
+      const effectiveWeights = useSociogram ? weights : {
+        ...weights,
+        avoid_isolation: 0,
+        reciprocal_friendships: 0,
+        chosen_friendships: 0,
+        work_relations: 0,
+      }
       const res = await fetch(`/api/processes/${id}/proposals/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,7 +130,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
       toast.success(`${data.generated} propuestas generadas correctamente`)
       router.push(`/processes/${id}/proposals`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al ejecutar el algoritmo")
+      toast.error(e instanceof Error ? e.message : "Error al generar propuestas")
     } finally {
       setRunning(false)
     }
@@ -135,8 +152,93 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
+      {/* Mode selector */}
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <button
+          onClick={() => setMode("algorithm")}
+          className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+            mode === "algorithm"
+              ? "border-primary bg-primary/5"
+              : "border-border hover:border-muted-foreground/30 hover:bg-muted/30"
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${mode === "algorithm" ? "bg-primary" : "bg-muted"}`}>
+            <Zap className={`w-5 h-5 ${mode === "algorithm" ? "text-white" : "text-muted-foreground"}`} />
+          </div>
+          <div>
+            <p className={`font-semibold text-sm ${mode === "algorithm" ? "text-primary" : ""}`}>Algoritmo heurístico</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Optimización automática con reglas y pesos configurables</p>
+          </div>
+          {mode === "algorithm" && <CheckCircle2 className="w-4 h-4 text-primary ml-auto shrink-0" />}
+        </button>
+        <button
+          onClick={() => setMode("ai")}
+          className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+            mode === "ai"
+              ? "border-violet-500 bg-violet-500/5"
+              : "border-border hover:border-muted-foreground/30 hover:bg-muted/30"
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${mode === "ai" ? "bg-violet-500" : "bg-muted"}`}>
+            <Sparkles className={`w-5 h-5 ${mode === "ai" ? "text-white" : "text-muted-foreground"}`} />
+          </div>
+          <div>
+            <p className={`font-semibold text-sm ${mode === "ai" ? "text-violet-700" : ""}`}>IA Copiloto</p>
+            <p className="text-xs text-muted-foreground mt-0.5">La IA distribuye las clases aplicando criterios pedagógicos</p>
+          </div>
+          {mode === "ai" && <CheckCircle2 className="w-4 h-4 text-violet-500 ml-auto shrink-0" />}
+        </button>
+      </div>
+
+      {/* AI mode card */}
+      {mode === "ai" && (
+        <Card className="mb-6 border-violet-200">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Bot className="w-4 h-4 text-violet-600" />
+              <CardTitle className="text-base text-violet-800">Generación con IA</CardTitle>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              La IA analizará los datos del sociograma, las reglas y el perfil académico de cada alumno para proponer la distribución más equilibrada. Puedes añadir instrucciones adicionales.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Instrucciones adicionales (opcional)</Label>
+              <Textarea
+                placeholder="Ej: Asegúrate de que los alumnos con NEE queden distribuidos equitativamente. Prioriza mantener juntos a los que tienen relaciones recíprocas fuertes..."
+                value={aiInstructions}
+                onChange={e => setAiInstructions(e.target.value)}
+                rows={3}
+                className="text-sm resize-none"
+                maxLength={1200}
+              />
+              <p className="text-xs text-muted-foreground text-right">{aiInstructions.length}/1200</p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Número de propuestas</Label>
+                <span className="text-lg font-bold text-violet-700">{aiNumProposals}</span>
+              </div>
+              <Slider
+                min={1} max={3} step={1}
+                value={[aiNumProposals]}
+                onValueChange={([v]) => setAiNumProposals(v)}
+                className="cursor-pointer"
+              />
+              <p className="text-xs text-muted-foreground">
+                Máximo 3 propuestas con IA. Cada una será distinta en criterios de distribución.
+              </p>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+              La IA respeta las reglas obligatorias (separaciones, bloqueos de clase) pero puede no cumplir al 100% las reglas blandas. Revisa siempre el resultado.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sociogram toggle */}
-      <Card className="mb-6">
+      {mode === "algorithm" && <Card className="mb-6">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -172,7 +274,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
             </p>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Infeasibility alert */}
       {infeasibility && (
@@ -193,6 +295,9 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       )}
+
+      {/* Algorithm-only sections */}
+      {mode === "algorithm" && <>
 
       {/* Profile selector */}
       <Card className="mb-6">
@@ -451,11 +556,20 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
         </CardContent>
       </Card>
 
+      </>}
+
       {/* Run button */}
       <div className="flex items-center gap-4">
-        <Button onClick={handleRun} disabled={running} size="lg" className="gap-2">
+        <Button
+          onClick={handleRun}
+          disabled={running}
+          size="lg"
+          className={`gap-2 ${mode === "ai" ? "bg-violet-600 hover:bg-violet-700 text-white" : ""}`}
+        >
           {running ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> Generando propuestas...</>
+          ) : mode === "ai" ? (
+            <><Sparkles className="w-4 h-4" /> Generar con IA</>
           ) : (
             <><Zap className="w-4 h-4" /> Ejecutar algoritmo</>
           )}

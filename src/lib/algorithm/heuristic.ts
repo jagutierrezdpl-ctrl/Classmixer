@@ -292,6 +292,18 @@ function computeScore(
   return weightedTotal(sub, weights)
 }
 
+export function scoreAssignments(
+  assignments: AssignmentResult[],
+  students: Student[],
+  responses: Response[],
+  rules: Rule[],
+  targetClasses: string[],
+  weights: AlgorithmWeights = DEFAULT_WEIGHTS,
+  relationTypes: RelationTypeGroups = DEFAULT_RELATION_TYPES
+): Omit<ProposalResult, "assignments"> {
+  return buildResult(assignments, students, responses, rules, targetClasses, weights, undefined, relationTypes)
+}
+
 // Full result including all sub-scores and per-class metrics
 function buildResult(
   assignments: AssignmentResult[],
