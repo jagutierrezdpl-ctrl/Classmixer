@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import {
   ArrowLeft, Users2, Loader2, RefreshCw, Printer,
   GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check, CheckCircle2,
-  ShieldAlert, Users, Plus, Trash2,
+  ShieldAlert, Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -447,6 +447,47 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
+      {/* Cooperative rules panel — always visible, above the groups */}
+      {!editMode && (
+        <div className="mb-6 print:hidden">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4" /> Reglas de agrupación
+            </h2>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
+              setSelectedStudentIds([])
+              setNewRuleType("must_separate")
+              setShowRuleDialog(true)
+            }}>
+              <Plus className="w-3.5 h-3.5" /> Nueva regla
+            </Button>
+          </div>
+          {rules.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin reglas. Añade reglas antes de generar para que el algoritmo las respete.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {rules.map(rule => (
+                <div key={rule.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${rule.rule_type === "must_separate" ? "border-red-200 bg-red-50/50" : "border-green-200 bg-green-50/50"}`}>
+                  <Badge variant="outline" className={`text-xs shrink-0 ${rule.rule_type === "must_separate" ? "border-red-300 text-red-700" : "border-green-300 text-green-700"}`}>
+                    {rule.rule_type === "must_separate" ? "Separar" : "Juntar"}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {rule.cooperative_rule_students.map(rs => `${rs.students.first_name} ${rs.students.last_name}`).join(" · ")}
+                  </span>
+                  <button
+                    type="button"
+                    className="ml-1 text-muted-foreground hover:text-red-600 transition-colors"
+                    onClick={() => handleDeleteRule(rule.id)}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* No groups yet */}
       {!latestSet && (
         <Card className="border-dashed">
@@ -454,7 +495,9 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
             <Users2 className="w-10 h-10 text-muted-foreground mb-3" />
             <p className="font-medium">Todavía no se han generado grupos</p>
             <p className="text-sm text-muted-foreground mt-1 mb-4">
-              Pulsa el botón para generar los grupos para la clase {session.class_name}
+              {rules.length > 0
+                ? `Se aplicarán ${rules.length} regla${rules.length > 1 ? "s" : ""} al generar`
+                : `Pulsa el botón para generar los grupos para la clase ${session.class_name}`}
             </p>
             <Button onClick={handleGenerate} disabled={generating} className="gap-2">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users2 className="w-4 h-4" />}
@@ -549,50 +592,6 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
               </Card>
             )
           })}
-        </div>
-      )}
-
-      {/* Cooperative rules panel */}
-      {!editMode && (
-        <div className="mt-8 print:hidden">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4" /> Reglas de agrupación
-            </h2>
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
-              setSelectedStudentIds([])
-              setNewRuleType("must_separate")
-              setShowRuleDialog(true)
-            }}>
-              <Plus className="w-3.5 h-3.5" /> Nueva regla
-            </Button>
-          </div>
-          {rules.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin reglas. Las reglas se aplican al generar o regenerar grupos.</p>
-          ) : (
-            <div className="space-y-2">
-              {rules.map(rule => (
-                <div key={rule.id} className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${rule.rule_type === "must_separate" ? "border-red-200 bg-red-50/50" : "border-green-200 bg-green-50/50"}`}>
-                  <div className="flex-1 min-w-0">
-                    <Badge variant="outline" className={`text-xs mb-1 ${rule.rule_type === "must_separate" ? "border-red-300 text-red-700" : "border-green-300 text-green-700"}`}>
-                      {rule.rule_type === "must_separate" ? "Separar" : "Mantener juntos"}
-                    </Badge>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {rule.cooperative_rule_students.map(rs => (
-                        <span key={rs.student_id} className="inline-flex items-center gap-1 text-xs bg-white border rounded px-1.5 py-0.5">
-                          <Users className="w-3 h-3 opacity-50" />
-                          {rs.students.first_name} {rs.students.last_name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:text-red-600 shrink-0" onClick={() => handleDeleteRule(rule.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
