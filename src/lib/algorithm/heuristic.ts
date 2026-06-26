@@ -1159,27 +1159,23 @@ export function generateProposals(
       }
     }
 
-    // 7. Isolation repair pass — best-effort: ensure every student has ≥1 social connection in their class.
-    // Only runs if enforce_no_isolation is set. Happens after all score optimisation to avoid interference.
+    // 7. Isolation repair pass — best-effort: ensure every student has ≥1 friendship choice in their class.
+    // Uses the SAME definition as the score's avoid_isolation metric: directional friendship choices
+    // made BY the student (respondent→target), NOT bidirectional and NOT including work relations.
+    // This guarantees the repair fixes exactly what the UI shows as "students_isolated".
     if (constraints.enforce_no_isolation) {
-      // Bidirectional connection map: any friendship OR work response, either direction
-      const socialResps = responses.filter(r =>
-        relationTypes.friendshipLike.includes(r.relation_type) ||
-        relationTypes.workLike.includes(r.relation_type)
-      )
-      const connMap = new Map<string, Set<string>>()
-      socialResps.forEach(r => {
-        let setA = connMap.get(r.respondent_student_id)
-        if (!setA) { setA = new Set(); connMap.set(r.respondent_student_id, setA) }
-        setA.add(r.target_student_id)
-        let setB = connMap.get(r.target_student_id)
-        if (!setB) { setB = new Set(); connMap.set(r.target_student_id, setB) }
-        setB.add(r.respondent_student_id)
+      // Directional friendship map: sid → set of students sid CHOSE (matching computeSubScores)
+      const dirFriendMap = new Map<string, Set<string>>()
+      friendshipResps.forEach(r => {
+        let set = dirFriendMap.get(r.respondent_student_id)
+        if (!set) { set = new Set(); dirFriendMap.set(r.respondent_student_id, set) }
+        set.add(r.target_student_id)
       })
 
       const clsOf = (sid: string) => assignments.find(a => a.student_id === sid)?.target_class
-      const hasConn = (sid: string, cls: string) =>
-        [...(connMap.get(sid) ?? [])].some(cid => clsOf(cid) === cls)
+      // Student is "covered" if they chose at least one person who ended up in the same class
+      const hasChosen = (sid: string, cls: string) =>
+        [...(dirFriendMap.get(sid) ?? [])].some(cid => clsOf(cid) === cls)
       const isMovable = (sid: string) => !lockedStudents.has(sid) && !mustTogetherLockedClass.has(sid)
       const repairSepOk = (sid: string, toCls: string) =>
         !separationRules.some(r => {
@@ -1191,20 +1187,33 @@ export function generateProposals(
         ![...(mustTogetherPartnersMap.get(sid) ?? [])].some(
           pid => assignments.some(pa => pa.student_id === pid && pa.target_class === fromCls)
         )
-      // For enforce_equal_size: only allow moves that reduce the size imbalance
       const repairSizeOk = (fromCls: string, toCls: string) => {
         if (!constraints.enforce_equal_size) return true
         return (classCounts.get(fromCls) ?? 0) > (classCounts.get(toCls) ?? 0)
       }
-      // Would moving `sid` out of `cls` leave any remaining student there without connections?
-      // If sid IS already isolated (0 connections in cls from either direction), this is always false
-      // because no one in cls has sid in their connMap. So we only need this check for Option B.
+      // Respect gender balance when enforce_gender_balance is on.
+      // Checks that placing sid in toCls stays within the configured tolerance.
+      const repairGenderOk = (sid: string, toCls: string) => {
+        if (!constraints.enforce_gender_balance) return true
+        const s = studentMapLocal.get(sid)
+        if (!s || (s.gender !== "F" && s.gender !== "M")) return true
+        const tolerance = constraints.gender_tolerance / 100
+        const inTo = assignments.filter(a => a.target_class === toCls && a.student_id !== sid)
+        let f = inTo.filter(a => studentMapLocal.get(a.student_id)?.gender === "F").length
+        let total = inTo.length
+        if (s.gender === "F") f++
+        total++
+        if (total === 0) return true
+        return Math.abs(f / total - globalFRatio) <= tolerance
+      }
+      // Would moving `sid` OUT of `cls` leave anyone there without a chosen friend?
+      // Uses the directional map: only checks students who actively CHOSE sid.
       const wouldIsolateSomeoneIn = (sid: string, cls: string) =>
         assignments.some(a => {
           if (a.student_id === sid || a.target_class !== cls) return false
-          const conns = connMap.get(a.student_id)
-          if (!conns?.has(sid)) return false
-          return [...conns].every(cid => cid === sid || clsOf(cid) !== cls)
+          const chosen = dirFriendMap.get(a.student_id)
+          if (!chosen?.has(sid)) return false
+          return [...chosen].every(cid => cid === sid || clsOf(cid) !== cls)
         })
       const doMove = (sid: string, fromCls: string, toCls: string) => {
         const idx = assignments.findIndex(a => a.student_id === sid)
@@ -1215,28 +1224,29 @@ export function generateProposals(
         }
       }
 
-      // Find isolated students once — later iterations may fix some via collateral moves
-      const isolated = assignments.filter(a => !hasConn(a.student_id, a.target_class))
+      // Isolated = chose no one who is in the same class (mirrors the score metric exactly)
+      const isolated = assignments.filter(a => !hasChosen(a.student_id, a.target_class))
 
       for (const iso of isolated) {
         const sid = iso.student_id
         let myCls = clsOf(sid)
-        if (!myCls || hasConn(sid, myCls)) continue // already fixed earlier in this pass
+        if (!myCls || hasChosen(sid, myCls)) continue // fixed by a previous iteration
 
-        const myConns = [...(connMap.get(sid) ?? [])]
-        if (myConns.length === 0) continue // no sociometric data at all — placement can't help
+        const myChosen = [...(dirFriendMap.get(sid) ?? [])]
+        if (myChosen.length === 0) continue // made no friendship choices — placement can't help
 
-        // Option A: move this student to a class where they already have connections
+        // Option A: move this student to a class where they chose someone
         if (isMovable(sid) && repairKeepOk(sid, myCls)) {
           const targets = targetClasses
-            .filter(cls => cls !== myCls && hasConn(sid, cls))
+            .filter(cls => cls !== myCls && hasChosen(sid, cls))
             .sort((a, b) =>
-              myConns.filter(c => clsOf(c) === b).length - myConns.filter(c => clsOf(c) === a).length
+              myChosen.filter(c => clsOf(c) === b).length - myChosen.filter(c => clsOf(c) === a).length
             )
           for (const toCls of targets) {
             if (!repairSepOk(sid, toCls)) continue
             if (forbiddenClassMap.get(sid)?.has(toCls)) continue
             if (!repairSizeOk(myCls, toCls)) continue
+            if (!repairGenderOk(sid, toCls)) continue
             doMove(sid, myCls, toCls)
             myCls = toCls
             break
@@ -1245,28 +1255,29 @@ export function generateProposals(
 
         // Re-check: option A may have fixed it
         const nowCls = clsOf(sid)
-        if (!nowCls || hasConn(sid, nowCls)) continue
+        if (!nowCls || hasChosen(sid, nowCls)) continue
 
-        // Option B: bring one of this student's connections to their class.
-        // Prefer connections who have many other connections in their own class (least disruptive to lose one).
-        const movableConns = myConns
+        // Option B: bring one of the people this student chose to their class.
+        // Prefer those who have many other chosen friends in their current class (least disruptive to move).
+        const movableChosen = myChosen
           .filter(cid => {
             const cCls = clsOf(cid)
             return cCls && cCls !== nowCls && isMovable(cid)
           })
           .sort((a, b) => {
-            const aOthers = [...(connMap.get(a) ?? [])].filter(c => clsOf(c) === clsOf(a)).length
-            const bOthers = [...(connMap.get(b) ?? [])].filter(c => clsOf(c) === clsOf(b)).length
+            const aOthers = [...(dirFriendMap.get(a) ?? [])].filter(c => clsOf(c) === clsOf(a)).length
+            const bOthers = [...(dirFriendMap.get(b) ?? [])].filter(c => clsOf(c) === clsOf(b)).length
             return bOthers - aOthers
           })
 
-        for (const connId of movableConns) {
+        for (const connId of movableChosen) {
           const connCls = clsOf(connId)
           if (!connCls) continue
           if (!repairSepOk(connId, nowCls)) continue
           if (forbiddenClassMap.get(connId)?.has(nowCls)) continue
           if (!repairKeepOk(connId, connCls)) continue
           if (!repairSizeOk(connCls, nowCls)) continue
+          if (!repairGenderOk(connId, nowCls)) continue
           if (wouldIsolateSomeoneIn(connId, connCls)) continue
           doMove(connId, connCls, nowCls)
           break
