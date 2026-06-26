@@ -745,7 +745,8 @@ export function generateProposals(
   const proposals: ProposalResult[] = []
   const seen = new Set<string>()
 
-  for (let seed = 0; seed < numProposals * 8 && proposals.length < numProposals; seed++) {
+  const maxSeeds = constraints.enforce_no_isolation ? numProposals * 30 : numProposals * 8
+  for (let seed = 0; seed < maxSeeds && proposals.length < numProposals; seed++) {
     const assignments: AssignmentResult[] = []
     const classCounts = new Map(targetClasses.map(c => [c, 0]))
 
@@ -1534,6 +1535,13 @@ export function generateProposals(
             break
           }
         }
+      }
+
+      // After all repair options, reject this seed if any student is still isolated.
+      // A different seed will produce a different initial distribution that may not need
+      // the cascading swaps that cause this problem.
+      if (assignments.some(a => !hasChosen(a.student_id, a.target_class))) {
+        continue
       }
     }
 
