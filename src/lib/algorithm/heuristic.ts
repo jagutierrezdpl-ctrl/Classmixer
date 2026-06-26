@@ -1413,6 +1413,61 @@ export function generateProposals(
           break // committed
         }
       }
+
+      // Option E: radical iterative pass — only must_separate and lock_student_to_class
+      // are treated as hard limits. Everything else (must_keep_together, avoid_tutor,
+      // size balance, gender balance, wouldIsolateSomeoneIn) is ignored so that every
+      // student with friendship data ends up with at least one bond in their class.
+      // Runs in a loop so chain-isolations created by each move are fixed next iteration.
+      let radicalChanged = true
+      let radicalIter = 0
+      while (radicalChanged && radicalIter < 10) {
+        radicalChanged = false
+        radicalIter++
+        const radicalIso = assignments.filter(a => !hasChosen(a.student_id, a.target_class))
+        for (const iso of radicalIso) {
+          const sid = iso.student_id
+          const isoClass = clsOf(sid)
+          if (!isoClass || hasChosen(sid, isoClass)) continue
+          const isoConns = [...(dirFriendMap.get(sid) ?? [])]
+          if (isoConns.length === 0) continue
+
+          // Try A (radical): move iso to a class with connections — only sep+lock block this
+          if (!lockedStudents.has(sid)) {
+            const targets = targetClasses
+              .filter(c => c !== isoClass && isoConns.some(cc => clsOf(cc) === c))
+              .sort((a, b) =>
+                isoConns.filter(c => clsOf(c) === b).length - isoConns.filter(c => clsOf(c) === a).length
+              )
+            for (const target of targets) {
+              if (!repairSepOk(sid, target)) continue
+              doMove(sid, isoClass, target)
+              radicalChanged = true
+              break
+            }
+          }
+
+          // Re-check: A may have fixed it
+          const isoClass2 = clsOf(sid)
+          if (!isoClass2 || hasChosen(sid, isoClass2)) continue
+
+          // Try B (radical): bring a connection here — only sep+lock block this
+          const sortedConns = isoConns
+            .filter(c => {
+              const cCls = clsOf(c)
+              return cCls && cCls !== isoClass2 && !lockedStudents.has(c)
+            })
+            .sort((a, b) => countWouldIsolate(a) - countWouldIsolate(b))
+          for (const connId of sortedConns) {
+            const connCls = clsOf(connId)
+            if (!connCls) continue
+            if (!repairSepOk(connId, isoClass2)) continue
+            doMove(connId, connCls, isoClass2)
+            radicalChanged = true
+            break
+          }
+        }
+      }
     }
 
     // Dedup by fingerprint
