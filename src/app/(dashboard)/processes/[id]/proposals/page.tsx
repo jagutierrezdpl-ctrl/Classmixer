@@ -10,7 +10,7 @@ import {
   ChevronDown, ChevronUp, CheckCircle, Settings2,
   UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap, GitBranch,
   Star, AlertTriangle, Printer, SplitSquareHorizontal, History, ChevronLeft, ChevronRight,
-  MoreHorizontal, Eye, Shield, CheckCircle2, XCircle, MinusCircle,
+  MoreHorizontal, Eye, Shield, CheckCircle2, XCircle, MinusCircle, Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric, Rule, ProposalAssignment } from "@/types"
@@ -297,6 +297,30 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
     }
   }
 
+  async function handleDeleteGeneration(gen: typeof generations[0]) {
+    if (gen.proposals.some(p => p.status === "aprobada")) {
+      toast.error("No se puede eliminar una generación con propuesta aprobada")
+      return
+    }
+    const ok = await confirmFn({
+      title: "Eliminar generación",
+      description: `¿Eliminar las ${gen.proposals.length} propuesta${gen.proposals.length !== 1 ? "s" : ""} de esta generación? Esta acción no se puede deshacer.`,
+      confirmLabel: "Eliminar",
+      variant: "destructive",
+    })
+    if (!ok) return
+    const results = await Promise.all(
+      gen.proposals.map(p => fetch(`/api/proposals/${p.id}`, { method: "DELETE" }))
+    )
+    if (results.every(r => r.ok)) {
+      toast.success("Generación eliminada")
+      setSelectedGenIdx(0)
+      await loadProposals()
+    } else {
+      toast.error("Error al eliminar la generación")
+    }
+  }
+
   async function handleAISummary(proposalId: string) {
     setAiLoading(prev => ({ ...prev, [proposalId]: true }))
     try {
@@ -390,31 +414,47 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                     Historial de generaciones
                   </div>
                   <div className="flex items-center gap-1 flex-wrap flex-1">
-                    {generations.map((gen, idx) => {
+                    {generations.slice(0, 5).map((gen, idx) => {
                       const dt = new Date(gen.generated_at)
                       const label = dt.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
                       const hasApproved = gen.proposals.some(p => p.status === "aprobada")
+                      const isSelected = idx === selectedGenIdx
                       return (
-                        <button
-                          key={gen.key}
-                          onClick={() => { setSelectedGenIdx(idx); setExpandedId(null) }}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                            idx === selectedGenIdx
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border bg-background hover:bg-muted/60"
-                          }`}
-                        >
-                          {idx === 0 && <span className="text-[10px] mr-0.5">●</span>}
-                          {label}
-                          <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                            idx === selectedGenIdx ? "bg-white/20" : "bg-muted"
-                          }`}>
-                            {gen.proposals.length}
-                          </span>
-                          {hasApproved && <CheckCircle className="w-3 h-3 text-green-500 ml-0.5" />}
-                        </button>
+                        <div key={gen.key} className="flex items-center gap-0.5">
+                          <button
+                            onClick={() => { setSelectedGenIdx(idx); setExpandedId(null) }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                              isSelected
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border bg-background hover:bg-muted/60"
+                            }`}
+                          >
+                            {idx === 0 && <span className="text-[10px] mr-0.5">●</span>}
+                            {label}
+                            <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                              isSelected ? "bg-white/20" : "bg-muted"
+                            }`}>
+                              {gen.proposals.length}
+                            </span>
+                            {hasApproved && <CheckCircle className="w-3 h-3 text-green-500 ml-0.5" />}
+                          </button>
+                          {!hasApproved && (
+                            <button
+                              onClick={() => handleDeleteGeneration(gen)}
+                              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-50 transition-colors"
+                              title="Eliminar esta generación"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       )
                     })}
+                    {generations.length > 5 && (
+                      <span className="text-xs text-muted-foreground px-2 py-1.5">
+                        +{generations.length - 5} más antiguas
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <Button

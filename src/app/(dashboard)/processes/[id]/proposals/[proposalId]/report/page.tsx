@@ -222,8 +222,21 @@ export default async function ReportPage({
           )
         })}
 
+        {/* Leyenda de colores */}
+        <div className="mt-8 mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Leyenda:</span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-5 h-4 rounded border border-orange-200 bg-orange-50" />
+            Conducta de seguimiento o conflictiva
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-5 h-4 rounded border border-border bg-muted/20" />
+            Fila alternada (sin alerta)
+          </span>
+        </div>
+
         {/* Footer */}
-        <div className="mt-8 pt-4 border-t text-xs text-muted-foreground">
+        <div className="mt-2 pt-4 border-t text-xs text-muted-foreground">
           <p>Informe generado por ClassMixer · {today} · Solo para uso interno del centro educativo.</p>
           <p className="mt-1">
             Este documento contiene datos personales de menores. Trátalo con confidencialidad conforme al RGPD.

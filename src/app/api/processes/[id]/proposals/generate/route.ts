@@ -320,6 +320,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await supabase.from("proposal_metrics").insert(allMetrics)
   }
 
+  // Auto-cleanup: keep only the 5 most recent generations, delete older ones.
+  // A "generation" is a group of proposals with the same generated_at timestamp.
+  const MAX_GENERATIONS = 5
+  const { data: allProposals } = await supabase
+    .from("proposals")
+    .select("id, generated_at, status")
+    .eq("process_id", id)
+    .order("generated_at", { ascending: false })
+
+  if (allProposals && allProposals.length > 0) {
+    const genKeys = [...new Set(allProposals.map(p => (p.generated_at ?? "").slice(0, 19)))]
+    if (genKeys.length > MAX_GENERATIONS) {
+      const oldKeys = genKeys.slice(MAX_GENERATIONS)
+      const toDelete = allProposals.filter(
+        p => oldKeys.includes((p.generated_at ?? "").slice(0, 19)) && p.status !== "aprobada"
+      )
+      if (toDelete.length > 0) {
+        await supabase.from("proposals").delete().in("id", toDelete.map(p => p.id))
+      }
+    }
+  }
+
   await supabase
     .from("processes")
     .update({ status: "propuestas_generadas", updated_at: new Date().toISOString() })

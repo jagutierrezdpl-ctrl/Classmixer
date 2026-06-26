@@ -80,3 +80,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json(data)
 }
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const profile = await getUserProfile()
+  if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!["admin", "superadmin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Solo administradores pueden eliminar propuestas" }, { status: 403 })
+  }
+
+  const { id } = await params
+  const supabase = createServiceClient()
+
+  const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
+  if (!owned) return NextResponse.json({ error: "No encontrada" }, { status: 404 })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((owned as any).status === "aprobada") {
+    return NextResponse.json({ error: "No se puede eliminar una propuesta aprobada" }, { status: 409 })
+  }
+
+  const { error } = await supabase.from("proposals").delete().eq("id", id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await logAudit(profile.id, profile.center_id, "delete_proposal", "proposal", { entityId: id })
+  return NextResponse.json({ ok: true })
+}
