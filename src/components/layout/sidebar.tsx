@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Kanban,
+  Users2,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -51,6 +52,7 @@ interface AppNotification {
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/processes", label: "Procesos", icon: FolderOpen },
+  { href: "/cooperativo", label: "Cooperativo", icon: Users2 },
   { href: "/history", label: "Histórico", icon: BarChart3 },
 ]
 
