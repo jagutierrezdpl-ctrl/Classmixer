@@ -70,6 +70,22 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
       .then(r => r.json())
       .then(d => setResponseCount(Array.isArray(d) ? d.length : (d.count ?? 0)))
       .catch(() => {})
+
+    // Restore last-used settings from localStorage
+    try {
+      const saved = localStorage.getItem(`classmixer_algorithm_${id}`)
+      if (saved) {
+        const s = JSON.parse(saved)
+        if (s.mode) setMode(s.mode)
+        if (s.profile) setProfile(s.profile)
+        if (s.baseProfile) setBaseProfile(s.baseProfile)
+        if (s.weights) setWeights(s.weights)
+        if (s.constraints) setConstraints(s.constraints)
+        if (typeof s.numProposals === "number") setNumProposals(s.numProposals)
+        if (typeof s.useSociogram === "boolean") setUseSociogram(s.useSociogram)
+        if (typeof s.aiNumProposals === "number") setAiNumProposals(s.aiNumProposals)
+      }
+    } catch { /* ignore bad localStorage data */ }
   }, [id])
 
   function selectProfile(p: Exclude<AlgorithmProfile, "personalizado">) {
@@ -91,6 +107,12 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   async function handleRun() {
     setRunning(true)
     setInfeasibility(null)
+    // Persist settings so the proposals page can offer "back to algorithm"
+    try {
+      localStorage.setItem(`classmixer_algorithm_${id}`, JSON.stringify({
+        mode, profile, baseProfile, weights, constraints, numProposals, useSociogram, aiNumProposals,
+      }))
+    } catch { /* ignore */ }
     try {
       if (mode === "ai") {
         const res = await fetch(`/api/processes/${id}/proposals/generate-ai`, {
@@ -581,7 +603,7 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
 
       <div className="mt-6 text-xs text-muted-foreground space-y-1 max-w-lg">
         <p>El algoritmo nunca toma decisiones definitivas. Todas las propuestas requieren revisión y aprobación manual.</p>
-        <p>Las propuestas generadas reemplazarán las anteriores no aprobadas.</p>
+        <p>Cada generación se guarda en el historial. Las propuestas anteriores no se eliminan.</p>
       </div>
     </div>
   )

@@ -26,6 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .from("proposals")
     .select("*, proposal_assignments(*, students(*)), proposal_metrics(*)")
     .eq("process_id", id)
+    .order("generated_at", { ascending: false })
     .order("score_total", { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

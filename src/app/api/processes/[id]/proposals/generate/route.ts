@@ -266,17 +266,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "No se pudieron generar propuestas" }, { status: 422 })
   }
 
-  // Delete old non-approved proposals
-  const { data: oldProposals } = await supabase
-    .from("proposals")
-    .select("id")
-    .eq("process_id", id)
-    .neq("status", "aprobada")
-
-  if (oldProposals && oldProposals.length > 0) {
-    await supabase.from("proposals").delete().in("id", oldProposals.map(p => p.id))
-  }
-
   const labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
 
   const { data: savedProposals } = await supabase

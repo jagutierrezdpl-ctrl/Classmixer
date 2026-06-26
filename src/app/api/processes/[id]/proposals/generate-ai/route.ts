@@ -167,17 +167,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }, { status: 422 })
     }
 
-    // Delete old non-approved proposals
-    const { data: oldProposals } = await supabase
-      .from("proposals")
-      .select("id")
-      .eq("process_id", id)
-      .neq("status", "aprobada")
-
-    if (oldProposals?.length) {
-      await supabase.from("proposals").delete().in("id", oldProposals.map(p => p.id))
-    }
-
     const { data: savedProposals } = await supabase
       .from("proposals")
       .insert(

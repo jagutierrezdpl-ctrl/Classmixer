@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useState } from "react"
+import { use, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +9,7 @@ import {
   ArrowLeft, Zap, Download, Users, Loader2,
   ChevronDown, ChevronUp, CheckCircle, Settings2,
   UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap, GitBranch,
-  Star, AlertTriangle, Printer, TrendingUp, SplitSquareHorizontal,
+  Star, AlertTriangle, Printer, SplitSquareHorizontal, History, ChevronLeft, ChevronRight,
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
@@ -64,6 +64,28 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({})
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({})
+  const [selectedGenIdx, setSelectedGenIdx] = useState(0)
+
+  // Group proposals by generation (same generated_at → same batch)
+  const generations = useMemo(() => {
+    const groups = new Map<string, Proposal[]>()
+    for (const p of proposals) {
+      const key = (p.generated_at ?? "").slice(0, 19) // truncate to second
+      const group = groups.get(key) ?? []
+      group.push(p)
+      groups.set(key, group)
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => b.localeCompare(a)) // newest first
+      .map(([key, props]) => ({
+        key,
+        generated_at: key,
+        proposals: [...props].sort((a, b) => b.score_total - a.score_total),
+      }))
+  }, [proposals])
+
+  const currentGen = generations[selectedGenIdx]
+  const currentProposals = currentGen?.proposals ?? []
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadProposals() }, [id])
@@ -71,7 +93,10 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   async function loadProposals() {
     setLoading(true)
     const res = await fetch(`/api/processes/${id}/proposals`)
-    if (res.ok) setProposals(await res.json())
+    if (res.ok) {
+      setProposals(await res.json())
+      setSelectedGenIdx(0)
+    }
     setLoading(false)
   }
 
@@ -125,7 +150,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   }
 
   const getBest = (key: string): number => {
-    return Math.max(...proposals.map(p => getProposalValue(p, key)))
+    return Math.max(...currentProposals.map(p => getProposalValue(p, key)))
   }
 
   return (
@@ -137,11 +162,14 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Propuestas de mezcla</h1>
-            <p className="text-muted-foreground text-sm">{proposals.length} propuestas generadas</p>
+            <p className="text-muted-foreground text-sm">
+              {proposals.length} propuestas en total
+              {generations.length > 1 && ` · ${generations.length} generaciones`}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
-          {proposals.length >= 2 && (
+          {currentProposals.length >= 2 && (
             <Button variant="outline" asChild>
               <Link href={`/processes/${id}/proposals/compare`}>
                 <SplitSquareHorizontal className="w-4 h-4" />
@@ -152,13 +180,13 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
           <Button variant="outline" asChild>
             <Link href={`/processes/${id}/algorithm`}>
               <Settings2 className="w-4 h-4" />
-              Configurar algoritmo
+              Modificar algoritmo
             </Link>
           </Button>
           <Button asChild>
             <Link href={`/processes/${id}/algorithm`}>
               <Zap className="w-4 h-4" />
-              {proposals.length > 0 ? "Regenerar" : "Generar propuestas"}
+              {proposals.length > 0 ? "Nueva generación" : "Generar propuestas"}
             </Link>
           </Button>
         </div>
@@ -184,10 +212,67 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
         </div>
       ) : (
         <>
+          {/* Generation history selector */}
+          {generations.length > 1 && (
+            <Card className="mb-5">
+              <CardContent className="py-3 px-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground shrink-0">
+                    <History className="w-4 h-4" />
+                    Historial de generaciones
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap flex-1">
+                    {generations.map((gen, idx) => {
+                      const dt = new Date(gen.generated_at)
+                      const label = dt.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                      const hasApproved = gen.proposals.some(p => p.status === "aprobada")
+                      return (
+                        <button
+                          key={gen.key}
+                          onClick={() => { setSelectedGenIdx(idx); setExpandedId(null) }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                            idx === selectedGenIdx
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border bg-background hover:bg-muted/60"
+                          }`}
+                        >
+                          {idx === 0 && <span className="text-[10px] mr-0.5">●</span>}
+                          {label}
+                          <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                            idx === selectedGenIdx ? "bg-white/20" : "bg-muted"
+                          }`}>
+                            {gen.proposals.length}
+                          </span>
+                          {hasApproved && <CheckCircle className="w-3 h-3 text-green-500 ml-0.5" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      disabled={selectedGenIdx === 0}
+                      onClick={() => { setSelectedGenIdx(i => Math.max(0, i - 1)); setExpandedId(null) }}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      disabled={selectedGenIdx === generations.length - 1}
+                      onClick={() => { setSelectedGenIdx(i => Math.min(generations.length - 1, i + 1)); setExpandedId(null) }}
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Charts */}
-          {proposals.length > 1 && (
+          {currentProposals.length > 1 && (
             <ProposalCharts
-              proposals={proposals.map(p => ({
+              proposals={currentProposals.map(p => ({
                 id: p.id,
                 name: p.name,
                 score_total:    p.score_total    ?? 0,
@@ -197,13 +282,13 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                 score_behavior: p.score_behavior ?? 0,
               }))}
               metricsMap={Object.fromEntries(
-                proposals.map(p => [p.id, buildMetricsMap(p.metrics ?? [])])
+                currentProposals.map(p => [p.id, buildMetricsMap(p.metrics ?? [])])
               )}
             />
           )}
 
           {/* Comparator table */}
-          {proposals.length > 1 && (
+          {currentProposals.length > 1 && (
             <Card className="mb-6 overflow-x-auto">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Comparativa de propuestas</CardTitle>
@@ -213,7 +298,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                   <thead>
                     <tr className="border-b">
                       <th className="text-left px-4 py-2 text-muted-foreground font-medium w-48">Métrica</th>
-                      {proposals.map((p, i) => (
+                      {currentProposals.map((p, i) => (
                         <th key={p.id} className="px-4 py-2 text-center font-semibold">
                           <span className={p.status === "aprobada" ? "text-green-600" : i === 0 ? "text-primary" : ""}>
                             {p.name}
@@ -228,7 +313,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                       return (
                         <tr key={metric.key} className="border-b last:border-0 hover:bg-muted/20">
                           <td className="px-4 py-2 text-muted-foreground">{metric.label}</td>
-                          {proposals.map(p => {
+                          {currentProposals.map(p => {
                             const val = getProposalValue(p, metric.key)
                             const isBest = val === best
                             return (
@@ -246,7 +331,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                     {/* Students with friend row — sum across classes */}
                     <tr className="border-b hover:bg-muted/20">
                       <td className="px-4 py-2 text-muted-foreground">Alumnos con amigo</td>
-                      {proposals.map(p => {
+                      {currentProposals.map(p => {
                         const mm = buildMetricsMap(p.metrics ?? [])
                         const total = Object.values(mm).reduce((sum, cls) => sum + (cls.students_with_friend ?? 0), 0)
                         const grandTotal = Object.values(mm).reduce((sum, cls) => sum + (cls.count ?? 0), 0)
@@ -261,10 +346,10 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                     </tr>
                     <tr className="border-b hover:bg-muted/20">
                       <td className="px-4 py-2 text-muted-foreground">Pares recíprocos preservados</td>
-                      {proposals.map(p => {
+                      {currentProposals.map(p => {
                         const mm = buildMetricsMap(p.metrics ?? [])
                         const total = Object.values(mm).reduce((sum, cls) => sum + (cls.reciprocal_preserved ?? 0), 0)
-                        const best = Math.max(...proposals.map(pp => {
+                        const best = Math.max(...currentProposals.map(pp => {
                           const m = buildMetricsMap(pp.metrics ?? [])
                           return Object.values(m).reduce((s, c) => s + (c.reciprocal_preserved ?? 0), 0)
                         }))
@@ -282,14 +367,14 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
           )}
 
           {/* Recommendation banner */}
-          {proposals.length > 1 && proposals.every(p => p.status !== "aprobada") && (() => {
-            const best = proposals.reduce((a, b) => a.score_total > b.score_total ? a : b)
-            const bestIdx = proposals.indexOf(best)
+          {currentProposals.length > 1 && currentProposals.every(p => p.status !== "aprobada") && (() => {
+            const best = currentProposals.reduce((a, b) => a.score_total > b.score_total ? a : b)
+            const bestIdx = currentProposals.indexOf(best)
             const mm = buildMetricsMap(best.metrics ?? [])
             const totalStudents = Object.values(mm).reduce((s, m) => s + (m.count ?? 0), 0)
             const withFriend = Object.values(mm).reduce((s, m) => s + (m.students_with_friend ?? 0), 0)
             const friendPct = totalStudents > 0 ? Math.round((withFriend / totalStudents) * 100) : 0
-            const runners = proposals.filter(p => p !== best)
+            const runners = currentProposals.filter(p => p !== best)
             const isBestSocial = best.score_social >= Math.max(...runners.map(r => r.score_social ?? 0))
             const isBestAcademic = best.score_academic >= Math.max(...runners.map(r => r.score_academic ?? 0))
             const isolated = totalStudents - withFriend
@@ -328,7 +413,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
 
           {/* Proposal cards */}
           <div className="space-y-4">
-            {proposals.map((proposal, idx) => {
+            {currentProposals.map((proposal, idx) => {
               const isExpanded = expandedId === proposal.id
               const isApproved = proposal.status === "aprobada"
               const metricsMap = buildMetricsMap(proposal.metrics ?? [])
