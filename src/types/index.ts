@@ -467,3 +467,38 @@ export interface ImportWarning {
   field: string
   message: string
 }
+
+export interface GroupSession {
+  id: string
+  process_id: string
+  class_name: string
+  name: string
+  num_groups: number
+  balance_gender: boolean
+  balance_academic: boolean
+  use_sociogram: boolean
+  created_by: string | null
+  created_at: string
+  group_sets?: GroupSet[]
+}
+
+export interface GroupSet {
+  id: string
+  session_id: string
+  name: string
+  score_total: number | null
+  status: "generado" | "aprobado"
+  generated_at: string
+  created_at: string
+  group_assignments?: GroupAssignment[]
+}
+
+export interface GroupAssignment {
+  id: string
+  group_set_id: string
+  student_id: string
+  group_number: number
+  role: string | null
+  created_at: string
+  students?: Student
+}
