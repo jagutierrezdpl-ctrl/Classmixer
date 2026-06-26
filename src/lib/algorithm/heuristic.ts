@@ -87,13 +87,12 @@ function computeSubScores(
     }
   })
 
-  // avoid_isolation: % of students with at least one friendship bond (either direction) in same class
+  // avoid_isolation: % of students who chose at least one friend in their class (directional, matches UI)
   let studentsWithFriend = 0
   students.forEach(s => {
     const myClass = assignMap.get(s.id)
     const hasFriend = friendships.some(r =>
-      (r.respondent_student_id === s.id && assignMap.get(r.target_student_id) === myClass) ||
-      (r.target_student_id === s.id && assignMap.get(r.respondent_student_id) === myClass)
+      r.respondent_student_id === s.id && assignMap.get(r.target_student_id) === myClass
     )
     if (hasFriend) studentsWithFriend++
   })
@@ -379,8 +378,7 @@ function buildResult(
     let studentsWithFriendInClass = 0
     classStudents.forEach(s => {
       const hasFriend = friendships.some(r =>
-        (r.respondent_student_id === s.id && assignMap.get(r.target_student_id) === cls) ||
-        (r.target_student_id === s.id && assignMap.get(r.respondent_student_id) === cls)
+        r.respondent_student_id === s.id && assignMap.get(r.target_student_id) === cls
       )
       if (hasFriend) studentsWithFriendInClass++
     })
@@ -1162,19 +1160,16 @@ export function generateProposals(
       }
     }
 
-    // 7. Isolation repair pass — best-effort: ensure every student has ≥1 friendship bond in their class.
-    // Uses a BIDIRECTIONAL friendship map (A chose B OR B chose A = they have a bond), matching the
-    // updated avoid_isolation metric in computeSubScores and buildResult. Does NOT include work relations.
+    // 7. Isolation repair pass — best-effort: ensure every student has ≥1 outgoing friendship choice
+    // in their assigned class. Uses a DIRECTIONAL map (A→B only, never B→A) to match the UI definition:
+    // a student is "sin amigos" only if they chose nobody in their class, regardless of who chose them.
     if (constraints.enforce_no_isolation) {
-      // Bidirectional friendship map: both A→B and B→A for every friendship response
+      // Directional friendship map: only A→B (the chooser's outgoing choices)
       const dirFriendMap = new Map<string, Set<string>>()
       friendshipResps.forEach(r => {
         let setA = dirFriendMap.get(r.respondent_student_id)
         if (!setA) { setA = new Set(); dirFriendMap.set(r.respondent_student_id, setA) }
         setA.add(r.target_student_id)
-        let setB = dirFriendMap.get(r.target_student_id)
-        if (!setB) { setB = new Set(); dirFriendMap.set(r.target_student_id, setB) }
-        setB.add(r.respondent_student_id)
       })
 
       const clsOf = (sid: string) => assignments.find(a => a.student_id === sid)?.target_class
