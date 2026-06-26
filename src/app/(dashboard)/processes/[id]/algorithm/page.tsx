@@ -662,6 +662,32 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
             )}
           </div>
 
+          <div className="border-t" />
+
+          {/* No-isolation repair pass */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Network className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm font-medium">Garantizar al menos un vínculo por alumno</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Tras la optimización, mueve alumnos aislados hasta que cada uno tenga al menos una conexión social en su clase
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={constraints.enforce_no_isolation}
+                onCheckedChange={v => setConstraints(prev => ({ ...prev, enforce_no_isolation: v }))}
+              />
+            </div>
+            {constraints.enforce_no_isolation && (
+              <p className="pl-6 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+                Si un alumno no tiene ninguna amistad ni relación de trabajo con sus compañeros de clase, el sistema intentará moverle (o traerle a alguien) respetando todas las reglas obligatorias. Puede afectar ligeramente al equilibrio académico o de género.
+              </p>
+            )}
+          </div>
+
         </CardContent>
       </Card>
 
