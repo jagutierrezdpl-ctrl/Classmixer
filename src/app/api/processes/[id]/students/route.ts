@@ -26,13 +26,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const supabase = createServiceClient()
+  const { searchParams } = new URL(request.url)
+  const classFilter = searchParams.get("class")
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("students")
     .select("*")
     .eq("process_id", id)
     .eq("active", true)
     .order("last_name")
+
+  if (classFilter) query = query.eq("current_class", classFilter)
+
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

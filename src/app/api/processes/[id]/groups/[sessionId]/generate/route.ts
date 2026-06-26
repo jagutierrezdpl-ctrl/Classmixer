@@ -112,6 +112,36 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // Load cooperative rules (must_separate / must_keep_together)
+  const mustSeparate: Array<[string, string]> = []
+  const mustKeepTogether: Array<[string, string]> = []
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rules } = await (supabase as any)
+    .from("cooperative_rules")
+    .select("id, rule_type, cooperative_rule_students(student_id)")
+    .eq("session_id", sessionId)
+    .eq("active", true)
+
+  if (rules) {
+    for (const rule of rules) {
+      const ids: string[] = (rule.cooperative_rule_students ?? []).map((rs: { student_id: string }) => rs.student_id)
+      // Only include students actually in this class
+      const validIds = ids.filter((sid: string) => studentIds.has(sid))
+      if (validIds.length < 2) continue
+      // Expand into all pairs
+      for (let i = 0; i < validIds.length; i++) {
+        for (let j = i + 1; j < validIds.length; j++) {
+          if (rule.rule_type === "must_separate") {
+            mustSeparate.push([validIds[i], validIds[j]])
+          } else if (rule.rule_type === "must_keep_together") {
+            mustKeepTogether.push([validIds[i], validIds[j]])
+          }
+        }
+      }
+    }
+  }
+
   const groupSizes: number[] | undefined =
     Array.isArray(session.group_sizes) && session.group_sizes.length > 0
       ? (session.group_sizes as number[])
@@ -127,6 +157,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     socialConnections: socialConnections && socialConnections.size > 0 ? socialConnections : undefined,
     socialConflicts: socialConflicts && socialConflicts.size > 0 ? socialConflicts : undefined,
     previousGroupings: previousGroupings.size > 0 ? previousGroupings : undefined,
+    mustSeparate: mustSeparate.length > 0 ? mustSeparate : undefined,
+    mustKeepTogether: mustKeepTogether.length > 0 ? mustKeepTogether : undefined,
   }, 20)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

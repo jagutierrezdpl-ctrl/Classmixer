@@ -6,12 +6,29 @@ import { toast } from "sonner"
 import {
   ArrowLeft, Users2, Loader2, RefreshCw, Printer,
   GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check, CheckCircle2,
+  ShieldAlert, Users, Plus, Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import type { GroupSession, GroupSet, GroupAssignment, Student, SociogramSnapshot } from "@/types"
+
+// ─── Cooperative rule types ───────────────────────────────────────────────────
+
+interface CoopRuleStudent {
+  student_id: string
+  students: { id: string; first_name: string; last_name: string }
+}
+
+interface CoopRule {
+  id: string
+  rule_type: "must_separate" | "must_keep_together"
+  description: string | null
+  cooperative_rule_students: CoopRuleStudent[]
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,6 +106,14 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
   const [editAssignments, setEditAssignments] = useState<GroupAssignmentWithStudent[]>([])
   const [saving, setSaving] = useState(false)
 
+  // Cooperative rules
+  const [rules, setRules] = useState<CoopRule[]>([])
+  const [classStudents, setClassStudents] = useState<Student[]>([])
+  const [showRuleDialog, setShowRuleDialog] = useState(false)
+  const [newRuleType, setNewRuleType] = useState<"must_separate" | "must_keep_together">("must_separate")
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
+  const [savingRule, setSavingRule] = useState(false)
+
   async function loadSession() {
     setLoading(true)
     try {
@@ -98,6 +123,10 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
       const s = sessions.find(s => s.id === sessionId)
       if (!s) { toast.error("Sesión no encontrada"); return }
       setSession(s)
+      await Promise.all([
+        loadRules(),
+        loadClassStudents(s.class_name),
+      ])
 
       if (s.group_sets && s.group_sets.length > 0) {
         const latest = s.group_sets.sort((a, b) =>
@@ -216,6 +245,63 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
     } catch {
       toast.error("Error inesperado")
     }
+  }
+
+  async function loadRules() {
+    const res = await fetch(`/api/cooperative/${sessionId}/rules`)
+    if (res.ok) setRules(await res.json())
+  }
+
+  async function loadClassStudents(className: string) {
+    const res = await fetch(`/api/processes/${id}/students?class=${encodeURIComponent(className)}`)
+    if (res.ok) {
+      const all: Student[] = await res.json()
+      setClassStudents(all.filter(s => s.active !== false))
+    }
+  }
+
+  async function handleAddRule() {
+    if (selectedStudentIds.length < 2) {
+      toast.error("Selecciona al menos 2 alumnos")
+      return
+    }
+    setSavingRule(true)
+    try {
+      const res = await fetch(`/api/cooperative/${sessionId}/rules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule_type: newRuleType, student_ids: selectedStudentIds }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        toast.error(err.error ?? "Error al crear la regla")
+        return
+      }
+      toast.success("Regla creada")
+      setShowRuleDialog(false)
+      setSelectedStudentIds([])
+      await loadRules()
+    } catch {
+      toast.error("Error inesperado")
+    } finally {
+      setSavingRule(false)
+    }
+  }
+
+  async function handleDeleteRule(ruleId: string) {
+    try {
+      const res = await fetch(`/api/cooperative/${sessionId}/rules/${ruleId}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Error al eliminar la regla"); return }
+      setRules(prev => prev.filter(r => r.id !== ruleId))
+    } catch {
+      toast.error("Error inesperado")
+    }
+  }
+
+  function toggleStudent(sid: string) {
+    setSelectedStudentIds(prev =>
+      prev.includes(sid) ? prev.filter(id => id !== sid) : [...prev, sid]
+    )
   }
 
   if (loading) {
@@ -465,6 +551,102 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
           })}
         </div>
       )}
+
+      {/* Cooperative rules panel */}
+      {!editMode && (
+        <div className="mt-8 print:hidden">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4" /> Reglas de agrupación
+            </h2>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
+              setSelectedStudentIds([])
+              setNewRuleType("must_separate")
+              setShowRuleDialog(true)
+            }}>
+              <Plus className="w-3.5 h-3.5" /> Nueva regla
+            </Button>
+          </div>
+          {rules.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin reglas. Las reglas se aplican al generar o regenerar grupos.</p>
+          ) : (
+            <div className="space-y-2">
+              {rules.map(rule => (
+                <div key={rule.id} className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${rule.rule_type === "must_separate" ? "border-red-200 bg-red-50/50" : "border-green-200 bg-green-50/50"}`}>
+                  <div className="flex-1 min-w-0">
+                    <Badge variant="outline" className={`text-xs mb-1 ${rule.rule_type === "must_separate" ? "border-red-300 text-red-700" : "border-green-300 text-green-700"}`}>
+                      {rule.rule_type === "must_separate" ? "Separar" : "Mantener juntos"}
+                    </Badge>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {rule.cooperative_rule_students.map(rs => (
+                        <span key={rs.student_id} className="inline-flex items-center gap-1 text-xs bg-white border rounded px-1.5 py-0.5">
+                          <Users className="w-3 h-3 opacity-50" />
+                          {rs.students.first_name} {rs.students.last_name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:text-red-600 shrink-0" onClick={() => handleDeleteRule(rule.id)}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add rule dialog */}
+      <Dialog open={showRuleDialog} onOpenChange={setShowRuleDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nueva regla de agrupación</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Tipo de regla</Label>
+              <Select value={newRuleType} onValueChange={(v) => setNewRuleType(v as typeof newRuleType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="must_separate">Separar — no pueden estar en el mismo grupo</SelectItem>
+                  <SelectItem value="must_keep_together">Juntar — deben estar en el mismo grupo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Alumnos implicados <span className="text-muted-foreground font-normal">(mín. 2)</span></Label>
+              <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
+                {classStudents.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors ${selectedStudentIds.includes(s.id) ? "bg-primary/5 font-medium" : ""}`}
+                    onClick={() => toggleStudent(s.id)}
+                  >
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${selectedStudentIds.includes(s.id) ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
+                      {selectedStudentIds.includes(s.id) && <Check className="w-2.5 h-2.5 text-white" />}
+                    </span>
+                    {s.first_name} {s.last_name}
+                    <span className="ml-auto text-xs text-muted-foreground">{s.gender}</span>
+                  </button>
+                ))}
+              </div>
+              {selectedStudentIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">{selectedStudentIds.length} alumno{selectedStudentIds.length > 1 ? "s" : ""} seleccionado{selectedStudentIds.length > 1 ? "s" : ""}</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRuleDialog(false)}>Cancelar</Button>
+            <Button onClick={handleAddRule} disabled={savingRule || selectedStudentIds.length < 2} className="gap-2">
+              {savingRule ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Crear regla
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Previous sets list */}
       {session.group_sets && session.group_sets.length > 1 && !editMode && (

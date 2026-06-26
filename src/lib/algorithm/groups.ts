@@ -13,6 +13,9 @@ export interface GroupConfig {
   socialConflicts?: Map<string, Set<string>>   // studentId → conflict students (negative)
   // Always used when available (independent of useSociogram)
   previousGroupings?: Map<string, Set<string>> // studentId → students grouped with before
+  // Hard constraints from cooperative rules
+  mustSeparate?: Array<[string, string]>        // pairs that must be in different groups
+  mustKeepTogether?: Array<[string, string]>    // pairs that should be in the same group
 }
 
 export interface GroupResult {
@@ -90,11 +93,68 @@ function scoreGroups(groups: Student[][], config: GroupConfig): number {
           config.previousGroupings?.get(a)?.has(b) ||
           config.previousGroupings?.get(b)?.has(a)
         if (repeated) score -= 2
+
+        // Cooperative rules
+        const separated = config.mustSeparate?.some(([x, y]) => (x === a && y === b) || (x === b && y === a))
+        if (separated) score -= 50
+        const kept = config.mustKeepTogether?.some(([x, y]) => (x === a && y === b) || (x === b && y === a))
+        if (kept) score += 15
       }
     }
   }
 
   return Math.max(0, score)
+}
+
+// Repair pass: swap students to fix must_separate violations.
+// Modifies groups in place; returns true if all violations are resolved.
+function repairSeparations(groups: Student[][], mustSeparate: Array<[string, string]>): boolean {
+  let improved = true
+  let passes = 0
+  while (improved && passes < 30) {
+    improved = false
+    passes++
+    for (const [aId, bId] of mustSeparate) {
+      // Find which groups contain each student
+      const gA = groups.findIndex(g => g.some(s => s.id === aId))
+      const gB = groups.findIndex(g => g.some(s => s.id === bId))
+      if (gA === -1 || gB === -1 || gA !== gB) continue // already separated or not found
+      // They're in the same group — try to move B to a different group
+      const sB = groups[gA].find(s => s.id === bId)!
+      // Find target group: prefer one that doesn't also contain conflicting pairs with sB
+      let moved = false
+      for (let t = 0; t < groups.length; t++) {
+        if (t === gA) continue
+        const wouldViolate = mustSeparate.some(([x, y]) => {
+          const partner = x === bId ? y : y === bId ? x : null
+          return partner && groups[t].some(s => s.id === partner)
+        })
+        if (!wouldViolate) {
+          groups[gA] = groups[gA].filter(s => s.id !== bId)
+          // Swap with the last student of target group to keep sizes balanced
+          const swapped = groups[t][groups[t].length - 1]
+          groups[t] = [...groups[t].slice(0, -1), sB]
+          groups[gA] = [...groups[gA], swapped]
+          improved = true
+          moved = true
+          break
+        }
+      }
+      if (!moved) {
+        // Last resort: just move without swapping (sizes will differ by 1)
+        groups[gA] = groups[gA].filter(s => s.id !== bId)
+        const target = groups.reduce((best, g, i) => i !== gA && g.length < groups[best].length ? i : best, (gA + 1) % groups.length)
+        groups[target] = [...groups[target], sB]
+        improved = true
+      }
+    }
+  }
+  // Check if all violations resolved
+  return mustSeparate.every(([a, b]) => {
+    const gA = groups.findIndex(g => g.some(s => s.id === a))
+    const gB = groups.findIndex(g => g.some(s => s.id === b))
+    return gA === -1 || gB === -1 || gA !== gB
+  })
 }
 
 export function generateGroups(students: Student[], config: GroupConfig, seed = 0): GroupResult {
@@ -173,6 +233,11 @@ export function generateGroups(students: Student[], config: GroupConfig, seed = 
         else gIdx--
       }
     }
+  }
+
+  // Apply repair pass for hard must_separate constraints
+  if (config.mustSeparate && config.mustSeparate.length > 0) {
+    repairSeparations(groups, config.mustSeparate)
   }
 
   const score = scoreGroups(groups, config)

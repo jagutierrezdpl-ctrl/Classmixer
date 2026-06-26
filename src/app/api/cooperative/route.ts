@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, tutorCanAccessProcess } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess, getTutorGroups } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 // GET — list all group_sessions the user can access, across all processes in the center.
@@ -32,11 +32,23 @@ export async function GET(_req: Request) {
 
   if (accessibleProcessIds.length === 0) return NextResponse.json([])
 
-  const { data, error } = await (supabase as any)
+  // Tutors only see sessions for their own assigned classes
+  const tutorClasses = profile.role === "tutor"
+    ? await getTutorGroups(profile.center_id, profile.id)
+    : null
+
+  let query = (supabase as any)
     .from("group_sessions")
     .select("*, group_sets(id, name, status, score_total, generated_at), sociogram_snapshots(id, name)")
     .in("process_id", accessibleProcessIds)
     .order("created_at", { ascending: false })
+
+  if (tutorClasses !== null) {
+    if (tutorClasses.length === 0) return NextResponse.json([])
+    query = query.in("class_name", tutorClasses)
+  }
+
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -85,8 +97,15 @@ export async function POST(req: Request) {
 
   // Authorization check for non-admins
   if (!hasFullAccess(profile.role)) {
-    const ok = await tutorCanAccessProcess(profile.center_id, profile.id, processId)
-    if (!ok) return NextResponse.json({ error: "Sin acceso a esa clase" }, { status: 403 })
+    if (profile.role === "tutor") {
+      const tutorClasses = await getTutorGroups(profile.center_id, profile.id)
+      if (!tutorClasses.includes(class_name)) {
+        return NextResponse.json({ error: "Solo puedes crear grupos para tu propia clase" }, { status: 403 })
+      }
+    } else {
+      const ok = await tutorCanAccessProcess(profile.center_id, profile.id, processId)
+      if (!ok) return NextResponse.json({ error: "Sin acceso a esa clase" }, { status: 403 })
+    }
   }
 
   const sizes: number[] | undefined =

@@ -1,14 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, tutorCanAccessProcess } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, tutorCanAccessProcess, getTutorGroups } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
-// Returns distinct class names that have active students in any accessible process for this center.
+// Returns distinct class names that have active students in any accessible process
+// for this center. Tutors only see their own assigned classes.
 export async function GET(_req: Request) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const supabase = createServiceClient()
+
+  // Tutors are restricted to their own assigned classes
+  if (profile.role === "tutor") {
+    const tutorClasses = await getTutorGroups(profile.center_id, profile.id)
+    return NextResponse.json(tutorClasses.sort())
+  }
 
   const { data: processes } = await supabase
     .from("processes")
