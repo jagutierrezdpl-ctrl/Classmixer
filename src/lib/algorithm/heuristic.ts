@@ -1533,6 +1533,88 @@ export function generateProposals(
         }
       }
 
+      // Option F: gender balance swap pass.
+      // After isolation is fixed, try F↔M size-neutral swaps between the most-over-female
+      // and most-under-female classes. Unlike repairGenderOk (which blocks moves when the
+      // destination is already off-tolerance), this pass specifically targets improvement
+      // from an already-unbalanced state by checking "does this swap help?" rather than
+      // "does the destination stay within tolerance after this move?".
+      if (constraints.enforce_gender_balance) {
+        let gSwapDone = true
+        let gIter = 0
+        while (gSwapDone && gIter < 15) {
+          gSwapDone = false
+          gIter++
+
+          // Find the most over-female and most under-female classes
+          let overCls = targetClasses[0], underCls = targetClasses[0]
+          let maxDev = -Infinity, minDev = Infinity
+          for (const c of targetClasses) {
+            const inC = assignments.filter(a => a.target_class === c)
+            const fC = inC.filter(a => studentMapLocal.get(a.student_id)?.gender === "F").length
+            const dev = inC.length > 0 ? fC / inC.length - globalFRatio : 0
+            if (dev > maxDev) { maxDev = dev; overCls = c }
+            if (dev < minDev) { minDev = dev; underCls = c }
+          }
+
+          // Already within tolerance — nothing to fix
+          const tol = constraints.gender_tolerance / 100
+          if (maxDev <= tol && minDev >= -tol) break
+          if (overCls === underCls) break
+
+          // Females in the over-female class that can move
+          const femalesOver = assignments.filter(a =>
+            a.target_class === overCls &&
+            studentMapLocal.get(a.student_id)?.gender === "F" &&
+            !lockedStudents.has(a.student_id) &&
+            !mustTogetherLockedClass.has(a.student_id)
+          )
+          // Males in the under-female class that can move
+          const malesUnder = assignments.filter(a =>
+            a.target_class === underCls &&
+            studentMapLocal.get(a.student_id)?.gender === "M" &&
+            !lockedStudents.has(a.student_id) &&
+            !mustTogetherLockedClass.has(a.student_id)
+          )
+
+          genderSwap:
+          for (const fA of femalesOver) {
+            const fId = fA.student_id
+            // F must have chosen at least one person in underCls so she won't be isolated there
+            const fConns = dirFriendMap.get(fId) ?? new Set<string>()
+            if (![...fConns].some(c => clsOf(c) === underCls)) continue
+            if (forbiddenClassMap.get(fId)?.has(underCls)) continue
+
+            for (const mA of malesUnder) {
+              const mId = mA.student_id
+              // M must have chosen at least one person in overCls so he won't be isolated there
+              const mConns = dirFriendMap.get(mId) ?? new Set<string>()
+              if (![...mConns].some(c => clsOf(c) === overCls)) continue
+              if (forbiddenClassMap.get(mId)?.has(overCls)) continue
+
+              // Tentative swap (size-neutral — no classCounts update needed)
+              const fIdx = assignments.findIndex(a => a.student_id === fId)
+              const mIdx = assignments.findIndex(a => a.student_id === mId)
+              assignments[fIdx].target_class = underCls
+              assignments[mIdx].target_class = overCls
+
+              // Verify: no isolation introduced, separation rules respected after the swap
+              const noIso = !assignments.some(a => !hasChosen(a.student_id, a.target_class))
+              const sepOk = repairSepOk(fId, underCls) && repairSepOk(mId, overCls)
+
+              if (noIso && sepOk) {
+                gSwapDone = true
+                break genderSwap
+              }
+
+              // Revert
+              assignments[fIdx].target_class = overCls
+              assignments[mIdx].target_class = underCls
+            }
+          }
+        }
+      }
+
       // After all repair options, reject this seed if any student is still isolated.
       // A different seed will produce a different initial distribution that may not need
       // the cascading swaps that cause this problem.
