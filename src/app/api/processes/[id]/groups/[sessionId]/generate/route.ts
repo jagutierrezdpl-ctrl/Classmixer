@@ -25,7 +25,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .single()
   if (!session) return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 })
 
-  // Get students for this class
   const { data: students } = await supabase
     .from("students")
     .select("*")
@@ -37,14 +36,74 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "No hay alumnos en esta clase" }, { status: 400 })
   }
 
+  const studentIds = new Set((students as Student[]).map(s => s.id))
+
+  // Load social data when use_sociogram is enabled
+  let socialConnections: Map<string, Set<string>> | undefined
+  let socialConflicts: Map<string, Set<string>> | undefined
+
+  if (session.use_sociogram) {
+    const { data: responses } = await supabase
+      .from("responses")
+      .select("respondent_student_id, target_student_id, relation_type")
+      .eq("process_id", id)
+
+    if (responses) {
+      socialConnections = new Map()
+      socialConflicts = new Map()
+      for (const r of responses) {
+        if (!studentIds.has(r.respondent_student_id) || !studentIds.has(r.target_student_id)) continue
+        if (r.relation_type === "negative") {
+          if (!socialConflicts.has(r.respondent_student_id)) socialConflicts.set(r.respondent_student_id, new Set())
+          socialConflicts.get(r.respondent_student_id)!.add(r.target_student_id)
+        } else if (r.relation_type === "friendship" || r.relation_type === "work") {
+          if (!socialConnections.has(r.respondent_student_id)) socialConnections.set(r.respondent_student_id, new Set())
+          socialConnections.get(r.respondent_student_id)!.add(r.target_student_id)
+        }
+      }
+    }
+  }
+
+  // Build anti-repetition map from all previous group sets in this session
+  const previousGroupings = new Map<string, Set<string>>()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: prevSets } = await (supabase as any)
+    .from("group_sets")
+    .select("id, group_assignments(student_id, group_number)")
+    .eq("session_id", sessionId)
+
+  if (prevSets) {
+    for (const gs of prevSets) {
+      const byGroup = new Map<number, string[]>()
+      for (const a of (gs.group_assignments ?? [])) {
+        if (!byGroup.has(a.group_number)) byGroup.set(a.group_number, [])
+        byGroup.get(a.group_number)!.push(a.student_id)
+      }
+      for (const [, members] of byGroup) {
+        for (let i = 0; i < members.length; i++) {
+          for (let j = i + 1; j < members.length; j++) {
+            const a = members[i], b = members[j]
+            if (!previousGroupings.has(a)) previousGroupings.set(a, new Set())
+            if (!previousGroupings.has(b)) previousGroupings.set(b, new Set())
+            previousGroupings.get(a)!.add(b)
+            previousGroupings.get(b)!.add(a)
+          }
+        }
+      }
+    }
+  }
+
   const result = generateBestGroups(students as Student[], {
     numGroups: session.num_groups,
     balanceGender: session.balance_gender,
     balanceAcademic: session.balance_academic,
     useSociogram: session.use_sociogram,
+    socialConnections: socialConnections && socialConnections.size > 0 ? socialConnections : undefined,
+    socialConflicts: socialConflicts && socialConflicts.size > 0 ? socialConflicts : undefined,
+    previousGroupings: previousGroupings.size > 0 ? previousGroupings : undefined,
   }, 20)
 
-  // Count existing group_sets for this session to name it
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { count } = await (supabase as any)
     .from("group_sets")

@@ -5,11 +5,12 @@ import Link from "next/link"
 import { toast } from "sonner"
 import {
   ArrowLeft, Users2, Loader2, RefreshCw, Printer,
-  GraduationCap, UserCheck, BookOpen, Mic, Eye,
+  GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { GroupSession, GroupSet, GroupAssignment, Student } from "@/types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,7 +64,6 @@ function genderBadge(gender: string) {
   return <Badge variant="outline" className="text-xs">{gender}</Badge>
 }
 
-// Build groups map from assignments
 function buildGroups(assignments: GroupAssignmentWithStudent[]): Map<number, GroupAssignmentWithStudent[]> {
   const map = new Map<number, GroupAssignmentWithStudent[]>()
   for (const a of assignments) {
@@ -83,6 +83,11 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
 
+  // Edit mode
+  const [editMode, setEditMode] = useState(false)
+  const [editAssignments, setEditAssignments] = useState<GroupAssignmentWithStudent[]>([])
+  const [saving, setSaving] = useState(false)
+
   async function loadSession() {
     setLoading(true)
     try {
@@ -93,7 +98,6 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
       if (!s) { toast.error("Sesión no encontrada"); return }
       setSession(s)
 
-      // Load the latest group set if any
       if (s.group_sets && s.group_sets.length > 0) {
         const latest = s.group_sets.sort((a, b) =>
           new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime()
@@ -129,12 +133,57 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
       const result = await res.json()
       toast.success(`Grupos generados (puntuación: ${result.score_total?.toFixed(1)})`)
       await loadGroupSet(result.id)
-      // Refresh session to update group_sets list
       await loadSession()
     } catch {
       toast.error("Error inesperado")
     } finally {
       setGenerating(false)
+    }
+  }
+
+  function enterEdit() {
+    if (!latestSet?.group_assignments) return
+    setEditAssignments([...latestSet.group_assignments])
+    setEditMode(true)
+  }
+
+  function exitEdit() {
+    setEditMode(false)
+    setEditAssignments([])
+  }
+
+  function moveStudent(studentId: string, newGroup: number) {
+    setEditAssignments(prev => prev.map(a =>
+      a.student_id === studentId ? { ...a, group_number: newGroup } : a
+    ))
+  }
+
+  async function handleSave() {
+    if (!latestSet) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/group-sets/${latestSet.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignments: editAssignments.map(a => ({
+            student_id: a.student_id,
+            group_number: a.group_number,
+            role: a.role,
+          })),
+        }),
+      })
+      if (!res.ok) {
+        toast.error("Error al guardar los cambios")
+        return
+      }
+      toast.success("Cambios guardados")
+      exitEdit()
+      await loadGroupSet(latestSet.id)
+    } catch {
+      toast.error("Error inesperado")
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -157,8 +206,10 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
     )
   }
 
-  const groups = latestSet?.group_assignments ? buildGroups(latestSet.group_assignments) : new Map()
+  const displayAssignments = editMode ? editAssignments : (latestSet?.group_assignments ?? [])
+  const groups = displayAssignments.length > 0 ? buildGroups(displayAssignments) : new Map<number, GroupAssignmentWithStudent[]>()
   const sortedGroupNumbers = [...groups.keys()].sort((a, b) => a - b)
+  const numGroups = session.num_groups
 
   return (
     <div className="p-8 print:p-4">
@@ -171,33 +222,59 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
           <div>
             <h1 className="text-2xl font-bold">{session.name}</h1>
             <p className="text-muted-foreground text-sm">
-              Clase {session.class_name} · {session.num_groups} grupos
+              Clase {session.class_name} · {numGroups} grupos
               {session.balance_gender ? " · Equilibrio de género" : ""}
               {session.balance_academic ? " · Equilibrio académico" : ""}
+              {session.use_sociogram ? " · Sociograma" : ""}
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          {latestSet && (
-            <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-2">
-              <Printer className="w-4 h-4" /> Imprimir
+        <div className="flex gap-2 flex-wrap">
+          {latestSet && !editMode && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-2">
+                <Printer className="w-4 h-4" /> Imprimir
+              </Button>
+              <Button variant="outline" size="sm" onClick={enterEdit} className="gap-2">
+                <Pencil className="w-4 h-4" /> Editar
+              </Button>
+            </>
+          )}
+          {editMode ? (
+            <>
+              <Button variant="outline" size="sm" onClick={exitEdit} disabled={saving} className="gap-2">
+                <X className="w-4 h-4" /> Descartar
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Guardar cambios
+              </Button>
+            </>
+          ) : (
+            <Button onClick={handleGenerate} disabled={generating} className="gap-2">
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {latestSet ? "Regenerar" : "Generar grupos"}
             </Button>
           )}
-          <Button onClick={handleGenerate} disabled={generating} className="gap-2">
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            {latestSet ? "Regenerar grupos" : "Generar grupos"}
-          </Button>
         </div>
       </div>
 
       {/* Print header */}
       <div className="hidden print:block mb-6">
         <h1 className="text-xl font-bold">{session.name}</h1>
-        <p className="text-sm text-gray-600">Clase {session.class_name} · {session.num_groups} grupos</p>
+        <p className="text-sm text-gray-600">Clase {session.class_name} · {numGroups} grupos</p>
       </div>
 
+      {/* Edit mode banner */}
+      {editMode && (
+        <div className="mb-5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          <Pencil className="w-4 h-4 shrink-0" />
+          Modo edición — usa los selectores para mover alumnos entre grupos. Los cambios no se guardan hasta pulsar «Guardar cambios».
+        </div>
+      )}
+
       {/* Score banner */}
-      {latestSet && (
+      {latestSet && !editMode && (
         <div className="mb-6 flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-sm px-3 py-1">
@@ -255,30 +332,51 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
                 </CardHeader>
                 <CardContent className="px-4 pb-4 space-y-2">
                   {members
-                    .sort((a: GroupAssignmentWithStudent, b: GroupAssignmentWithStudent) => (a.role && !b.role ? -1 : !a.role && b.role ? 1 : 0))
-                    .map((assignment: GroupAssignmentWithStudent) => {
+                    .sort((a, b) => (a.role && !b.role ? -1 : !a.role && b.role ? 1 : 0))
+                    .map((assignment) => {
                       const student = assignment.students
                       const roleConf = assignment.role ? ROLE_CONFIG[assignment.role] : null
                       return (
-                        <div key={assignment.id} className="flex items-start gap-2 py-1 border-b border-black/5 last:border-0">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium leading-tight truncate">
-                              {student ? `${student.first_name} ${student.last_name}` : "—"}
-                            </p>
-                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              {student && genderBadge(student.gender)}
-                              {student?.academic_level && (
-                                <span className="text-xs text-muted-foreground">{student.academic_level}</span>
-                              )}
+                        <div key={assignment.id ?? assignment.student_id} className="py-1 border-b border-black/5 last:border-0">
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium leading-tight truncate">
+                                {student ? `${student.first_name} ${student.last_name}` : "—"}
+                              </p>
+                              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                {student && genderBadge(student.gender)}
+                                {student?.academic_level && (
+                                  <span className="text-xs text-muted-foreground">{student.academic_level}</span>
+                                )}
+                              </div>
                             </div>
+                            {!editMode && roleConf && (
+                              <Badge
+                                variant="outline"
+                                className={`text-xs border shrink-0 ${roleConf.color}`}
+                              >
+                                {roleConf.label}
+                              </Badge>
+                            )}
                           </div>
-                          {roleConf && (
-                            <Badge
-                              variant="outline"
-                              className={`text-xs border shrink-0 ${roleConf.color}`}
-                            >
-                              {roleConf.label}
-                            </Badge>
+                          {editMode && (
+                            <div className="mt-1.5">
+                              <Select
+                                value={String(assignment.group_number)}
+                                onValueChange={(v) => moveStudent(assignment.student_id, Number(v))}
+                              >
+                                <SelectTrigger className="h-7 text-xs w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({ length: numGroups }, (_, i) => i + 1).map(n => (
+                                    <SelectItem key={n} value={String(n)} className="text-xs">
+                                      Grupo {n}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           )}
                         </div>
                       )
@@ -291,7 +389,7 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* Previous sets list */}
-      {session.group_sets && session.group_sets.length > 1 && (
+      {session.group_sets && session.group_sets.length > 1 && !editMode && (
         <div className="mt-8 print:hidden">
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Distribuciones anteriores</h2>
           <div className="flex flex-wrap gap-2">

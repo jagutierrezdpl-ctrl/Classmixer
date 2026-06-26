@@ -47,6 +47,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   const [formNumGroups, setFormNumGroups] = useState(4)
   const [formBalanceGender, setFormBalanceGender] = useState(true)
   const [formBalanceAcademic, setFormBalanceAcademic] = useState(true)
+  const [formUseSociogram, setFormUseSociogram] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -90,7 +91,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
           num_groups: formNumGroups,
           balance_gender: formBalanceGender,
           balance_academic: formBalanceAcademic,
-          use_sociogram: false,
+          use_sociogram: formUseSociogram,
         }),
       })
       if (!res.ok) {
@@ -255,6 +256,17 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
                   id="balance-academic"
                   checked={formBalanceAcademic}
                   onCheckedChange={setFormBalanceAcademic}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="use-sociogram">Usar sociograma</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Requiere cuestionario completado</p>
+                </div>
+                <Switch
+                  id="use-sociogram"
+                  checked={formUseSociogram}
+                  onCheckedChange={setFormUseSociogram}
                 />
               </div>
             </div>

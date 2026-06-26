@@ -5,6 +5,11 @@ export interface GroupConfig {
   balanceGender: boolean
   balanceAcademic: boolean
   useSociogram: boolean
+  // Social data loaded when useSociogram=true
+  socialConnections?: Map<string, Set<string>> // studentId → students chosen (friendship/work)
+  socialConflicts?: Map<string, Set<string>>   // studentId → conflict students (negative)
+  // Always used when available (independent of useSociogram)
+  previousGroupings?: Map<string, Set<string>> // studentId → students grouped with before
 }
 
 export interface GroupResult {
@@ -34,17 +39,13 @@ function shuffle<T>(arr: T[], seed: number): T[] {
   return a
 }
 
-// Score a distribution: rewards gender balance and academic heterogeneity per group
-function scoreGroups(
-  groups: Student[][],
-  config: GroupConfig
-): number {
+function scoreGroups(groups: Student[][], config: GroupConfig): number {
   let score = 100
-  const n = groups.length
-  if (n === 0) return 0
+  if (groups.length === 0) return 0
 
-  const globalF = groups.flat().filter(s => s.gender === "F").length
-  const totalStudents = groups.flat().length
+  const allStudents = groups.flat()
+  const totalStudents = allStudents.length
+  const globalF = allStudents.filter(s => s.gender === "F").length
   const globalFRatio = totalStudents > 0 ? globalF / totalStudents : 0.5
 
   for (const g of groups) {
@@ -52,8 +53,7 @@ function scoreGroups(
 
     if (config.balanceGender) {
       const f = g.filter(s => s.gender === "F").length
-      const ratio = f / g.length
-      const dev = Math.abs(ratio - globalFRatio)
+      const dev = Math.abs(f / g.length - globalFRatio)
       score -= dev * 50
     }
 
@@ -61,26 +61,46 @@ function scoreGroups(
       const levels = g.map(s => academicScore(s))
       const mean = levels.reduce((a, b) => a + b, 0) / levels.length
       const variance = levels.reduce((a, b) => a + (b - mean) ** 2, 0) / levels.length
-      // Higher variance = better heterogeneity (max ~4 for a fully mixed group)
       score += Math.min(variance / 2, 10)
+    }
+
+    // Per-pair social scoring
+    const ids = g.map(s => s.id)
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = ids[i], b = ids[j]
+
+        if (config.useSociogram) {
+          const connected =
+            config.socialConnections?.get(a)?.has(b) ||
+            config.socialConnections?.get(b)?.has(a)
+          if (connected) score += 3
+
+          const conflict =
+            config.socialConflicts?.get(a)?.has(b) ||
+            config.socialConflicts?.get(b)?.has(a)
+          if (conflict) score -= 8
+        }
+
+        // Anti-repetition (always applied when data is available)
+        const repeated =
+          config.previousGroupings?.get(a)?.has(b) ||
+          config.previousGroupings?.get(b)?.has(a)
+        if (repeated) score -= 2
+      }
     }
   }
 
   return Math.max(0, score)
 }
 
-export function generateGroups(
-  students: Student[],
-  config: GroupConfig,
-  seed = 0
-): GroupResult {
+export function generateGroups(students: Student[], config: GroupConfig, seed = 0): GroupResult {
   if (students.length === 0 || config.numGroups < 1) {
     return { assignments: [], score_total: 0 }
   }
 
   const numGroups = Math.min(config.numGroups, students.length)
 
-  // Interleave by gender then by academic level for balanced snake distribution
   const base = seed === 0
     ? [...students].sort((a, b) => academicScore(b) - academicScore(a))
     : shuffle([...students], seed * 12345 + 7)
@@ -88,20 +108,17 @@ export function generateGroups(
   let sortedStudents: Student[]
 
   if (config.balanceGender) {
-    // Interleave F and M proportionally (same as main algorithm)
     const females = base.filter(s => s.gender === "F")
     const males = base.filter(s => s.gender === "M")
     const others = base.filter(s => s.gender !== "F" && s.gender !== "M")
-    // Within each gender, also sort by academic level (descending)
     if (seed === 0) {
       females.sort((a, b) => academicScore(b) - academicScore(a))
       males.sort((a, b) => academicScore(b) - academicScore(a))
     }
     const interleaved: Student[] = []
     let fi = 0, mi = 0
-    const fLen = females.length, mLen = males.length
-    while (fi < fLen || mi < mLen) {
-      const addF = mi >= mLen || (fi < fLen && fi * mLen <= mi * fLen)
+    while (fi < females.length || mi < males.length) {
+      const addF = mi >= males.length || (fi < females.length && fi * males.length <= mi * females.length)
       if (addF) interleaved.push(females[fi++])
       else interleaved.push(males[mi++])
     }
@@ -110,11 +127,9 @@ export function generateGroups(
     sortedStudents = base
   }
 
-  // Snake distribution across groups
   const groups: Student[][] = Array.from({ length: numGroups }, () => [])
   let direction = 1
   let gIdx = 0
-
   for (const student of sortedStudents) {
     groups[gIdx].push(student)
     if (direction === 1) {
@@ -128,9 +143,7 @@ export function generateGroups(
 
   const score = scoreGroups(groups, config)
 
-  // Assign roles to the first 4 slots of each group
   const ROLES = ["coordinador", "secretario", "portavoz", "revisor"]
-
   const assignments: GroupResult["assignments"] = []
   groups.forEach((group, gi) => {
     group.forEach((student, memberIdx) => {
@@ -145,12 +158,7 @@ export function generateGroups(
   return { assignments, score_total: score }
 }
 
-// Try multiple seeds and return the best result
-export function generateBestGroups(
-  students: Student[],
-  config: GroupConfig,
-  tries = 10
-): GroupResult {
+export function generateBestGroups(students: Student[], config: GroupConfig, tries = 10): GroupResult {
   let best: GroupResult = { assignments: [], score_total: -1 }
   for (let seed = 0; seed < tries; seed++) {
     const result = generateGroups(students, config, seed)
