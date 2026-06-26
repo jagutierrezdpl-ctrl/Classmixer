@@ -87,13 +87,14 @@ function computeSubScores(
     }
   })
 
-  // avoid_isolation: % of students with at least one chosen friend in same class
+  // avoid_isolation: % of students with at least one friendship bond (either direction) in same class
   let studentsWithFriend = 0
   students.forEach(s => {
     const myClass = assignMap.get(s.id)
-    const hasFriend = friendships
-      .filter(r => r.respondent_student_id === s.id)
-      .some(r => assignMap.get(r.target_student_id) === myClass)
+    const hasFriend = friendships.some(r =>
+      (r.respondent_student_id === s.id && assignMap.get(r.target_student_id) === myClass) ||
+      (r.target_student_id === s.id && assignMap.get(r.respondent_student_id) === myClass)
+    )
     if (hasFriend) studentsWithFriend++
   })
   const avoidIsolation = students.length > 0 ? (studentsWithFriend / students.length) * 100 : 100
@@ -377,9 +378,10 @@ function buildResult(
 
     let studentsWithFriendInClass = 0
     classStudents.forEach(s => {
-      const hasFriend = friendships
-        .filter(r => r.respondent_student_id === s.id)
-        .some(r => assignMap.get(r.target_student_id) === cls)
+      const hasFriend = friendships.some(r =>
+        (r.respondent_student_id === s.id && assignMap.get(r.target_student_id) === cls) ||
+        (r.target_student_id === s.id && assignMap.get(r.respondent_student_id) === cls)
+      )
       if (hasFriend) studentsWithFriendInClass++
     })
 
@@ -1159,21 +1161,23 @@ export function generateProposals(
       }
     }
 
-    // 7. Isolation repair pass — best-effort: ensure every student has ≥1 friendship choice in their class.
-    // Uses the SAME definition as the score's avoid_isolation metric: directional friendship choices
-    // made BY the student (respondent→target), NOT bidirectional and NOT including work relations.
-    // This guarantees the repair fixes exactly what the UI shows as "students_isolated".
+    // 7. Isolation repair pass — best-effort: ensure every student has ≥1 friendship bond in their class.
+    // Uses a BIDIRECTIONAL friendship map (A chose B OR B chose A = they have a bond), matching the
+    // updated avoid_isolation metric in computeSubScores and buildResult. Does NOT include work relations.
     if (constraints.enforce_no_isolation) {
-      // Directional friendship map: sid → set of students sid CHOSE (matching computeSubScores)
+      // Bidirectional friendship map: both A→B and B→A for every friendship response
       const dirFriendMap = new Map<string, Set<string>>()
       friendshipResps.forEach(r => {
-        let set = dirFriendMap.get(r.respondent_student_id)
-        if (!set) { set = new Set(); dirFriendMap.set(r.respondent_student_id, set) }
-        set.add(r.target_student_id)
+        let setA = dirFriendMap.get(r.respondent_student_id)
+        if (!setA) { setA = new Set(); dirFriendMap.set(r.respondent_student_id, setA) }
+        setA.add(r.target_student_id)
+        let setB = dirFriendMap.get(r.target_student_id)
+        if (!setB) { setB = new Set(); dirFriendMap.set(r.target_student_id, setB) }
+        setB.add(r.respondent_student_id)
       })
 
       const clsOf = (sid: string) => assignments.find(a => a.student_id === sid)?.target_class
-      // Student is "covered" if they chose at least one person who ended up in the same class
+      // Student is "covered" if they have at least one friendship bond (either direction) in the same class
       const hasChosen = (sid: string, cls: string) =>
         [...(dirFriendMap.get(sid) ?? [])].some(cid => clsOf(cid) === cls)
       const isMovable = (sid: string) => !lockedStudents.has(sid) && !mustTogetherLockedClass.has(sid)
@@ -1224,7 +1228,7 @@ export function generateProposals(
         }
       }
 
-      // Isolated = chose no one who is in the same class (mirrors the score metric exactly)
+      // Isolated = no friendship bond (either direction) in current class
       const isolated = assignments.filter(a => !hasChosen(a.student_id, a.target_class))
 
       for (const iso of isolated) {
