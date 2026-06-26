@@ -159,6 +159,12 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
     ))
   }
 
+  function changeRole(studentId: string, role: string | null) {
+    setEditAssignments(prev => prev.map(a =>
+      a.student_id === studentId ? { ...a, role } : a
+    ))
+  }
+
   async function handleSave() {
     if (!latestSet) return
     setSaving(true)
@@ -417,12 +423,12 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
                             )}
                           </div>
                           {editMode && (
-                            <div className="mt-1.5">
+                            <div className="mt-1.5 grid grid-cols-2 gap-1">
                               <Select
                                 value={String(assignment.group_number)}
                                 onValueChange={(v) => moveStudent(assignment.student_id, Number(v))}
                               >
-                                <SelectTrigger className="h-7 text-xs w-full">
+                                <SelectTrigger className="h-7 text-xs">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -431,6 +437,21 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
                                       Grupo {n}
                                     </SelectItem>
                                   ))}
+                                </SelectContent>
+                              </Select>
+                              <Select
+                                value={assignment.role ?? "__none__"}
+                                onValueChange={(v) => changeRole(assignment.student_id, v === "__none__" ? null : v)}
+                              >
+                                <SelectTrigger className="h-7 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__" className="text-xs">Sin rol</SelectItem>
+                                  <SelectItem value="coordinador" className="text-xs">Coordinador</SelectItem>
+                                  <SelectItem value="secretario" className="text-xs">Secretario</SelectItem>
+                                  <SelectItem value="portavoz" className="text-xs">Portavoz</SelectItem>
+                                  <SelectItem value="revisor" className="text-xs">Revisor</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>

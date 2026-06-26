@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight, Camera, History } from "lucide-react"
+import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight, Camera, History, Pencil, Trash2, MoreVertical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { GroupSession, SociogramSnapshot } from "@/types"
 
 type GroupSessionWithSets = Omit<GroupSession, "group_sets"> & {
@@ -39,6 +40,11 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   const [creating, setCreating] = useState(false)
   const [open, setOpen] = useState(false)
 
+  // Rename dialog
+  const [renameSession, setRenameSession] = useState<GroupSessionWithSets | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const [renaming, setRenaming] = useState(false)
+
   const [classes, setClasses] = useState<string[]>([])
 
   // Form state
@@ -49,6 +55,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   const [formBalanceAcademic, setFormBalanceAcademic] = useState(true)
   const [formUseSociogram, setFormUseSociogram] = useState(false)
   const [formSnapshotId, setFormSnapshotId] = useState<string>("current")
+  const [formMaxPerGroup, setFormMaxPerGroup] = useState<string>("none")
 
   // Snapshot state
   const [snapshots, setSnapshots] = useState<Pick<SociogramSnapshot, "id" | "name" | "response_count" | "created_at">[]>([])
@@ -143,6 +150,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
           balance_gender: formBalanceGender,
           balance_academic: formBalanceAcademic,
           use_sociogram: formUseSociogram,
+          max_per_group: formMaxPerGroup !== "none" ? Number(formMaxPerGroup) : null,
           sociogram_snapshot_id: formUseSociogram && formSnapshotId !== "current" ? formSnapshotId : null,
         }),
       })
@@ -164,9 +172,40 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   function handleOpenChange(v: boolean) {
     setOpen(v)
     if (!v) {
-      // Reset snapshot form state on close
       setCreatingSnapshot(false)
       setNewSnapshotName("")
+    }
+  }
+
+  async function handleRename() {
+    if (!renameSession || !renameValue.trim()) return
+    setRenaming(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/groups/${renameSession.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: renameValue.trim() }),
+      })
+      if (!res.ok) { toast.error("Error al renombrar"); return }
+      setSessions(prev => prev.map(s => s.id === renameSession.id ? { ...s, name: renameValue.trim() } : s))
+      setRenameSession(null)
+      toast.success("Sesión renombrada")
+    } catch {
+      toast.error("Error inesperado")
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  async function handleDelete(session: GroupSessionWithSets) {
+    if (!confirm(`¿Eliminar la sesión "${session.name}" y todas sus distribuciones? Esta acción no se puede deshacer.`)) return
+    try {
+      const res = await fetch(`/api/processes/${id}/groups/${session.id}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Error al eliminar"); return }
+      setSessions(prev => prev.filter(s => s.id !== session.id))
+      toast.success("Sesión eliminada")
+    } catch {
+      toast.error("Error inesperado")
     }
   }
 
@@ -216,7 +255,8 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sessions.map(session => (
-            <Link key={session.id} href={`/processes/${id}/groups/${session.id}`}>
+            <div key={session.id} className="relative group">
+              <Link href={`/processes/${id}/groups/${session.id}`}>
               <Card className="hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer h-full">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
@@ -256,6 +296,34 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
                 </CardContent>
               </Card>
             </Link>
+              {/* Session action menu — floats over the card */}
+              <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 bg-background/80 backdrop-blur-sm border shadow-sm"
+                      onClick={e => e.preventDefault()}
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => { setRenameSession(session); setRenameValue(session.name) }}>
+                      <Pencil className="w-3.5 h-3.5 mr-2" /> Renombrar
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => handleDelete(session)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" /> Eliminar sesión
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -296,16 +364,30 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
                 />
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sess-num">Número de grupos</Label>
-              <Select value={String(formNumGroups)} onValueChange={v => setFormNumGroups(Number(v))}>
-                <SelectTrigger id="sess-num"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[2, 3, 4, 5, 6, 7, 8].map(n => (
-                    <SelectItem key={n} value={String(n)}>{n} grupos</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="sess-num">Número de grupos</Label>
+                <Select value={String(formNumGroups)} onValueChange={v => setFormNumGroups(Number(v))}>
+                  <SelectTrigger id="sess-num"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[2, 3, 4, 5, 6, 7, 8].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n} grupos</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sess-max">Máx. por grupo</Label>
+                <Select value={formMaxPerGroup} onValueChange={setFormMaxPerGroup}>
+                  <SelectTrigger id="sess-max"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin límite</SelectItem>
+                    {[3, 4, 5, 6, 7, 8].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n} alumnos</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -401,6 +483,30 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
             <Button onClick={handleCreate} disabled={creating} className="gap-2">
               {creating && <Loader2 className="w-4 h-4 animate-spin" />}
               Crear sesión
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename dialog */}
+      <Dialog open={!!renameSession} onOpenChange={v => !v && setRenameSession(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Renombrar sesión</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleRename()}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameSession(null)} disabled={renaming}>Cancelar</Button>
+            <Button onClick={handleRename} disabled={renaming || !renameValue.trim()} className="gap-2">
+              {renaming && <Loader2 className="w-4 h-4 animate-spin" />}
+              Guardar
             </Button>
           </DialogFooter>
         </DialogContent>

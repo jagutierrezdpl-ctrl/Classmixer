@@ -5,6 +5,7 @@ export interface GroupConfig {
   balanceGender: boolean
   balanceAcademic: boolean
   useSociogram: boolean
+  maxPerGroup?: number // optional cap on group size; auto-increases numGroups if needed
   // Social data loaded when useSociogram=true
   socialConnections?: Map<string, Set<string>> // studentId → students chosen (friendship/work)
   socialConflicts?: Map<string, Set<string>>   // studentId → conflict students (negative)
@@ -99,7 +100,11 @@ export function generateGroups(students: Student[], config: GroupConfig, seed = 
     return { assignments: [], score_total: 0 }
   }
 
-  const numGroups = Math.min(config.numGroups, students.length)
+  // If maxPerGroup is set, ensure we have enough groups to fit all students within the cap
+  const minGroupsNeeded = config.maxPerGroup
+    ? Math.ceil(students.length / config.maxPerGroup)
+    : 1
+  const numGroups = Math.min(Math.max(config.numGroups, minGroupsNeeded), students.length)
 
   const base = seed === 0
     ? [...students].sort((a, b) => academicScore(b) - academicScore(a))

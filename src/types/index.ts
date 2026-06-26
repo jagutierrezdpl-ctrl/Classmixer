@@ -485,6 +485,7 @@ export interface GroupSession {
   class_name: string
   name: string
   num_groups: number
+  max_per_group?: number | null
   balance_gender: boolean
   balance_academic: boolean
   use_sociogram: boolean

@@ -44,6 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       balance_gender: body.balance_gender ?? true,
       balance_academic: body.balance_academic ?? true,
       use_sociogram: body.use_sociogram ?? false,
+      max_per_group: body.max_per_group ?? null,
       sociogram_snapshot_id: body.sociogram_snapshot_id ?? null,
       created_by: profile.id,
     })
