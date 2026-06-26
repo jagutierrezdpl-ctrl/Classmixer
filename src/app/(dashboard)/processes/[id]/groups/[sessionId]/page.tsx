@@ -5,7 +5,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import {
   ArrowLeft, Users2, Loader2, RefreshCw, Printer,
-  GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check,
+  GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check, CheckCircle2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -188,6 +188,30 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
     }
   }
 
+  async function handleApprove() {
+    if (!latestSet) return
+    try {
+      const res = await fetch(`/api/group-sets/${latestSet.id}/approve`, { method: "POST" })
+      if (!res.ok) { toast.error("Error al aprobar"); return }
+      toast.success("Grupos aprobados como definitivos")
+      await loadGroupSet(latestSet.id)
+    } catch {
+      toast.error("Error inesperado")
+    }
+  }
+
+  async function handleUnapprove() {
+    if (!latestSet) return
+    try {
+      const res = await fetch(`/api/group-sets/${latestSet.id}/approve`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Error al desaprobar"); return }
+      toast.success("Marcado como borrador de nuevo")
+      await loadGroupSet(latestSet.id)
+    } catch {
+      toast.error("Error inesperado")
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -213,7 +237,13 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
   const numGroups = session.num_groups
 
   return (
-    <div className="p-8 print:p-4">
+    <div className="p-8 print:p-0">
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 1.5cm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:justify-between mb-8 print:hidden">
         <div className="flex items-center gap-3">
@@ -241,6 +271,24 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
               <Button variant="outline" size="sm" onClick={enterEdit} className="gap-2">
                 <Pencil className="w-4 h-4" /> Editar
               </Button>
+              {latestSet.status === "aprobado" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUnapprove}
+                  className="gap-2 border-green-300 text-green-700 hover:bg-green-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Aprobado
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handleApprove}
+                  className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Check className="w-4 h-4" /> Aprobar
+                </Button>
+              )}
             </>
           )}
           {editMode ? (
@@ -263,9 +311,15 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
       </div>
 
       {/* Print header */}
-      <div className="hidden print:block mb-6">
+      <div className="hidden print:block mb-6 pb-3 border-b">
         <h1 className="text-xl font-bold">{session.name}</h1>
-        <p className="text-sm text-gray-600">Clase {session.class_name} · {numGroups} grupos</p>
+        <p className="text-sm text-gray-600">
+          Clase {session.class_name} · {numGroups} grupos
+          {latestSet?.status === "aprobado" ? " · ✓ Aprobado" : ""}
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          Impreso el {new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })}
+        </p>
       </div>
 
       {/* Edit mode banner */}
@@ -325,7 +379,7 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
             const members = groups.get(groupNumber) ?? []
             const colorIdx = (groupNumber - 1) % GROUP_COLORS.length
             return (
-              <Card key={groupNumber} className={`border ${GROUP_COLORS[colorIdx]}`}>
+              <Card key={groupNumber} className={`border ${GROUP_COLORS[colorIdx]} print:break-inside-avoid`}>
                 <CardHeader className="pb-2 pt-3 px-4">
                   <div className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold w-fit ${GROUP_HEADER_COLORS[colorIdx]}`}>
                     <GraduationCap className="w-3.5 h-3.5" />

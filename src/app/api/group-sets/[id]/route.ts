@@ -68,6 +68,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
+  // Editing an approved set resets it to generado
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((existing as any).status === "aprobado") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from("group_sets").update({ status: "generado" }).eq("id", id)
+  }
+
   return NextResponse.json({ ok: true })
 }
 

@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight, Camera } from "lucide-react"
+import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight, Camera, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -183,9 +183,16 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
             <p className="text-muted-foreground text-sm">Genera grupos de trabajo equilibrados dentro de cada clase</p>
           </div>
         </div>
-        <Button onClick={() => setOpen(true)} className="gap-2">
-          <Plus className="w-4 h-4" /> Nueva sesión
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild className="gap-2">
+            <Link href={`/processes/${id}/groups/history`}>
+              <History className="w-4 h-4" /> Historial
+            </Link>
+          </Button>
+          <Button onClick={() => setOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Nueva sesión
+          </Button>
+        </div>
       </div>
 
       {/* Sessions list */}
