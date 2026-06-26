@@ -10,11 +10,16 @@ import {
   ChevronDown, ChevronUp, CheckCircle, Settings2,
   UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap, GitBranch,
   Star, AlertTriangle, Printer, SplitSquareHorizontal, History, ChevronLeft, ChevronRight,
+  MoreHorizontal, Eye,
 } from "lucide-react"
 import Link from "next/link"
 import type { Proposal, ProposalMetric } from "@/types"
 import ProposalCharts from "@/components/proposals/ProposalCharts"
 import { useConfirm } from "@/components/ui/ConfirmDialog"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
 
 function ScoreBar({ label, value, color = "bg-primary" }: { label: string; value: number; color?: string }) {
   return (
@@ -460,87 +465,120 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" asChild title="Listado imprimible por clase">
-                          <Link href={`/processes/${id}/proposals/${proposal.id}/print`} target="_blank">
-                            <Printer className="w-4 h-4" />
-                            Imprimir
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/processes/${id}/proposals/${proposal.id}/friends`}>
-                            <GitBranch className="w-4 h-4" />
-                            Vínculos
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/processes/${id}/proposals/${proposal.id}/simulation`}>
-                            <Network className="w-4 h-4" />
-                            Simulación
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/processes/${id}/proposals/${proposal.id}/tutors`}>
-                            <GraduationCap className="w-4 h-4" />
-                            Tutores
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/processes/${id}/proposals/${proposal.id}/report`} target="_blank">
-                            <FileText className="w-4 h-4" />
-                            Informe
-                          </Link>
-                        </Button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Ver dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Eye className="w-3.5 h-3.5 mr-1.5" />
+                              Ver
+                              <ChevronDown className="w-3 h-3 ml-1 opacity-60" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Vistas</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/processes/${id}/proposals/${proposal.id}/friends`}>
+                                <GitBranch className="w-4 h-4 mr-2" /> Vínculos
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/processes/${id}/proposals/${proposal.id}/simulation`}>
+                                <Network className="w-4 h-4 mr-2" /> Simulación sociograma
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/processes/${id}/proposals/${proposal.id}/tutors`}>
+                                <GraduationCap className="w-4 h-4 mr-2" /> Asignación tutores
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                              <Link href={`/processes/${id}/proposals/${proposal.id}/report`} target="_blank">
+                                <FileText className="w-4 h-4 mr-2" /> Informe completo
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/processes/${id}/proposals/${proposal.id}/print`} target="_blank">
+                                <Printer className="w-4 h-4 mr-2" /> Listado imprimible
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {/* Exportar dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Download className="w-3.5 h-3.5 mr-1.5" />
+                              Exportar
+                              <ChevronDown className="w-3 h-3 ml-1 opacity-60" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Descargar</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => handleExport(proposal.id, proposal.name)}>
+                              <Download className="w-4 h-4 mr-2" /> Excel — distribución final
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                              <a href={`/api/proposals/${proposal.id}/export/pdf`} download>
+                                <Download className="w-4 h-4 mr-2" /> PDF completo
+                              </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <a href={`/api/proposals/${proposal.id}/export/pdf/direccion`} download>
+                                <Download className="w-4 h-4 mr-2" /> PDF dirección
+                              </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <a href={`/api/proposals/${proposal.id}/export/pdf/tutores`} download>
+                                <Download className="w-4 h-4 mr-2" /> PDF tutoría
+                              </a>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {/* Edit */}
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/processes/${id}/proposals/${proposal.id}/edit`}>
-                            <Pencil className="w-4 h-4" />
+                            <Pencil className="w-3.5 h-3.5 mr-1.5" />
                             Editar
                           </Link>
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleExport(proposal.id, proposal.name)}>
-                          <Download className="w-4 h-4" />
-                          Excel
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={`/api/proposals/${proposal.id}/export/pdf`} download>
-                            <Download className="w-4 h-4" />
-                            PDF
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild title="Informe para dirección (PDF)">
-                          <a href={`/api/proposals/${proposal.id}/export/pdf/direccion`} download>
-                            <Download className="w-4 h-4" />
-                            Dirección
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild title="Informe de tutoría (PDF)">
-                          <a href={`/api/proposals/${proposal.id}/export/pdf/tutores`} download>
-                            <Download className="w-4 h-4" />
-                            Tutoría
-                          </a>
-                        </Button>
+
+                        {/* Approve */}
                         {!isApproved && (
                           <Button size="sm" onClick={() => handleApprove(proposal.id)}>
-                            <CheckCircle className="w-4 h-4" />
+                            <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
                             Aprobar
                           </Button>
                         )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAISummary(proposal.id)}
-                          disabled={aiLoading[proposal.id]}
-                          title="Análisis IA"
-                        >
-                          {aiLoading[proposal.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setExpandedId(isExpanded ? null : proposal.id)}
-                        >
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </Button>
+
+                        {/* More: AI + expand */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleAISummary(proposal.id)}
+                              disabled={aiLoading[proposal.id]}
+                            >
+                              {aiLoading[proposal.id]
+                                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                : <Sparkles className="w-4 h-4 mr-2 text-violet-500" />}
+                              Análisis IA
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setExpandedId(isExpanded ? null : proposal.id)}>
+                              {isExpanded
+                                ? <><ChevronUp className="w-4 h-4 mr-2" /> Colapsar detalle</>
+                                : <><ChevronDown className="w-4 h-4 mr-2" /> Ver detalle de clases</>}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   </CardHeader>

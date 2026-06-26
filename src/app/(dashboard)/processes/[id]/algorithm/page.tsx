@@ -7,15 +7,25 @@ import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash, SlidersHorizontal, RotateCcw, Network, Sparkles, Bot } from "lucide-react"
+import { ArrowLeft, Zap, Loader2, AlertTriangle, CheckCircle2, Brain, GraduationCap, Heart, Shield, Shuffle, Users, Hash, SlidersHorizontal, RotateCcw, Network, Sparkles, Bot, Save, Trash2, BookmarkPlus } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import type { AlgorithmProfile, AlgorithmWeights } from "@/types"
 import { WEIGHT_PROFILES, DEFAULT_WEIGHTS, WEIGHT_LABELS, WEIGHT_TOOLTIPS } from "@/lib/algorithm/weights"
 import { DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
 import type { AlgorithmConstraints } from "@/lib/algorithm/heuristic"
+
+const SAVED_PROFILES_KEY = "classmixer_saved_profiles"
+
+interface SavedProfile {
+  id: string
+  name: string
+  weights: AlgorithmWeights
+  constraints: AlgorithmConstraints
+}
 
 const PROFILES: { id: Exclude<AlgorithmProfile, "personalizado">; label: string; description: string; icon: React.ElementType; color: string }[] = [
   {
@@ -64,6 +74,9 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   const [running, setRunning] = useState(false)
   const [infeasibility, setInfeasibility] = useState<{ blocking_rules: string[]; explanation: string[] } | null>(null)
   const [responseCount, setResponseCount] = useState<number | null>(null)
+  const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([])
+  const [saveProfileName, setSaveProfileName] = useState("")
+  const [showSaveInput, setShowSaveInput] = useState(false)
 
   useEffect(() => {
     fetch(`/api/processes/${id}/responses`)
@@ -86,6 +99,12 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
         if (typeof s.aiNumProposals === "number") setAiNumProposals(s.aiNumProposals)
       }
     } catch { /* ignore bad localStorage data */ }
+
+    // Load saved custom profiles
+    try {
+      const sp = localStorage.getItem(SAVED_PROFILES_KEY)
+      if (sp) setSavedProfiles(JSON.parse(sp))
+    } catch { /* ignore */ }
   }, [id])
 
   function selectProfile(p: Exclude<AlgorithmProfile, "personalizado">) {
@@ -102,6 +121,38 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
   function resetToBase() {
     setProfile(baseProfile)
     setWeights(WEIGHT_PROFILES[baseProfile])
+  }
+
+  function handleSaveProfile() {
+    const name = saveProfileName.trim()
+    if (!name) return
+    const newProfile: SavedProfile = {
+      id: Date.now().toString(),
+      name,
+      weights,
+      constraints,
+    }
+    const updated = [...savedProfiles, newProfile]
+    setSavedProfiles(updated)
+    try { localStorage.setItem(SAVED_PROFILES_KEY, JSON.stringify(updated)) } catch { /* ignore */ }
+    setSaveProfileName("")
+    setShowSaveInput(false)
+    toast.success(`Perfil "${name}" guardado`)
+  }
+
+  function handleDeleteSavedProfile(profileId: string) {
+    const updated = savedProfiles.filter(p => p.id !== profileId)
+    setSavedProfiles(updated)
+    try { localStorage.setItem(SAVED_PROFILES_KEY, JSON.stringify(updated)) } catch { /* ignore */ }
+    if (profile === `saved_${profileId}`) {
+      setProfile("personalizado")
+    }
+  }
+
+  function loadSavedProfile(sp: SavedProfile) {
+    setProfile(`saved_${sp.id}` as AlgorithmProfile)
+    setWeights(sp.weights)
+    setConstraints(sp.constraints)
   }
 
   async function handleRun() {
@@ -370,6 +421,37 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
               <p className={`text-sm font-semibold ${profile === "personalizado" ? "text-primary" : ""}`}>Personalizado</p>
               <p className="text-xs text-muted-foreground leading-tight">Ajusta cada peso manualmente</p>
             </button>
+
+            {/* Saved profiles */}
+            {savedProfiles.map(sp => {
+              const isActive = profile === `saved_${sp.id}`
+              return (
+                <div key={sp.id} className="relative group">
+                  <button
+                    onClick={() => loadSavedProfile(sp)}
+                    className={`w-full flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all ${
+                      isActive
+                        ? "border-amber-500 bg-amber-50"
+                        : "border-amber-200 hover:border-amber-400 hover:bg-amber-50/50"
+                    }`}
+                  >
+                    {isActive && <CheckCircle2 className="absolute top-2 right-2 w-4 h-4 text-amber-500" />}
+                    <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center">
+                      <BookmarkPlus className="w-5 h-5 text-white" />
+                    </div>
+                    <p className={`text-sm font-semibold leading-tight ${isActive ? "text-amber-700" : ""}`}>{sp.name}</p>
+                    <p className="text-xs text-muted-foreground">Perfil guardado</p>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSavedProfile(sp.id)}
+                    className="absolute top-2 left-2 w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-red-100 hover:bg-red-200 text-red-500"
+                    title="Eliminar perfil"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </CardContent>
       </Card>
@@ -377,10 +459,10 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
       {/* Weight sliders */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
               <CardTitle className="text-base">Pesos del algoritmo</CardTitle>
-              {profile === "personalizado" && (
+              {(profile === "personalizado" || profile.startsWith("saved_")) && (
                 <button
                   onClick={resetToBase}
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -388,6 +470,34 @@ export default function AlgorithmPage({ params }: { params: Promise<{ id: string
                 >
                   <RotateCcw className="w-3 h-3" />
                   Restablecer
+                </button>
+              )}
+              {/* Save current weights as a named profile */}
+              {showSaveInput ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    autoFocus
+                    placeholder="Nombre del perfil..."
+                    value={saveProfileName}
+                    onChange={e => setSaveProfileName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleSaveProfile(); if (e.key === "Escape") { setShowSaveInput(false); setSaveProfileName("") } }}
+                    className="h-7 text-xs w-40"
+                  />
+                  <Button size="sm" className="h-7 text-xs px-2" onClick={handleSaveProfile} disabled={!saveProfileName.trim()}>
+                    <Save className="w-3 h-3 mr-1" /> Guardar
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => { setShowSaveInput(false); setSaveProfileName("") }}>
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowSaveInput(true)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  title="Guardar estos pesos como perfil reutilizable"
+                >
+                  <BookmarkPlus className="w-3 h-3" />
+                  Guardar como perfil
                 </button>
               )}
             </div>
