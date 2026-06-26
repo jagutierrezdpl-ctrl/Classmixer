@@ -1414,11 +1414,76 @@ export function generateProposals(
         }
       }
 
-      // Option E: radical iterative pass — only must_separate and lock_student_to_class
-      // are treated as hard limits. Everything else (must_keep_together, avoid_tutor,
-      // size balance, gender balance, wouldIsolateSomeoneIn) is ignored so that every
-      // student with friendship data ends up with at least one bond in their class.
-      // Runs in a loop so chain-isolations created by each move are fixed next iteration.
+      // Option E: radical repair — only must_separate and lock_student_to_class are
+      // hard limits. Uses two strategies to avoid creating new isolations:
+      //
+      // E1 (reverse swap): bring a connection of iso here WHILE simultaneously sending
+      //    a student from iso's class to the connection's class, so sizes stay balanced
+      //    and the student sent away already has friends in the destination. This avoids
+      //    isolating anyone in the vacated class.
+      //
+      // E2 (guarded direct move): if no clean swap exists, move iso or bring a
+      //    connection directly. A `radicalMoved` set prevents any student from being
+      //    moved a second time, which stops the ping-pong where fixing A re-isolates B
+      //    and fixing B re-isolates A. Runs iteratively until stable.
+      const radicalMoved = new Set<string>()
+
+      // E1: for each isolated student try to find a size-neutral reverse swap.
+      // connId (in connCls) comes to isoCls; swapOut (in isoCls) goes to connCls.
+      // swapOut must already have ≥1 connection in connCls so they won't be isolated there.
+      const e1Iso = assignments.filter(a => !hasChosen(a.student_id, a.target_class))
+      for (const iso of e1Iso) {
+        const sid = iso.student_id
+        const isoCls = clsOf(sid)
+        if (!isoCls || hasChosen(sid, isoCls)) continue
+        const isoConns = [...(dirFriendMap.get(sid) ?? [])]
+        if (isoConns.length === 0) continue
+
+        e1Swap: for (const connId of isoConns) {
+          const connCls = clsOf(connId)
+          if (!connCls || connCls === isoCls || lockedStudents.has(connId)) continue
+          if (!repairSepOk(connId, isoCls)) continue
+
+          // Find a student in isoCls who has a connection in connCls and can go there
+          const swapCandidates = assignments.filter(a => {
+            if (a.student_id === sid || a.target_class !== isoCls) return false
+            if (lockedStudents.has(a.student_id)) return false
+            if (!repairSepOk(a.student_id, connCls)) return false
+            const cConns = dirFriendMap.get(a.student_id)
+            return !![...( cConns ?? [])].some(c => clsOf(c) === connCls)
+          })
+
+          for (const swapOutA of swapCandidates) {
+            const swapOut = swapOutA.student_id
+
+            // Temporarily apply swap: connId→isoCls, swapOut→connCls
+            const connIdx = assignments.findIndex(a => a.student_id === connId)
+            const swapIdx = assignments.findIndex(a => a.student_id === swapOut)
+            assignments[connIdx].target_class = isoCls
+            assignments[swapIdx].target_class = connCls
+
+            // Verify: no student in either class becomes newly isolated
+            const swapOk = !assignments.some(a => {
+              if (a.student_id === connId || a.student_id === swapOut) return false
+              if (a.target_class !== isoCls && a.target_class !== connCls) return false
+              return !hasChosen(a.student_id, a.target_class)
+            })
+
+            if (swapOk && hasChosen(sid, isoCls)) {
+              radicalMoved.add(connId)
+              radicalMoved.add(swapOut)
+              break e1Swap
+            }
+
+            // Revert
+            assignments[connIdx].target_class = connCls
+            assignments[swapIdx].target_class = isoCls
+          }
+        }
+      }
+
+      // E2: for students still isolated after E1, fall back to direct moves.
+      // radicalMoved prevents ping-pong (a moved student is never moved back).
       let radicalChanged = true
       let radicalIter = 0
       while (radicalChanged && radicalIter < 10) {
@@ -1432,8 +1497,8 @@ export function generateProposals(
           const isoConns = [...(dirFriendMap.get(sid) ?? [])]
           if (isoConns.length === 0) continue
 
-          // Try A (radical): move iso to a class with connections — only sep+lock block this
-          if (!lockedStudents.has(sid)) {
+          // Try A (radical): move iso — only sep+lock, and not already moved
+          if (!lockedStudents.has(sid) && !radicalMoved.has(sid)) {
             const targets = targetClasses
               .filter(c => c !== isoClass && isoConns.some(cc => clsOf(cc) === c))
               .sort((a, b) =>
@@ -1442,6 +1507,7 @@ export function generateProposals(
             for (const target of targets) {
               if (!repairSepOk(sid, target)) continue
               doMove(sid, isoClass, target)
+              radicalMoved.add(sid)
               radicalChanged = true
               break
             }
@@ -1451,11 +1517,11 @@ export function generateProposals(
           const isoClass2 = clsOf(sid)
           if (!isoClass2 || hasChosen(sid, isoClass2)) continue
 
-          // Try B (radical): bring a connection here — only sep+lock block this
+          // Try B (radical): bring a connection — only sep+lock, and not already moved
           const sortedConns = isoConns
             .filter(c => {
               const cCls = clsOf(c)
-              return cCls && cCls !== isoClass2 && !lockedStudents.has(c)
+              return cCls && cCls !== isoClass2 && !lockedStudents.has(c) && !radicalMoved.has(c)
             })
             .sort((a, b) => countWouldIsolate(a) - countWouldIsolate(b))
           for (const connId of sortedConns) {
@@ -1463,6 +1529,7 @@ export function generateProposals(
             if (!connCls) continue
             if (!repairSepOk(connId, isoClass2)) continue
             doMove(connId, connCls, isoClass2)
+            radicalMoved.add(connId)
             radicalChanged = true
             break
           }
