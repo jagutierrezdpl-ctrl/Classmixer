@@ -141,7 +141,10 @@ function computeSubScores(
       : 0
   const academicScore = Math.max(0, 100 - gradeVariance * 20)
 
-  // gender_balance: inverse variance of F/total ratio per class
+  // gender_balance: inverse variance of F/total ratio per class vs actual global ratio
+  const totalFGlobal = students.filter(s => s.gender === "F").length
+  const totalBinaryGlobal = students.filter(s => s.gender === "F" || s.gender === "M").length
+  const globalFRatioForScore = totalBinaryGlobal > 0 ? totalFGlobal / totalBinaryGlobal : 0.5
   const classGenders = new Map<string, { F: number; M: number }>()
   targetClasses.forEach(c => classGenders.set(c, { F: 0, M: 0 }))
   assignments.forEach(a => {
@@ -154,10 +157,10 @@ function computeSubScores(
   const genderRatios = targetClasses.map(c => {
     const g = classGenders.get(c)!
     const total = g.F + g.M
-    return total > 0 ? g.F / total : 0.5
+    return total > 0 ? g.F / total : globalFRatioForScore
   })
   const genderVariance =
-    genderRatios.reduce((sum, r) => sum + Math.pow(r - 0.5, 2), 0) / (genderRatios.length || 1)
+    genderRatios.reduce((sum, r) => sum + Math.pow(r - globalFRatioForScore, 2), 0) / (genderRatios.length || 1)
   const genderScore = Math.max(0, 100 - genderVariance * 400)
 
   // group_mix: origin class spread across target classes
@@ -718,6 +721,10 @@ export function generateProposals(
     if (!constraints.enforce_gender_balance) return false
     const tolerance = constraints.gender_tolerance / 100
     const classBefore = assignments.filter(a => a.target_class === cls)
+    // Don't enforce on partially-filled classes — individual placements skew small samples.
+    // Only check once the class is at least half its expected final size.
+    const expectedSize = Math.ceil(activeStudents.length / targetClasses.length)
+    if (classBefore.length < Math.floor(expectedSize / 2)) return false
     let f = classBefore.filter(a => studentMap.get(a.student_id)?.gender === "F").length
     let total = classBefore.length
     for (const uid of unitIds) {
@@ -787,11 +794,28 @@ export function generateProposals(
       })
     }
 
-    // Remaining free students (sorted by grade descending, shuffled on seed > 0)
-    const sortedFree =
-      seed === 0
-        ? [...freeStudents].sort((a, b) => b.average_grade - a.average_grade)
-        : shuffle([...freeStudents], seed * 12345)
+    // Remaining free students (grade-sorted + gender-interleaved on seed 0, shuffled otherwise).
+    // Interleaving genders in the sorted order ensures the snake distributes F and M evenly
+    // across classes regardless of any grade/gender correlation in the cohort.
+    let sortedFree: Student[]
+    if (seed === 0) {
+      const byGrade = [...freeStudents].sort((a, b) => b.average_grade - a.average_grade)
+      const sortedF = byGrade.filter(s => s.gender === "F")
+      const sortedM = byGrade.filter(s => s.gender === "M")
+      const sortedOther = byGrade.filter(s => s.gender !== "F" && s.gender !== "M")
+      const interleaved: Student[] = []
+      let fi = 0, mi = 0
+      while (fi < sortedF.length || mi < sortedM.length) {
+        // Proportional interleave: advance whichever gender is "behind" vs its share
+        const addF = mi >= sortedM.length ||
+          (fi < sortedF.length && fi * sortedM.length <= mi * sortedF.length)
+        if (addF) interleaved.push(sortedF[fi++])
+        else interleaved.push(sortedM[mi++])
+      }
+      sortedFree = [...interleaved, ...sortedOther]
+    } else {
+      sortedFree = shuffle([...freeStudents], seed * 12345)
+    }
 
     sortedFree.forEach(s => {
       if (!alreadyAssigned.has(s.id) && !unitCovered.has(s.id)) {
