@@ -561,6 +561,17 @@ export function generateProposals(
     }
   })
 
+  // must_keep_together partners map: sid → Set of partner sids that must share a class
+  const mustTogetherPartnersMap = new Map<string, Set<string>>()
+  mustTogetherRules.forEach(r => {
+    const ids = (r.students ?? []).map(rs => rs.student_id)
+    ids.forEach(sid => {
+      const partners = mustTogetherPartnersMap.get(sid) ?? new Set<string>()
+      ids.forEach(pid => { if (pid !== sid) partners.add(pid) })
+      mustTogetherPartnersMap.set(sid, partners)
+    })
+  })
+
   // Pre-compute friendship responses — needed by protectMap expansion and autoProtect
   const friendshipResps = responses.filter(r => relationTypes.friendshipLike.includes(r.relation_type))
 
@@ -929,13 +940,17 @@ export function generateProposals(
         if (!friendAssign || friendAssign.target_class === myClass) continue
         const friendClass = friendAssign.target_class
 
-        // Find a candidate in myClass to swap out (must not violate separations)
+        // Find a candidate in myClass to swap out (must not violate separations or must_keep_together)
         const candidates = assignments.filter(
           a =>
             a.target_class === myClass &&
             a.student_id !== mainId &&
             !lockedStudents.has(a.student_id) &&
-            !mustTogetherLockedClass.has(a.student_id)
+            !mustTogetherLockedClass.has(a.student_id) &&
+            // Don't move a student away from their must_keep_together partner
+            ![...(mustTogetherPartnersMap.get(a.student_id) ?? [])].some(
+              pid => assignments.some(pa => pa.student_id === pid && pa.target_class === myClass)
+            )
         )
 
         for (const candidate of candidates) {
@@ -1056,6 +1071,16 @@ export function generateProposals(
       // avoid_tutor: neither student may land in their forbidden class
       if (forbiddenClassMap.get(a1.student_id)?.has(orig2)) continue
       if (forbiddenClassMap.get(a2.student_id)?.has(orig1)) continue
+
+      // must_keep_together: don't move a student away from their mandatory partner
+      const keepTogetherOk =
+        ![...(mustTogetherPartnersMap.get(a1.student_id) ?? [])].some(
+          pid => pid !== a2.student_id && assignments.some(a => a.student_id === pid && a.target_class === orig1)
+        ) &&
+        ![...(mustTogetherPartnersMap.get(a2.student_id) ?? [])].some(
+          pid => pid !== a1.student_id && assignments.some(a => a.student_id === pid && a.target_class === orig2)
+        )
+      if (!keepTogetherOk) continue
 
       a1.target_class = orig2
       a2.target_class = orig1
