@@ -1286,6 +1286,61 @@ export function generateProposals(
           doMove(connId, connCls, nowCls)
           break
         }
+
+        // Option C: symmetric swap — when A and B both fail, swap iso with a movable student
+        // from a class where iso has a connection. Sizes stay equal (no classCounts update).
+        // The swap is validated in the post-swap state: we temporarily apply it, run all
+        // constraint checks, and revert if any fail.
+        const nowClsC = clsOf(sid)
+        if (!nowClsC || hasChosen(sid, nowClsC)) continue
+        if (!isMovable(sid)) continue
+
+        swapLoop: for (const cid of myChosen) {
+          const cidCls = clsOf(cid)
+          if (!cidCls || cidCls === nowClsC) continue
+
+          const swapCandidates = assignments
+            .filter(a => a.target_class === cidCls && isMovable(a.student_id) && repairKeepOk(a.student_id, cidCls))
+            .map(a => a.student_id)
+
+          for (const partner of swapCandidates) {
+            const isoIdx = assignments.findIndex(a => a.student_id === sid)
+            const partnerIdx = assignments.findIndex(a => a.student_id === partner)
+            if (isoIdx === -1 || partnerIdx === -1) continue
+
+            // Apply swap temporarily
+            assignments[isoIdx].target_class = cidCls
+            assignments[partnerIdx].target_class = nowClsC
+
+            const ok =
+              // iso ends up with at least one connection in cidCls
+              hasChosen(sid, cidCls) &&
+              // no separation rule violated for either student in their new class
+              repairSepOk(sid, cidCls) &&
+              repairSepOk(partner, nowClsC) &&
+              // no forbidden-class violation
+              !forbiddenClassMap.get(sid)?.has(cidCls) &&
+              !forbiddenClassMap.get(partner)?.has(nowClsC) &&
+              // no must_keep_together broken
+              [...(mustTogetherPartnersMap.get(sid) ?? [])].every(pid => clsOf(pid) !== nowClsC) &&
+              [...(mustTogetherPartnersMap.get(partner) ?? [])].every(pid => clsOf(pid) !== cidCls) &&
+              // no student who was NOT originally isolated is now isolated in either affected class
+              !assignments.some(a => {
+                if (a.student_id === sid || a.student_id === partner) return false
+                if (a.target_class !== nowClsC && a.target_class !== cidCls) return false
+                if (isolated.some(il => il.student_id === a.student_id)) return false
+                return !hasChosen(a.student_id, a.target_class)
+              })
+
+            if (ok) {
+              break swapLoop // keep the swap
+            }
+
+            // Revert swap
+            assignments[isoIdx].target_class = nowClsC
+            assignments[partnerIdx].target_class = cidCls
+          }
+        }
       }
     }
 
