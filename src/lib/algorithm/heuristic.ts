@@ -465,6 +465,33 @@ export function checkInfeasibility(
       }
     })
 
+  // must_keep_together + must_separate conflict
+  rules
+    .filter(r => r.rule_type === "must_keep_together" && r.active)
+    .forEach(keepRule => {
+      const keepIds = (keepRule.students ?? []).map(rs => rs.student_id)
+      rules
+        .filter(r => r.rule_type === "must_separate" && r.active)
+        .forEach(sepRule => {
+          const sepIds = new Set((sepRule.students ?? []).map(rs => rs.student_id))
+          for (let i = 0; i < keepIds.length; i++) {
+            for (let j = i + 1; j < keepIds.length; j++) {
+              if (sepIds.has(keepIds[i]) && sepIds.has(keepIds[j])) {
+                const sA = students.find(s => s.id === keepIds[i])
+                const sB = students.find(s => s.id === keepIds[j])
+                const nameA = sA ? `${sA.first_name} ${sA.last_name}` : keepIds[i]
+                const nameB = sB ? `${sB.first_name} ${sB.last_name}` : keepIds[j]
+                const desc = `Conflicto: ${nameA} y ${nameB} tienen reglas de "mantener juntos" y "separar obligatoriamente" al mismo tiempo.`
+                if (!blocking.includes(desc)) {
+                  blocking.push(desc)
+                  explanation.push(desc)
+                }
+              }
+            }
+          }
+        })
+    })
+
   if (targetClasses.length === 0) {
     blocking.push("Sin clases destino")
     explanation.push("No hay clases destino configuradas para este proceso.")
@@ -746,7 +773,7 @@ export function generateProposals(
       }
     })
 
-    // should_keep_together (applied on odd seeds)
+    // should_keep_together (applied on even seeds for variety)
     if (seed % 2 === 0) {
       shouldTogetherRules.forEach(r => {
         const ids = (r.students ?? []).map(rs => rs.student_id)
@@ -892,7 +919,11 @@ export function generateProposals(
           a =>
             a.target_class === bigClass &&
             !lockedStudents.has(a.student_id) &&
-            !mustTogetherLockedClass.has(a.student_id)
+            !mustTogetherLockedClass.has(a.student_id) &&
+            // Don't separate must_keep_together partners during rebalancing
+            ![...(mustTogetherPartnersMap.get(a.student_id) ?? [])].some(
+              pid => assignments.some(pa => pa.student_id === pid && pa.target_class === bigClass)
+            )
         )
         let moved = false
         for (const candidate of movable) {
@@ -990,7 +1021,15 @@ export function generateProposals(
             !forbiddenClassMap.get(fid)?.has(myClass) &&
             !forbiddenClassMap.get(candidate.student_id)?.has(friendClass)
 
-          if (forbiddenOk) {
+          // Don't move fid away from its must_keep_together partners in friendClass
+          const fidKeepOk = forbiddenOk &&
+            ![...(mustTogetherPartnersMap.get(fid) ?? [])].some(
+              pid => pid !== candidate.student_id && assignments.some(
+                pa => pa.student_id === pid && pa.target_class === friendClass
+              )
+            )
+
+          if (fidKeepOk) {
             // Swap: friend → myClass, candidate → friendClass
             const fidIdx = assignments.findIndex(a => a.student_id === fid)
             const candIdx = assignments.findIndex(a => a.student_id === candidate.student_id)
