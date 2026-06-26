@@ -797,28 +797,25 @@ export function generateProposals(
       })
     }
 
-    // Remaining free students (grade-sorted + gender-interleaved on seed 0, shuffled otherwise).
-    // Interleaving genders in the sorted order ensures the snake distributes F and M evenly
-    // across classes regardless of any grade/gender correlation in the cohort.
-    let sortedFree: Student[]
-    if (seed === 0) {
-      const byGrade = [...freeStudents].sort((a, b) => b.average_grade - a.average_grade)
-      const sortedF = byGrade.filter(s => s.gender === "F")
-      const sortedM = byGrade.filter(s => s.gender === "M")
-      const sortedOther = byGrade.filter(s => s.gender !== "F" && s.gender !== "M")
-      const interleaved: Student[] = []
-      let fi = 0, mi = 0
-      while (fi < sortedF.length || mi < sortedM.length) {
-        // Proportional interleave: advance whichever gender is "behind" vs its share
-        const addF = mi >= sortedM.length ||
-          (fi < sortedF.length && fi * sortedM.length <= mi * sortedF.length)
-        if (addF) interleaved.push(sortedF[fi++])
-        else interleaved.push(sortedM[mi++])
-      }
-      sortedFree = [...interleaved, ...sortedOther]
-    } else {
-      sortedFree = shuffle([...freeStudents], seed * 12345)
+    // Remaining free students: always gender-interleaved so the snake distributes F and M
+    // evenly across classes regardless of grade/gender correlation. On seed 0, sort by grade
+    // within each gender group; on other seeds, shuffle within each group for variety.
+    const baseOrder = seed === 0
+      ? [...freeStudents].sort((a, b) => b.average_grade - a.average_grade)
+      : shuffle([...freeStudents], seed * 12345)
+    const interleavedF = baseOrder.filter(s => s.gender === "F")
+    const interleavedM = baseOrder.filter(s => s.gender === "M")
+    const interleavedOther = baseOrder.filter(s => s.gender !== "F" && s.gender !== "M")
+    const interleavedList: Student[] = []
+    let fi = 0, mi = 0
+    while (fi < interleavedF.length || mi < interleavedM.length) {
+      // Proportional interleave: advance whichever gender is "behind" vs its share
+      const addF = mi >= interleavedM.length ||
+        (fi < interleavedF.length && fi * interleavedM.length <= mi * interleavedF.length)
+      if (addF) interleavedList.push(interleavedF[fi++])
+      else interleavedList.push(interleavedM[mi++])
     }
+    const sortedFree = [...interleavedList, ...interleavedOther]
 
     sortedFree.forEach(s => {
       if (!alreadyAssigned.has(s.id) && !unitCovered.has(s.id)) {
@@ -1439,12 +1436,14 @@ export function generateProposals(
           const connCls = clsOf(connId)
           if (!connCls || connCls === isoCls || lockedStudents.has(connId)) continue
           if (!repairSepOk(connId, isoCls)) continue
+          if (!repairGenderOk(connId, isoCls)) continue
 
           // Find a student in isoCls who has a connection in connCls and can go there
           const swapCandidates = assignments.filter(a => {
             if (a.student_id === sid || a.target_class !== isoCls) return false
             if (lockedStudents.has(a.student_id)) return false
             if (!repairSepOk(a.student_id, connCls)) return false
+            if (!repairGenderOk(a.student_id, connCls)) return false
             const cConns = dirFriendMap.get(a.student_id)
             return !![...( cConns ?? [])].some(c => clsOf(c) === connCls)
           })
@@ -1493,7 +1492,7 @@ export function generateProposals(
           const isoConns = [...(dirFriendMap.get(sid) ?? [])]
           if (isoConns.length === 0) continue
 
-          // Try A (radical): move iso — only sep+lock, and not already moved
+          // Try A (radical): move iso — only sep+lock+gender, and not already moved
           if (!lockedStudents.has(sid) && !radicalMoved.has(sid)) {
             const targets = targetClasses
               .filter(c => c !== isoClass && isoConns.some(cc => clsOf(cc) === c))
@@ -1502,6 +1501,7 @@ export function generateProposals(
               )
             for (const target of targets) {
               if (!repairSepOk(sid, target)) continue
+              if (!repairGenderOk(sid, target)) continue
               doMove(sid, isoClass, target)
               radicalMoved.add(sid)
               radicalChanged = true
@@ -1524,6 +1524,7 @@ export function generateProposals(
             const connCls = clsOf(connId)
             if (!connCls) continue
             if (!repairSepOk(connId, isoClass2)) continue
+            if (!repairGenderOk(connId, isoClass2)) continue
             doMove(connId, connCls, isoClass2)
             radicalMoved.add(connId)
             radicalChanged = true
