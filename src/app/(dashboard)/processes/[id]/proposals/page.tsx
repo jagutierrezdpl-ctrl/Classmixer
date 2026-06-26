@@ -10,10 +10,10 @@ import {
   ChevronDown, ChevronUp, CheckCircle, Settings2,
   UserX, UserCheck, Heart, Pencil, FileText, Sparkles, X, Network, GraduationCap, GitBranch,
   Star, AlertTriangle, Printer, SplitSquareHorizontal, History, ChevronLeft, ChevronRight,
-  MoreHorizontal, Eye,
+  MoreHorizontal, Eye, Shield, CheckCircle2, XCircle, MinusCircle,
 } from "lucide-react"
 import Link from "next/link"
-import type { Proposal, ProposalMetric } from "@/types"
+import type { Proposal, ProposalMetric, Rule, ProposalAssignment } from "@/types"
 import ProposalCharts from "@/components/proposals/ProposalCharts"
 import { useConfirm } from "@/components/ui/ConfirmDialog"
 import {
@@ -41,6 +41,160 @@ function getScoreColor(score: number) {
   return "text-red-600"
 }
 
+const RULE_TYPE_LABELS: Record<string, string> = {
+  must_separate: "Separar obligatoriamente",
+  should_keep_together: "Mantener juntos (recomendación)",
+  must_keep_together: "Mantener juntos",
+  keep_at_least_one: "Al menos uno por clase",
+  max_from_group: "Máximo por clase",
+  lock_student_to_class: "Fijar en clase",
+  avoid_tutor: "Evitar tutor",
+  with_tutor: "Asignar con tutor",
+  protect_vulnerable: "Proteger alumno vulnerable",
+  exclude_student: "Excluido de la mezcla",
+}
+
+const PRIORITY_LABELS: Record<string, string> = {
+  obligatoria: "Obligatoria",
+  alta: "Alta",
+  media: "Media",
+  baja: "Baja",
+}
+
+interface RuleResult {
+  rule: Rule
+  fulfilled: boolean
+  details: string
+  isNA?: boolean
+}
+
+function computeRuleCompliance(rules: Rule[], assignments: ProposalAssignment[]): RuleResult[] {
+  const classOf = (sid: string) => assignments.find(a => a.student_id === sid)?.target_class
+
+  return rules
+    .filter(r => r.active && r.rule_type !== "exclude_student" && r.rule_type !== "protect_vulnerable")
+    .map((rule): RuleResult => {
+      const studentIds = (rule.students ?? []).map(rs => rs.student_id)
+
+      switch (rule.rule_type) {
+        case "must_separate": {
+          let violatingPair: [string, string] | null = null
+          for (let i = 0; i < studentIds.length && !violatingPair; i++) {
+            for (let j = i + 1; j < studentIds.length; j++) {
+              const c1 = classOf(studentIds[i])
+              const c2 = classOf(studentIds[j])
+              if (c1 && c2 && c1 === c2) { violatingPair = [studentIds[i], studentIds[j]]; break }
+            }
+          }
+          return {
+            rule,
+            fulfilled: !violatingPair,
+            details: violatingPair
+              ? `Están juntos en la misma clase`
+              : `Separados correctamente`,
+          }
+        }
+
+        case "must_keep_together": {
+          const classes = studentIds.map(classOf).filter(Boolean)
+          const allSame = classes.length > 0 && classes.every(c => c === classes[0])
+          return {
+            rule,
+            fulfilled: allSame,
+            details: allSame ? `Juntos en ${classes[0]}` : `En clases distintas`,
+          }
+        }
+
+        case "should_keep_together": {
+          const classes = studentIds.map(classOf).filter(Boolean)
+          const allSame = classes.length > 0 && classes.every(c => c === classes[0])
+          return {
+            rule,
+            fulfilled: allSame,
+            details: allSame ? `Juntos en ${classes[0]}` : `En clases distintas (recomendación no cumplida)`,
+          }
+        }
+
+        case "lock_student_to_class": {
+          if (!studentIds[0] || !rule.target_class) return { rule, fulfilled: true, details: "Sin datos", isNA: true }
+          const cls = classOf(studentIds[0])
+          const ok = cls === rule.target_class
+          return {
+            rule,
+            fulfilled: ok,
+            details: ok ? `En ${rule.target_class} (correcto)` : `En ${cls ?? "?"} en lugar de ${rule.target_class}`,
+          }
+        }
+
+        case "avoid_tutor": {
+          if (!studentIds[0] || !rule.target_class) return { rule, fulfilled: true, details: "Sin datos", isNA: true }
+          const cls = classOf(studentIds[0])
+          const ok = cls !== rule.target_class
+          return {
+            rule,
+            fulfilled: ok,
+            details: ok ? `Evita ${rule.target_class} (correcto)` : `Asignado a ${rule.target_class} que debe evitar`,
+          }
+        }
+
+        case "with_tutor": {
+          if (!studentIds[0] || !rule.target_class) return { rule, fulfilled: true, details: "Sin datos", isNA: true }
+          const cls = classOf(studentIds[0])
+          const ok = cls === rule.target_class
+          return {
+            rule,
+            fulfilled: ok,
+            details: ok ? `Con tutor en ${rule.target_class}` : `En ${cls ?? "?"} en lugar de ${rule.target_class}`,
+          }
+        }
+
+        case "max_from_group": {
+          const maxCount = rule.max_count ?? 1
+          const countPerClass: Record<string, number> = {}
+          for (const sid of studentIds) {
+            const cls = classOf(sid)
+            if (cls) countPerClass[cls] = (countPerClass[cls] ?? 0) + 1
+          }
+          const maxFound = Math.max(...Object.values(countPerClass), 0)
+          const ok = maxFound <= maxCount
+          const worst = Object.entries(countPerClass).find(([, n]) => n > maxCount)
+          return {
+            rule,
+            fulfilled: ok,
+            details: ok
+              ? `Máximo ${maxCount} por clase cumplido`
+              : `${worst?.[1] ?? maxFound} alumnos en ${worst?.[0] ?? "una clase"} (máx. ${maxCount})`,
+          }
+        }
+
+        case "keep_at_least_one": {
+          if (rule.target_class) {
+            const hasOne = studentIds.some(sid => classOf(sid) === rule.target_class)
+            return {
+              rule,
+              fulfilled: hasOne,
+              details: hasOne
+                ? `Al menos uno en ${rule.target_class}`
+                : `Ninguno del grupo en ${rule.target_class}`,
+            }
+          }
+          const targetClasses = [...new Set(assignments.map(a => a.target_class))]
+          const missingClass = targetClasses.find(cls => !studentIds.some(sid => classOf(sid) === cls))
+          const ok = !missingClass
+          return {
+            rule,
+            fulfilled: ok,
+            details: ok ? "Al menos uno por cada clase" : `Ninguno del grupo en ${missingClass}`,
+          }
+        }
+
+        default: {
+          return { rule, fulfilled: true, details: "Verificado", isNA: true }
+        }
+      }
+    })
+}
+
 function buildMetricsMap(metrics: ProposalMetric[]): Record<string, Record<string, number>> {
   const result: Record<string, Record<string, number>> = {}
   for (const m of metrics ?? []) {
@@ -65,8 +219,10 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
 
   const confirmFn = useConfirm()
   const [proposals, setProposals] = useState<Proposal[]>([])
+  const [rules, setRules] = useState<Rule[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [rulesOpenId, setRulesOpenId] = useState<string | null>(null)
   const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({})
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({})
   const [selectedGenIdx, setSelectedGenIdx] = useState(0)
@@ -97,10 +253,17 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
 
   async function loadProposals() {
     setLoading(true)
-    const res = await fetch(`/api/processes/${id}/proposals`)
-    if (res.ok) {
-      setProposals(await res.json())
+    const [proposalsRes, rulesRes] = await Promise.all([
+      fetch(`/api/processes/${id}/proposals`),
+      fetch(`/api/processes/${id}/rules`),
+    ])
+    if (proposalsRes.ok) {
+      setProposals(await proposalsRes.json())
       setSelectedGenIdx(0)
+    }
+    if (rulesRes.ok) {
+      const allRules: Rule[] = await rulesRes.json()
+      setRules(allRules.filter(r => r.active && r.rule_type !== "exclude_student"))
     }
     setLoading(false)
   }
@@ -646,6 +809,118 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                         </>
                       )}
                     </div>
+
+                    {/* Rules compliance panel */}
+                    {rules.length > 0 && (() => {
+                      const ruleResults = computeRuleCompliance(rules, proposal.assignments ?? [])
+                      const violated = ruleResults.filter(r => !r.fulfilled && !r.isNA)
+                      const fulfilled = ruleResults.filter(r => r.fulfilled && !r.isNA)
+                      const isOpen = rulesOpenId === proposal.id
+                      const hasViolations = violated.length > 0
+                      const mandatoryViolated = violated.filter(r =>
+                        r.rule.priority === "obligatoria" || r.rule.priority === "alta"
+                      ).length
+
+                      return (
+                        <div className="mb-3 border rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setRulesOpenId(isOpen ? null : proposal.id)}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/40 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="font-medium text-muted-foreground">Cumplimiento de reglas</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="flex items-center gap-0.5 text-xs text-green-600 font-medium">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  {fulfilled.length}
+                                </span>
+                                {hasViolations && (
+                                  <span className={`flex items-center gap-0.5 text-xs font-medium ${mandatoryViolated > 0 ? "text-red-600" : "text-amber-600"}`}>
+                                    <XCircle className="w-3 h-3" />
+                                    {violated.length}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                          </button>
+
+                          {isOpen && (
+                            <div className="border-t divide-y">
+                              {ruleResults.map(result => {
+                                const { rule, fulfilled: ok, details, isNA } = result
+                                const studentNames = (rule.students ?? [])
+                                  .map(rs => rs.student?.first_name
+                                    ? `${rs.student.first_name} ${rs.student.last_name}`
+                                    : "")
+                                  .filter(Boolean)
+                                  .join(", ")
+                                const isMandatory = rule.priority === "obligatoria" || rule.priority === "alta"
+                                const rowBg = isNA
+                                  ? "bg-muted/20"
+                                  : ok
+                                  ? "bg-green-50/50"
+                                  : isMandatory
+                                  ? "bg-red-50/60"
+                                  : "bg-amber-50/60"
+
+                                return (
+                                  <div key={rule.id} className={`px-3 py-2 flex items-start gap-2.5 ${rowBg}`}>
+                                    <div className="mt-0.5 shrink-0">
+                                      {isNA
+                                        ? <MinusCircle className="w-3.5 h-3.5 text-muted-foreground/50" />
+                                        : ok
+                                        ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                                        : isMandatory
+                                        ? <XCircle className="w-3.5 h-3.5 text-red-500" />
+                                        : <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs font-medium">
+                                          {RULE_TYPE_LABELS[rule.rule_type] ?? rule.rule_type}
+                                        </span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                          rule.priority === "obligatoria" ? "bg-red-100 text-red-700"
+                                          : rule.priority === "alta" ? "bg-orange-100 text-orange-700"
+                                          : rule.priority === "media" ? "bg-yellow-100 text-yellow-700"
+                                          : "bg-slate-100 text-slate-600"
+                                        }`}>
+                                          {PRIORITY_LABELS[rule.priority] ?? rule.priority}
+                                        </span>
+                                        {rule.target_class && (
+                                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                                            {rule.target_class}
+                                          </Badge>
+                                        )}
+                                        {rule.max_count != null && (
+                                          <span className="text-[10px] text-muted-foreground">máx. {rule.max_count}</span>
+                                        )}
+                                      </div>
+                                      {studentNames && (
+                                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{studentNames}</p>
+                                      )}
+                                      {rule.description && (
+                                        <p className="text-[11px] text-muted-foreground/70 mt-0.5 italic">{rule.description}</p>
+                                      )}
+                                      <p className={`text-[11px] mt-0.5 font-medium ${
+                                        isNA ? "text-muted-foreground"
+                                        : ok ? "text-green-700"
+                                        : isMandatory ? "text-red-700"
+                                        : "text-amber-700"
+                                      }`}>
+                                        {details}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Expanded detail */}
                     {isExpanded && (
