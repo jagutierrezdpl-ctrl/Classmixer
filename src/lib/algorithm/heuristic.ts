@@ -1342,6 +1342,77 @@ export function generateProposals(
           }
         }
       }
+
+      // Option D: last-resort second pass for students still isolated after A/B/C.
+      // Same as Option B but skips the wouldIsolateSomeoneIn guard. We pick the
+      // connection that would cause the FEWEST newly-isolated students, then
+      // immediately try Option-A chain-fixes for any students left without a bond
+      // in the vacated class. This handles cases where the isolated student cannot
+      // move (multiple sep-rule conflicts block every destination) but we can still
+      // bring a friend to them.
+      const countWouldIsolate = (cid: string): number => {
+        const cCls = clsOf(cid)
+        if (!cCls) return 999
+        return assignments.filter(a => {
+          if (a.student_id === cid || a.target_class !== cCls) return false
+          const conns = dirFriendMap.get(a.student_id)
+          if (!conns?.has(cid)) return false
+          return [...conns].every(c => c === cid || clsOf(c) !== cCls)
+        }).length
+      }
+
+      const stillIsolated = assignments.filter(a => !hasChosen(a.student_id, a.target_class))
+      for (const iso of stillIsolated) {
+        const sid = iso.student_id
+        const nowCls = clsOf(sid)
+        if (!nowCls || hasChosen(sid, nowCls)) continue
+
+        const myConns = [...(dirFriendMap.get(sid) ?? [])]
+        if (myConns.length === 0) continue
+
+        const movableConns = myConns
+          .filter(cid => {
+            const cCls = clsOf(cid)
+            return cCls && cCls !== nowCls && isMovable(cid)
+          })
+          .sort((a, b) => countWouldIsolate(a) - countWouldIsolate(b)) // prefer least damage
+
+        for (const connId of movableConns) {
+          const connCls = clsOf(connId)
+          if (!connCls) continue
+          if (!repairSepOk(connId, nowCls)) continue
+          if (forbiddenClassMap.get(connId)?.has(nowCls)) continue
+          if (!repairKeepOk(connId, connCls)) continue
+          if (!repairSizeOk(connCls, nowCls)) continue
+          if (!repairGenderOk(connId, nowCls)) continue
+          // No wouldIsolateSomeoneIn — last resort
+
+          doMove(connId, connCls, nowCls)
+
+          // Chain-fix: give any newly isolated students in connCls a chance via Option A
+          assignments
+            .filter(a => a.target_class === connCls && a.student_id !== connId && !hasChosen(a.student_id, connCls))
+            .forEach(a => {
+              const lostSid = a.student_id
+              const lostCls = clsOf(lostSid)
+              if (!lostCls || hasChosen(lostSid, lostCls) || !isMovable(lostSid)) return
+              if (!repairKeepOk(lostSid, lostCls)) return
+              const lostConns = [...(dirFriendMap.get(lostSid) ?? [])]
+              for (const target of targetClasses) {
+                if (target === lostCls) continue
+                if (!lostConns.some(c => clsOf(c) === target)) continue
+                if (!repairSepOk(lostSid, target)) continue
+                if (forbiddenClassMap.get(lostSid)?.has(target)) continue
+                if (!repairSizeOk(lostCls, target)) continue
+                if (!repairGenderOk(lostSid, target)) continue
+                doMove(lostSid, lostCls, target)
+                break
+              }
+            })
+
+          break // committed
+        }
+      }
     }
 
     // Dedup by fingerprint
