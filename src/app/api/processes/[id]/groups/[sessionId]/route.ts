@@ -22,7 +22,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!supabase) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   const body = await req.json()
-  const allowed = ["name", "num_groups", "balance_gender", "balance_academic", "use_sociogram", "sociogram_snapshot_id", "max_per_group"]
+  const allowed = ["name", "num_groups", "balance_gender", "balance_academic", "use_sociogram", "sociogram_snapshot_id", "max_per_group", "group_sizes"]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update: Record<string, any> = {}
   for (const key of allowed) {

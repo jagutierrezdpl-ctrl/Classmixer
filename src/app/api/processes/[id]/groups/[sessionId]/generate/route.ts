@@ -112,9 +112,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  const groupSizes: number[] | undefined =
+    Array.isArray(session.group_sizes) && session.group_sizes.length > 0
+      ? (session.group_sizes as number[])
+      : undefined
+
   const result = generateBestGroups(students as Student[], {
-    numGroups: session.num_groups,
-    maxPerGroup: session.max_per_group ?? undefined,
+    numGroups: groupSizes ? groupSizes.length : session.num_groups,
+    maxPerGroup: groupSizes ? undefined : (session.max_per_group ?? undefined),
+    groupSizes,
     balanceGender: session.balance_gender,
     balanceAcademic: session.balance_academic,
     useSociogram: session.use_sociogram,

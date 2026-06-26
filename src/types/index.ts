@@ -486,6 +486,9 @@ export interface GroupSession {
   name: string
   num_groups: number
   max_per_group?: number | null
+  // Variable-size config: each element is the target size for that group index.
+  // When present, overrides num_groups + max_per_group.
+  group_sizes?: number[] | null
   balance_gender: boolean
   balance_academic: boolean
   use_sociogram: boolean

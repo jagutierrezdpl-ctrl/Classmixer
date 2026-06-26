@@ -6,6 +6,8 @@ export interface GroupConfig {
   balanceAcademic: boolean
   useSociogram: boolean
   maxPerGroup?: number // optional cap on group size; auto-increases numGroups if needed
+  // Explicit per-group sizes, e.g. [4,4,4,3,3,3]. When set, overrides numGroups/maxPerGroup.
+  groupSizes?: number[]
   // Social data loaded when useSociogram=true
   socialConnections?: Map<string, Set<string>> // studentId → students chosen (friendship/work)
   socialConflicts?: Map<string, Set<string>>   // studentId → conflict students (negative)
@@ -100,12 +102,6 @@ export function generateGroups(students: Student[], config: GroupConfig, seed = 
     return { assignments: [], score_total: 0 }
   }
 
-  // If maxPerGroup is set, ensure we have enough groups to fit all students within the cap
-  const minGroupsNeeded = config.maxPerGroup
-    ? Math.ceil(students.length / config.maxPerGroup)
-    : 1
-  const numGroups = Math.min(Math.max(config.numGroups, minGroupsNeeded), students.length)
-
   const base = seed === 0
     ? [...students].sort((a, b) => academicScore(b) - academicScore(a))
     : shuffle([...students], seed * 12345 + 7)
@@ -132,17 +128,50 @@ export function generateGroups(students: Student[], config: GroupConfig, seed = 
     sortedStudents = base
   }
 
-  const groups: Student[][] = Array.from({ length: numGroups }, () => [])
-  let direction = 1
-  let gIdx = 0
-  for (const student of sortedStudents) {
-    groups[gIdx].push(student)
-    if (direction === 1) {
-      if (gIdx === numGroups - 1) direction = -1
-      else gIdx++
-    } else {
-      if (gIdx === 0) direction = 1
-      else gIdx--
+  let groups: Student[][]
+
+  if (config.groupSizes && config.groupSizes.length > 0) {
+    // Variable-size mode: fill each group up to its target capacity using snake order
+    const capacities = [...config.groupSizes]
+    groups = capacities.map(() => [])
+    // Snake-fill respecting per-group capacities
+    let dir = 1
+    let gi = 0
+    for (const student of sortedStudents) {
+      // Advance to next group with remaining capacity
+      let attempts = 0
+      while (groups[gi].length >= capacities[gi] && attempts < capacities.length) {
+        gi = (gi + dir + capacities.length) % capacities.length
+        attempts++
+      }
+      groups[gi].push(student)
+      // Move to next group in snake direction
+      if (dir === 1) {
+        if (gi === capacities.length - 1) dir = -1
+        else gi++
+      } else {
+        if (gi === 0) dir = 1
+        else gi--
+      }
+    }
+  } else {
+    // Uniform-size mode (original logic)
+    const minGroupsNeeded = config.maxPerGroup
+      ? Math.ceil(students.length / config.maxPerGroup)
+      : 1
+    const numGroups = Math.min(Math.max(config.numGroups, minGroupsNeeded), students.length)
+    groups = Array.from({ length: numGroups }, () => [])
+    let direction = 1
+    let gIdx = 0
+    for (const student of sortedStudents) {
+      groups[gIdx].push(student)
+      if (direction === 1) {
+        if (gIdx === numGroups - 1) direction = -1
+        else gIdx++
+      } else {
+        if (gIdx === 0) direction = 1
+        else gIdx--
+      }
     }
   }
 

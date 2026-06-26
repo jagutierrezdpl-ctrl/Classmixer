@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight, Camera, History, Pencil, Trash2, MoreVertical } from "lucide-react"
+import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight, Camera, History, Pencil, Trash2, MoreVertical, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -50,12 +50,12 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   // Form state
   const [formClassName, setFormClassName] = useState("")
   const [formName, setFormName] = useState("")
-  const [formNumGroups, setFormNumGroups] = useState(4)
+  // Group size rows: each entry = { count: N groups, size: M students per group }
+  const [formGroupSizes, setFormGroupSizes] = useState<{ count: number; size: number }[]>([{ count: 4, size: 4 }])
   const [formBalanceGender, setFormBalanceGender] = useState(true)
   const [formBalanceAcademic, setFormBalanceAcademic] = useState(true)
   const [formUseSociogram, setFormUseSociogram] = useState(false)
   const [formSnapshotId, setFormSnapshotId] = useState<string>("current")
-  const [formMaxPerGroup, setFormMaxPerGroup] = useState<string>("none")
 
   // Snapshot state
   const [snapshots, setSnapshots] = useState<Pick<SociogramSnapshot, "id" | "name" | "response_count" | "created_at">[]>([])
@@ -135,10 +135,29 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
     }
   }
 
+  function flatGroupSizes() {
+    return formGroupSizes.flatMap(r => Array(r.count).fill(r.size) as number[])
+  }
+  const totalGroups = formGroupSizes.reduce((s, r) => s + r.count, 0)
+  const totalSlots  = formGroupSizes.reduce((s, r) => s + r.count * r.size, 0)
+
+  function updateGroupSizeRow(i: number, field: "count" | "size", value: number) {
+    setFormGroupSizes(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+  }
+  function addGroupSizeRow() {
+    const lastSize = formGroupSizes[formGroupSizes.length - 1]?.size ?? 4
+    setFormGroupSizes(prev => [...prev, { count: 1, size: Math.max(2, lastSize - 1) }])
+  }
+  function removeGroupSizeRow(i: number) {
+    setFormGroupSizes(prev => prev.filter((_, idx) => idx !== i))
+  }
+
   async function handleCreate() {
     if (!formClassName) { toast.error("Selecciona una clase"); return }
     if (!formName.trim()) { toast.error("Escribe un nombre para la sesión"); return }
+    if (totalGroups < 1) { toast.error("Añade al menos un grupo"); return }
     setCreating(true)
+    const sizes = flatGroupSizes()
     try {
       const res = await fetch(`/api/processes/${id}/groups`, {
         method: "POST",
@@ -146,11 +165,11 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
         body: JSON.stringify({
           class_name: formClassName,
           name: formName.trim(),
-          num_groups: formNumGroups,
+          num_groups: sizes.length,
+          group_sizes: sizes,
           balance_gender: formBalanceGender,
           balance_academic: formBalanceAcademic,
           use_sociogram: formUseSociogram,
-          max_per_group: formMaxPerGroup !== "none" ? Number(formMaxPerGroup) : null,
           sociogram_snapshot_id: formUseSociogram && formSnapshotId !== "current" ? formSnapshotId : null,
         }),
       })
@@ -274,7 +293,20 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center gap-2 flex-wrap text-sm">
-                    <span className="text-muted-foreground">{session.num_groups} grupos</span>
+                    <span className="text-muted-foreground">
+                      {session.group_sizes && session.group_sizes.length > 0
+                        ? (() => {
+                            // Summarise sizes: e.g. [4,4,4,3,3] → "3×4 · 2×3"
+                            const counts = new Map<number, number>()
+                            for (const s of session.group_sizes) counts.set(s, (counts.get(s) ?? 0) + 1)
+                            return [...counts.entries()]
+                              .sort((a, b) => b[0] - a[0])
+                              .map(([size, n]) => `${n}×${size}`)
+                              .join(" · ")
+                          })()
+                        : `${session.num_groups} grupos`
+                      }
+                    </span>
                     {session.balance_gender && <Badge variant="outline" className="text-xs">Género</Badge>}
                     {session.balance_academic && <Badge variant="outline" className="text-xs">Nivel</Badge>}
                     {session.use_sociogram && (
@@ -364,30 +396,52 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
                 />
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Configuración de grupos</Label>
               <div className="space-y-2">
-                <Label htmlFor="sess-num">Número de grupos</Label>
-                <Select value={String(formNumGroups)} onValueChange={v => setFormNumGroups(Number(v))}>
-                  <SelectTrigger id="sess-num"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[2, 3, 4, 5, 6, 7, 8].map(n => (
-                      <SelectItem key={n} value={String(n)}>{n} grupos</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {formGroupSizes.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Select value={String(row.count)} onValueChange={v => updateGroupSizeRow(i, "count", Number(v))}>
+                      <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-sm text-muted-foreground shrink-0">grupos de</span>
+                    <Select value={String(row.size)} onValueChange={v => updateGroupSizeRow(i, "size", Number(v))}>
+                      <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {[2,3,4,5,6,7,8].map(n => (
+                          <SelectItem key={n} value={String(n)}>{n} alumnos</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formGroupSizes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeGroupSizeRow(i)}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="sess-max">Máx. por grupo</Label>
-                <Select value={formMaxPerGroup} onValueChange={setFormMaxPerGroup}>
-                  <SelectTrigger id="sess-max"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin límite</SelectItem>
-                    {[3, 4, 5, 6, 7, 8].map(n => (
-                      <SelectItem key={n} value={String(n)}>{n} alumnos</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={addGroupSizeRow}
+              >
+                <Plus className="w-3 h-3" /> Añadir tamaño diferente
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Total: <strong>{totalGroups} grupos</strong> · {totalSlots} huecos para alumnos
+              </p>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
