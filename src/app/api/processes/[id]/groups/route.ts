@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("group_sessions")
-    .select("*, group_sets(id, name, status, score_total, generated_at)")
+    .select("*, group_sets(id, name, status, score_total, generated_at), sociogram_snapshots(id, name)")
     .eq("process_id", id)
     .order("created_at", { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -44,6 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       balance_gender: body.balance_gender ?? true,
       balance_academic: body.balance_academic ?? true,
       use_sociogram: body.use_sociogram ?? false,
+      sociogram_snapshot_id: body.sociogram_snapshot_id ?? null,
       created_by: profile.id,
     })
     .select()

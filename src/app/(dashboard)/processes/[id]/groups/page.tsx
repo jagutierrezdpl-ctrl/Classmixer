@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight } from "lucide-react"
+import { ArrowLeft, Plus, Users2, Loader2, Calendar, ChevronRight, Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { GroupSession } from "@/types"
+import type { GroupSession, SociogramSnapshot } from "@/types"
 
 type GroupSessionWithSets = Omit<GroupSession, "group_sets"> & {
   group_sets?: Array<{
@@ -23,6 +23,7 @@ type GroupSessionWithSets = Omit<GroupSession, "group_sets"> & {
     score_total: number | null
     generated_at: string
   }>
+  sociogram_snapshots?: { id: string; name: string } | null
 }
 
 function formatDate(d: string) {
@@ -38,7 +39,6 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   const [creating, setCreating] = useState(false)
   const [open, setOpen] = useState(false)
 
-  // Available classes loaded from students
   const [classes, setClasses] = useState<string[]>([])
 
   // Form state
@@ -48,6 +48,14 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   const [formBalanceGender, setFormBalanceGender] = useState(true)
   const [formBalanceAcademic, setFormBalanceAcademic] = useState(true)
   const [formUseSociogram, setFormUseSociogram] = useState(false)
+  const [formSnapshotId, setFormSnapshotId] = useState<string>("current")
+
+  // Snapshot state
+  const [snapshots, setSnapshots] = useState<Pick<SociogramSnapshot, "id" | "name" | "response_count" | "created_at">[]>([])
+  const [loadingSnapshots, setLoadingSnapshots] = useState(false)
+  const [creatingSnapshot, setCreatingSnapshot] = useState(false)
+  const [newSnapshotName, setNewSnapshotName] = useState("")
+  const [savingSnapshot, setSavingSnapshot] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -57,10 +65,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
           fetch(`/api/processes/${id}/groups`),
           fetch(`/api/processes/${id}/students`),
         ])
-        if (sessRes.ok) {
-          const data = await sessRes.json()
-          setSessions(data)
-        }
+        if (sessRes.ok) setSessions(await sessRes.json())
         if (stuRes.ok) {
           const students: { current_class: string }[] = await stuRes.json()
           const unique = [...new Set(students.map(s => s.current_class))].sort()
@@ -77,6 +82,52 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // Load snapshots when sociogram toggle is turned on
+  useEffect(() => {
+    if (formUseSociogram && open) loadSnapshots()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formUseSociogram, open])
+
+  async function loadSnapshots() {
+    setLoadingSnapshots(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/snapshots`)
+      if (res.ok) {
+        const data = await res.json()
+        setSnapshots(data)
+        // Default to latest snapshot if any, otherwise "current"
+        if (data.length > 0 && formSnapshotId === "current") {
+          setFormSnapshotId(data[0].id)
+        }
+      }
+    } finally {
+      setLoadingSnapshots(false)
+    }
+  }
+
+  async function handleCreateSnapshot() {
+    if (!newSnapshotName.trim()) { toast.error("Escribe un nombre para el snapshot"); return }
+    setSavingSnapshot(true)
+    try {
+      const res = await fetch(`/api/processes/${id}/sociogram/snapshots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newSnapshotName.trim() }),
+      })
+      if (!res.ok) { toast.error("Error al crear el snapshot"); return }
+      const snap = await res.json()
+      setSnapshots(prev => [snap, ...prev])
+      setFormSnapshotId(snap.id)
+      setCreatingSnapshot(false)
+      setNewSnapshotName("")
+      toast.success("Snapshot creado")
+    } catch {
+      toast.error("Error inesperado")
+    } finally {
+      setSavingSnapshot(false)
+    }
+  }
+
   async function handleCreate() {
     if (!formClassName) { toast.error("Selecciona una clase"); return }
     if (!formName.trim()) { toast.error("Escribe un nombre para la sesión"); return }
@@ -92,6 +143,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
           balance_gender: formBalanceGender,
           balance_academic: formBalanceAcademic,
           use_sociogram: formUseSociogram,
+          sociogram_snapshot_id: formUseSociogram && formSnapshotId !== "current" ? formSnapshotId : null,
         }),
       })
       if (!res.ok) {
@@ -106,6 +158,15 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
       toast.error("Error inesperado")
     } finally {
       setCreating(false)
+    }
+  }
+
+  function handleOpenChange(v: boolean) {
+    setOpen(v)
+    if (!v) {
+      // Reset snapshot form state on close
+      setCreatingSnapshot(false)
+      setNewSnapshotName("")
     }
   }
 
@@ -165,13 +226,15 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2 flex-wrap text-sm">
                     <span className="text-muted-foreground">{session.num_groups} grupos</span>
-                    {session.balance_gender && (
-                      <Badge variant="outline" className="text-xs">Género</Badge>
-                    )}
-                    {session.balance_academic && (
-                      <Badge variant="outline" className="text-xs">Nivel</Badge>
+                    {session.balance_gender && <Badge variant="outline" className="text-xs">Género</Badge>}
+                    {session.balance_academic && <Badge variant="outline" className="text-xs">Nivel</Badge>}
+                    {session.use_sociogram && (
+                      <Badge variant="outline" className="text-xs gap-1">
+                        <Camera className="w-3 h-3" />
+                        {session.sociogram_snapshots?.name ?? "Sociograma actual"}
+                      </Badge>
                     )}
                   </div>
                   {(session.group_sets?.length ?? 0) > 0 ? (
@@ -191,7 +254,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
       )}
 
       {/* Create session dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Nueva sesión de grupos</DialogTitle>
@@ -214,9 +277,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
                     <SelectValue placeholder="Selecciona una clase" />
                   </SelectTrigger>
                   <SelectContent>
-                    {classes.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
+                    {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               ) : (
@@ -231,9 +292,7 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
             <div className="space-y-2">
               <Label htmlFor="sess-num">Número de grupos</Label>
               <Select value={String(formNumGroups)} onValueChange={v => setFormNumGroups(Number(v))}>
-                <SelectTrigger id="sess-num">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger id="sess-num"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[2, 3, 4, 5, 6, 7, 8].map(n => (
                     <SelectItem key={n} value={String(n)}>{n} grupos</SelectItem>
@@ -244,32 +303,91 @@ export default function GroupsPage({ params }: { params: Promise<{ id: string }>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label htmlFor="balance-gender">Equilibrar género</Label>
-                <Switch
-                  id="balance-gender"
-                  checked={formBalanceGender}
-                  onCheckedChange={setFormBalanceGender}
-                />
+                <Switch id="balance-gender" checked={formBalanceGender} onCheckedChange={setFormBalanceGender} />
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="balance-academic">Equilibrar nivel académico</Label>
-                <Switch
-                  id="balance-academic"
-                  checked={formBalanceAcademic}
-                  onCheckedChange={setFormBalanceAcademic}
-                />
+                <Switch id="balance-academic" checked={formBalanceAcademic} onCheckedChange={setFormBalanceAcademic} />
               </div>
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="use-sociogram">Usar sociograma</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Requiere cuestionario completado</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Tiene en cuenta amistades y conflictos</p>
                 </div>
-                <Switch
-                  id="use-sociogram"
-                  checked={formUseSociogram}
-                  onCheckedChange={setFormUseSociogram}
-                />
+                <Switch id="use-sociogram" checked={formUseSociogram} onCheckedChange={setFormUseSociogram} />
               </div>
             </div>
+
+            {/* Snapshot selector — only when use_sociogram is ON */}
+            {formUseSociogram && (
+              <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Datos del sociograma
+                </Label>
+                {loadingSnapshots ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Cargando snapshots...
+                  </div>
+                ) : (
+                  <Select value={formSnapshotId} onValueChange={setFormSnapshotId}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="current">
+                        Respuestas actuales
+                      </SelectItem>
+                      {snapshots.map(s => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            · {formatDate(s.created_at)}
+                            {s.response_count != null ? ` · ${s.response_count} resp.` : ""}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {/* Inline create snapshot */}
+                {!creatingSnapshot ? (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs text-muted-foreground"
+                    onClick={() => setCreatingSnapshot(true)}
+                  >
+                    <Camera className="w-3 h-3 mr-1" /> Guardar snapshot de las respuestas actuales
+                  </Button>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Nombre del snapshot (ej: Trimestre 1)"
+                      value={newSnapshotName}
+                      onChange={e => setNewSnapshotName(e.target.value)}
+                      className="h-8 text-sm flex-1"
+                      onKeyDown={e => e.key === "Enter" && handleCreateSnapshot()}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 px-3"
+                      onClick={handleCreateSnapshot}
+                      disabled={savingSnapshot}
+                    >
+                      {savingSnapshot ? <Loader2 className="w-3 h-3 animate-spin" /> : "Guardar"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2"
+                      onClick={() => { setCreatingSnapshot(false); setNewSnapshotName("") }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={creating}>Cancelar</Button>

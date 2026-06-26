@@ -468,6 +468,17 @@ export interface ImportWarning {
   message: string
 }
 
+export interface SociogramSnapshot {
+  id: string
+  process_id: string
+  name: string
+  description?: string
+  connections: Array<{ from: string; to: string; type: string }>
+  response_count?: number
+  created_by?: string | null
+  created_at: string
+}
+
 export interface GroupSession {
   id: string
   process_id: string
@@ -477,6 +488,8 @@ export interface GroupSession {
   balance_gender: boolean
   balance_academic: boolean
   use_sociogram: boolean
+  sociogram_snapshot_id?: string | null
+  sociogram_snapshots?: Pick<SociogramSnapshot, "id" | "name"> | null
   created_by: string | null
   created_at: string
   group_sets?: GroupSet[]

@@ -43,23 +43,41 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   let socialConflicts: Map<string, Set<string>> | undefined
 
   if (session.use_sociogram) {
-    const { data: responses } = await supabase
-      .from("responses")
-      .select("respondent_student_id, target_student_id, relation_type")
-      .eq("process_id", id)
+    // Prefer snapshot data if set; otherwise fall back to current responses
+    let rawConnections: Array<{ from: string; to: string; type: string }> = []
 
-    if (responses) {
-      socialConnections = new Map()
-      socialConflicts = new Map()
-      for (const r of responses) {
-        if (!studentIds.has(r.respondent_student_id) || !studentIds.has(r.target_student_id)) continue
-        if (r.relation_type === "negative") {
-          if (!socialConflicts.has(r.respondent_student_id)) socialConflicts.set(r.respondent_student_id, new Set())
-          socialConflicts.get(r.respondent_student_id)!.add(r.target_student_id)
-        } else if (r.relation_type === "friendship" || r.relation_type === "work") {
-          if (!socialConnections.has(r.respondent_student_id)) socialConnections.set(r.respondent_student_id, new Set())
-          socialConnections.get(r.respondent_student_id)!.add(r.target_student_id)
-        }
+    if (session.sociogram_snapshot_id) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: snap } = await (supabase as any)
+        .from("sociogram_snapshots")
+        .select("connections")
+        .eq("id", session.sociogram_snapshot_id)
+        .single()
+      if (snap?.connections) {
+        rawConnections = snap.connections as typeof rawConnections
+      }
+    } else {
+      const { data: responses } = await supabase
+        .from("responses")
+        .select("respondent_student_id, target_student_id, relation_type")
+        .eq("process_id", id)
+      rawConnections = (responses ?? []).map(r => ({
+        from: r.respondent_student_id,
+        to: r.target_student_id,
+        type: r.relation_type,
+      }))
+    }
+
+    socialConnections = new Map()
+    socialConflicts = new Map()
+    for (const c of rawConnections) {
+      if (!studentIds.has(c.from) || !studentIds.has(c.to)) continue
+      if (c.type === "negative") {
+        if (!socialConflicts.has(c.from)) socialConflicts.set(c.from, new Set())
+        socialConflicts.get(c.from)!.add(c.to)
+      } else if (c.type === "friendship" || c.type === "work") {
+        if (!socialConnections.has(c.from)) socialConnections.set(c.from, new Set())
+        socialConnections.get(c.from)!.add(c.to)
       }
     }
   }

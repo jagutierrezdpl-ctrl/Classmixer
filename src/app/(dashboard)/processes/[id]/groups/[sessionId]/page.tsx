@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { GroupSession, GroupSet, GroupAssignment, Student } from "@/types"
+import type { GroupSession, GroupSet, GroupAssignment, Student, SociogramSnapshot } from "@/types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ interface GroupSetWithAssignments extends GroupSet {
 
 interface GroupSessionDetail extends GroupSession {
   group_sets?: GroupSetWithAssignments[]
+  sociogram_snapshots?: Pick<SociogramSnapshot, "id" | "name"> | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -225,7 +226,9 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
               Clase {session.class_name} · {numGroups} grupos
               {session.balance_gender ? " · Equilibrio de género" : ""}
               {session.balance_academic ? " · Equilibrio académico" : ""}
-              {session.use_sociogram ? " · Sociograma" : ""}
+              {session.use_sociogram
+                ? ` · Sociograma: ${session.sociogram_snapshots?.name ?? "respuestas actuales"}`
+                : ""}
             </p>
           </div>
         </div>
