@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   Users2, Plus, Loader2, ChevronRight, Calendar,
-  Camera, X, CheckCircle2
+  Camera, X, CheckCircle2, Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -60,6 +60,7 @@ export default function CooperativoPage() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Available classes across all processes
   const [classes, setClasses] = useState<string[]>([])
@@ -199,6 +200,23 @@ export default function CooperativoPage() {
     }
   }
 
+  async function handleDelete(session: CoopSession, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm(`¿Eliminar la sesión "${session.name}"? Se borrarán todas sus distribuciones y reglas.`)) return
+    setDeletingId(session.id)
+    try {
+      const res = await fetch(`/api/processes/${session.process_id}/groups/${session.id}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Error al eliminar"); return }
+      setSessions(prev => prev.filter(s => s.id !== session.id))
+      toast.success("Sesión eliminada")
+    } catch {
+      toast.error("Error inesperado")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   function handleOpenChange(v: boolean) {
     setOpen(v)
     if (!v) { setCreatingSnapshot(false); setNewSnapshotName("") }
@@ -263,52 +281,62 @@ export default function CooperativoPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {clsSessions.map(session => {
                   const approved = session.group_sets?.find(s => s.status === "aprobado")
+                  const isDeleting = deletingId === session.id
                   return (
-                    <Link
+                    <Card
                       key={session.id}
-                      href={`/processes/${session.process_id}/groups/${session.id}`}
+                      className="hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer h-full relative group"
+                      onClick={() => router.push(`/processes/${session.process_id}/groups/${session.id}`)}
                     >
-                      <Card className="hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer h-full">
-                        <CardHeader className="pb-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <Users2 className="w-4 h-4 text-primary" />
-                              </div>
-                              <div>
-                                <CardTitle className="text-base leading-tight">{session.name}</CardTitle>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {sizeSummary(session.group_sizes, session.num_groups)}
-                                </p>
-                              </div>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <Users2 className="w-4 h-4 text-primary" />
                             </div>
-                            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+                            <div>
+                              <CardTitle className="text-base leading-tight">{session.name}</CardTitle>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {sizeSummary(session.group_sizes, session.num_groups)}
+                              </p>
+                            </div>
                           </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {session.balance_gender && <Badge variant="outline" className="text-xs">Género</Badge>}
-                            {session.balance_academic && <Badge variant="outline" className="text-xs">Nivel</Badge>}
-                            {session.use_sociogram && (
-                              <Badge variant="outline" className="text-xs gap-1">
-                                <Camera className="w-3 h-3" />
-                                {session.sociogram_snapshots?.name ?? "Sociograma"}
-                              </Badge>
-                            )}
-                            {approved && (
-                              <Badge className="text-xs gap-1 bg-green-100 text-green-700 border-green-200">
-                                <CheckCircle2 className="w-3 h-3" /> Aprobado
-                              </Badge>
-                            )}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 hover:text-red-600 text-muted-foreground"
+                              onClick={(e) => handleDelete(session, e)}
+                              disabled={isDeleting}
+                            >
+                              {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </button>
+                            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="w-3 h-3" />
-                            {session.group_sets?.length ?? 0} distribución{(session.group_sets?.length ?? 0) !== 1 ? "es" : ""}
-                            &nbsp;· {formatDate(session.created_at)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {session.balance_gender && <Badge variant="outline" className="text-xs">Género</Badge>}
+                          {session.balance_academic && <Badge variant="outline" className="text-xs">Nivel</Badge>}
+                          {session.use_sociogram && (
+                            <Badge variant="outline" className="text-xs gap-1">
+                              <Camera className="w-3 h-3" />
+                              {session.sociogram_snapshots?.name ?? "Sociograma"}
+                            </Badge>
+                          )}
+                          {approved && (
+                            <Badge className="text-xs gap-1 bg-green-100 text-green-700 border-green-200">
+                              <CheckCircle2 className="w-3 h-3" /> Aprobado
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Calendar className="w-3 h-3" />
+                          {session.group_sets?.length ?? 0} distribución{(session.group_sets?.length ?? 0) !== 1 ? "es" : ""}
+                          &nbsp;· {formatDate(session.created_at)}
+                        </div>
+                      </CardContent>
+                    </Card>
                   )
                 })}
               </div>

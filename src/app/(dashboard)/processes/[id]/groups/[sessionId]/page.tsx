@@ -2,11 +2,12 @@
 
 import { use, useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   ArrowLeft, Users2, Loader2, RefreshCw, Printer,
   GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check, CheckCircle2,
-  ShieldAlert, Plus,
+  ShieldAlert, Plus, Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -95,6 +96,7 @@ function buildGroups(assignments: GroupAssignmentWithStudent[]): Map<number, Gro
 
 export default function GroupSessionPage({ params }: { params: Promise<{ id: string; sessionId: string }> }) {
   const { id, sessionId } = use(params)
+  const router = useRouter()
 
   const [session, setSession] = useState<GroupSessionDetail | null>(null)
   const [latestSet, setLatestSet] = useState<GroupSetWithAssignments | null>(null)
@@ -247,6 +249,19 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
     }
   }
 
+  async function handleDeleteSession() {
+    if (!session) return
+    if (!confirm(`¿Eliminar la sesión "${session.name}"? Se borrarán todas sus distribuciones y reglas.`)) return
+    try {
+      const res = await fetch(`/api/processes/${id}/groups/${sessionId}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Error al eliminar"); return }
+      toast.success("Sesión eliminada")
+      router.push(`/cooperativo`)
+    } catch {
+      toast.error("Error inesperado")
+    }
+  }
+
   async function loadRules() {
     const res = await fetch(`/api/cooperative/${sessionId}/rules`)
     if (res.ok) setRules(await res.json())
@@ -355,6 +370,16 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {!editMode && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+              onClick={handleDeleteSession}
+            >
+              <Trash2 className="w-4 h-4" /> Eliminar sesión
+            </Button>
+          )}
           {latestSet && !editMode && (
             <>
               <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-2">
