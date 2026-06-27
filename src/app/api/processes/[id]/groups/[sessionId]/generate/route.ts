@@ -19,7 +19,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: session } = await (supabase as any)
     .from("group_sessions")
-    .select("*")
+    .select("*, sociogram_snapshots(name)")
     .eq("id", sessionId)
     .eq("process_id", id)
     .single()
@@ -161,6 +161,98 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     mustKeepTogether: mustKeepTogether.length > 0 ? mustKeepTogether : undefined,
   }, 20)
 
+  // Build rationale report
+  const studentMap = new Map((students as Student[]).map(s => [s.id, s]))
+  const byGroup = new Map<number, string[]>()
+  for (const a of result.assignments) {
+    if (!byGroup.has(a.group_number)) byGroup.set(a.group_number, [])
+    byGroup.get(a.group_number)!.push(a.student_id)
+  }
+
+  const groupReports = [...byGroup.entries()].sort(([a], [b]) => a - b).map(([num, memberIds]) => {
+    const members = memberIds.map(sid => studentMap.get(sid)).filter(Boolean) as Student[]
+    const genderCount: Record<string, number> = {}
+    const levelCount: Record<string, number> = {}
+    let gradeSum = 0, gradeCount = 0
+    let socialPairs = 0, conflictPairs = 0, repeatedPairs = 0
+
+    for (const m of members) {
+      genderCount[m.gender ?? "?"] = (genderCount[m.gender ?? "?"] ?? 0) + 1
+      const lvl = m.academic_level ?? "?"
+      levelCount[lvl] = (levelCount[lvl] ?? 0) + 1
+      if (m.average_grade != null) { gradeSum += m.average_grade; gradeCount++ }
+    }
+
+    for (let i = 0; i < memberIds.length; i++) {
+      for (let j = i + 1; j < memberIds.length; j++) {
+        const a = memberIds[i], b = memberIds[j]
+        if (socialConnections?.get(a)?.has(b) || socialConnections?.get(b)?.has(a)) socialPairs++
+        if (socialConflicts?.get(a)?.has(b) || socialConflicts?.get(b)?.has(a)) conflictPairs++
+        if (previousGroupings.get(a)?.has(b) || previousGroupings.get(b)?.has(a)) repeatedPairs++
+      }
+    }
+
+    return {
+      number: num,
+      size: members.length,
+      gender: genderCount,
+      avg_grade: gradeCount > 0 ? Math.round((gradeSum / gradeCount) * 10) / 10 : null,
+      levels: levelCount,
+      social_pairs: socialPairs,
+      conflict_pairs: conflictPairs,
+      repeated_pairs: repeatedPairs,
+    }
+  })
+
+  const ruleReports = (rules ?? []).map((rule: { rule_type: string; cooperative_rule_students: { student_id: string }[] }) => {
+    const ids = (rule.cooperative_rule_students ?? []).map((rs: { student_id: string }) => rs.student_id).filter((sid: string) => studentIds.has(sid))
+    const names = ids.map((sid: string) => {
+      const s = studentMap.get(sid)
+      return s ? `${s.first_name} ${s.last_name}` : sid
+    })
+    // Check if satisfied: for must_separate, no pair should share a group
+    let satisfied = true
+    if (rule.rule_type === "must_separate") {
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const ga = result.assignments.find(a => a.student_id === ids[i])?.group_number
+          const gb = result.assignments.find(a => a.student_id === ids[j])?.group_number
+          if (ga != null && gb != null && ga === gb) { satisfied = false; break }
+        }
+        if (!satisfied) break
+      }
+    } else if (rule.rule_type === "must_keep_together") {
+      const groups = ids.map((sid: string) => result.assignments.find(a => a.student_id === sid)?.group_number)
+      satisfied = groups.every(g => g != null && g === groups[0])
+    }
+    return { type: rule.rule_type, students: names, satisfied }
+  })
+
+  const totalSocialPairs = groupReports.reduce((s, g) => s + g.social_pairs, 0)
+  const totalConflictPairs = groupReports.reduce((s, g) => s + g.conflict_pairs, 0)
+  const totalRepeated = groupReports.reduce((s, g) => s + g.repeated_pairs, 0)
+
+  const rationale = {
+    score: result.score_total,
+    settings: {
+      balance_gender: session.balance_gender,
+      balance_academic: session.balance_academic,
+      use_sociogram: session.use_sociogram,
+      snapshot_name: session.sociogram_snapshots?.name ?? null,
+      group_sizes: groupSizes ?? null,
+    },
+    rules: ruleReports,
+    groups: groupReports,
+    totals: {
+      students: (students as Student[]).length,
+      rules_satisfied: ruleReports.filter((r: { satisfied: boolean }) => r.satisfied).length,
+      rules_violated: ruleReports.filter((r: { satisfied: boolean }) => !r.satisfied).length,
+      social_pairs_within: totalSocialPairs,
+      conflict_pairs_within: totalConflictPairs,
+      repeated_pairs: totalRepeated,
+    },
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { count } = await (supabase as any)
     .from("group_sets")
@@ -172,7 +264,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: groupSet, error: setErr } = await (supabase as any)
     .from("group_sets")
-    .insert({ session_id: sessionId, name: setName, score_total: result.score_total, status: "generado" })
+    .insert({ session_id: sessionId, name: setName, score_total: result.score_total, status: "generado", rationale })
     .select()
     .single()
 

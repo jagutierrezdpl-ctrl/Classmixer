@@ -499,6 +499,42 @@ export interface GroupSession {
   group_sets?: GroupSet[]
 }
 
+export interface GroupRationaleGroup {
+  number: number
+  size: number
+  gender: Record<string, number>
+  avg_grade: number | null
+  levels: Record<string, number>
+  social_pairs: number
+  conflict_pairs: number
+  repeated_pairs: number
+}
+
+export interface GroupRationale {
+  score: number
+  settings: {
+    balance_gender: boolean
+    balance_academic: boolean
+    use_sociogram: boolean
+    snapshot_name: string | null
+    group_sizes: number[] | null
+  }
+  rules: Array<{
+    type: string
+    students: string[]
+    satisfied: boolean
+  }>
+  groups: GroupRationaleGroup[]
+  totals: {
+    students: number
+    rules_satisfied: number
+    rules_violated: number
+    social_pairs_within: number
+    conflict_pairs_within: number
+    repeated_pairs: number
+  }
+}
+
 export interface GroupSet {
   id: string
   session_id: string
@@ -508,6 +544,7 @@ export interface GroupSet {
   generated_at: string
   created_at: string
   group_assignments?: GroupAssignment[]
+  rationale?: GroupRationale | null
 }
 
 export interface GroupAssignment {

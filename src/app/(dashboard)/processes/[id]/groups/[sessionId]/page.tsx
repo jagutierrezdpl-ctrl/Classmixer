@@ -7,7 +7,7 @@ import { toast } from "sonner"
 import {
   ArrowLeft, Users2, Loader2, RefreshCw, Printer,
   GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check, CheckCircle2,
-  ShieldAlert, Plus, Trash2,
+  ShieldAlert, Plus, Trash2, FileText, TrendingUp, AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import type { GroupSession, GroupSet, GroupAssignment, Student, SociogramSnapshot } from "@/types"
+import type { GroupSession, GroupSet, GroupAssignment, Student, SociogramSnapshot, GroupRationale } from "@/types"
 
 // ─── Cooperative rule types ───────────────────────────────────────────────────
 
@@ -92,6 +92,105 @@ function buildGroups(assignments: GroupAssignmentWithStudent[]): Map<number, Gro
   return map
 }
 
+// ─── Rationale panel ──────────────────────────────────────────────────────────
+
+function RationalePanel({ rationale, onClose }: { rationale: GroupRationale; onClose: () => void }) {
+  const r = rationale
+  const LEVEL_COLOR: Record<string, string> = {
+    "Alto": "text-green-700 bg-green-50", "Medio-alto": "text-teal-700 bg-teal-50",
+    "Medio": "text-blue-700 bg-blue-50", "Medio-bajo": "text-orange-700 bg-orange-50",
+    "Bajo": "text-red-700 bg-red-50",
+  }
+  return (
+    <div className="mb-6 rounded-xl border bg-card shadow-sm print:hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b">
+        <h2 className="font-semibold flex items-center gap-2 text-sm">
+          <FileText className="w-4 h-4 text-primary" /> Informe de generación — {r.settings.balance_gender ? "equilibrio género · " : ""}{r.settings.balance_academic ? "equilibrio nivel · " : ""}{r.settings.use_sociogram ? `sociograma${r.settings.snapshot_name ? ` (${r.settings.snapshot_name})` : ""} · ` : ""}Puntuación {r.score.toFixed(1)}
+        </h2>
+        <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}><X className="w-4 h-4" /></Button>
+      </div>
+
+      <div className="p-5 space-y-5">
+        {/* Summary row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Alumnos", value: r.totals.students },
+            { label: "Reglas cumplidas", value: r.totals.rules_satisfied, color: "text-green-600" },
+            { label: "Reglas incumplidas", value: r.totals.rules_violated, color: r.totals.rules_violated > 0 ? "text-red-600" : "text-muted-foreground" },
+            r.settings.use_sociogram
+              ? { label: "Pares con afinidad", value: r.totals.social_pairs_within, color: "text-blue-600" }
+              : { label: "Pares repetidos evitados", value: `−${r.totals.repeated_pairs}`, color: "text-orange-600" },
+          ].map(item => (
+            <div key={item.label} className="rounded-lg border px-4 py-3 text-center">
+              <p className={`text-2xl font-bold ${item.color ?? ""}`}>{item.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{item.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Rules */}
+        {r.rules.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Reglas aplicadas</h3>
+            <div className="space-y-1.5">
+              {r.rules.map((rule, i) => (
+                <div key={i} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${rule.satisfied ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                  {rule.satisfied
+                    ? <Check className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                    : <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />}
+                  <div>
+                    <span className="font-medium">{rule.type === "must_separate" ? "Separar" : "Juntar"}:</span>{" "}
+                    {rule.students.join(" · ")}
+                    {!rule.satisfied && <span className="ml-2 text-red-600 text-xs">No fue posible cumplir esta regla</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Per-group stats */}
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Detalle por grupo</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {r.groups.map(g => (
+              <div key={g.number} className="rounded-lg border px-4 py-3 space-y-2">
+                <p className="font-semibold text-sm">Grupo {g.number} <span className="text-muted-foreground font-normal">({g.size} alumnos)</span></p>
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  {Object.entries(g.gender).map(([gen, n]) => (
+                    <span key={gen} className={`rounded px-1.5 py-0.5 border ${gen === "F" ? "border-pink-200 bg-pink-50 text-pink-700" : gen === "M" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"}`}>
+                      {gen} {n}
+                    </span>
+                  ))}
+                  {g.avg_grade != null && (
+                    <span className="rounded px-1.5 py-0.5 border border-gray-200 bg-gray-50 flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" /> {g.avg_grade.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1 text-xs">
+                  {Object.entries(g.levels).sort(([, a], [, b]) => b - a).map(([lvl, n]) => (
+                    <span key={lvl} className={`rounded px-1.5 py-0.5 ${LEVEL_COLOR[lvl] ?? "bg-gray-50 text-gray-700"}`}>
+                      {lvl} {n}
+                    </span>
+                  ))}
+                </div>
+                {(g.social_pairs > 0 || g.conflict_pairs > 0 || g.repeated_pairs > 0) && (
+                  <div className="text-xs text-muted-foreground space-y-0.5 pt-1 border-t">
+                    {g.social_pairs > 0 && <p className="text-blue-600">{g.social_pairs} par{g.social_pairs > 1 ? "es" : ""} con afinidad</p>}
+                    {g.conflict_pairs > 0 && <p className="text-red-600">{g.conflict_pairs} par{g.conflict_pairs > 1 ? "es" : ""} en conflicto</p>}
+                    {g.repeated_pairs > 0 && <p className="text-orange-600">{g.repeated_pairs} par{g.repeated_pairs > 1 ? "es" : ""} ya agrupados antes</p>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function GroupSessionPage({ params }: { params: Promise<{ id: string; sessionId: string }> }) {
@@ -107,6 +206,9 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
   const [editMode, setEditMode] = useState(false)
   const [editAssignments, setEditAssignments] = useState<GroupAssignmentWithStudent[]>([])
   const [saving, setSaving] = useState(false)
+
+  // Rationale report
+  const [showRationale, setShowRationale] = useState(false)
 
   // Cooperative rules
   const [rules, setRules] = useState<CoopRule[]>([])
@@ -385,6 +487,11 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
               <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-2">
                 <Printer className="w-4 h-4" /> Imprimir
               </Button>
+              {latestSet.rationale && (
+                <Button variant="outline" size="sm" onClick={() => setShowRationale(v => !v)} className="gap-2">
+                  <FileText className="w-4 h-4" /> Informe
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={enterEdit} className="gap-2">
                 <Pencil className="w-4 h-4" /> Editar
               </Button>
@@ -470,6 +577,11 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
             {latestSet.group_assignments?.length ?? 0} alumnos distribuidos en {sortedGroupNumbers.length} grupos
           </p>
         </div>
+      )}
+
+      {/* Rationale report panel */}
+      {showRationale && latestSet?.rationale && (
+        <RationalePanel rationale={latestSet.rationale} onClose={() => setShowRationale(false)} />
       )}
 
       {/* Cooperative rules panel — always visible, above the groups */}
