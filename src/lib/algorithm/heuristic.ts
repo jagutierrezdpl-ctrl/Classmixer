@@ -560,6 +560,12 @@ export function generateProposals(
   const excludeRules = rules.filter(r => r.rule_type === "exclude_student" && r.active)
   const mustTogetherRules = rules.filter(r => r.rule_type === "must_keep_together" && r.active)
   const shouldTogetherRules = rules.filter(r => r.rule_type === "should_keep_together" && r.active)
+  // "Hard" together rules: must_keep_together always + should_keep_together when priority=obligatoria.
+  // Priority overrides type — if the user marks a "recommendation" as mandatory, we enforce it.
+  const hardTogetherRules = [
+    ...mustTogetherRules,
+    ...shouldTogetherRules.filter(r => r.priority === "obligatoria"),
+  ]
   const atLeastOneRules = rules.filter(r => r.rule_type === "keep_at_least_one" && r.active)
   const maxFromGroupRules = rules.filter(r => r.rule_type === "max_from_group" && r.active)
   const protectVulnerableRules = rules.filter(r => r.rule_type === "protect_vulnerable" && r.active)
@@ -585,7 +591,7 @@ export function generateProposals(
 
   // Students who cannot be moved
   const mustTogetherLockedClass = new Map<string, string>()
-  mustTogetherRules.forEach(r => {
+  hardTogetherRules.forEach(r => {
     const ids = (r.students ?? []).map(rs => rs.student_id)
     const lockedInGroup = ids.filter(sid => lockedStudents.has(sid))
     if (lockedInGroup.length > 0) {
@@ -596,7 +602,7 @@ export function generateProposals(
 
   // must_keep_together partners map: sid → Set of partner sids that must share a class
   const mustTogetherPartnersMap = new Map<string, Set<string>>()
-  mustTogetherRules.forEach(r => {
+  hardTogetherRules.forEach(r => {
     const ids = (r.students ?? []).map(rs => rs.student_id)
     ids.forEach(sid => {
       const partners = mustTogetherPartnersMap.get(sid) ?? new Set<string>()
@@ -687,7 +693,7 @@ export function generateProposals(
 
   // Mandatory rule subsets — these MUST be satisfied; seeds that violate them are rejected.
   const mandatorySepaRules = separationRules.filter(r => r.priority === "obligatoria")
-  const mandatoryTogetherRules = mustTogetherRules.filter(r => r.priority === "obligatoria")
+  const mandatoryTogetherRules = hardTogetherRules.filter(r => r.priority === "obligatoria")
   const mandatoryMaxRules = maxFromGroupRules.filter(r => r.priority === "obligatoria")
 
   // Pre-built map for name resolution in violation messages
@@ -834,14 +840,14 @@ export function generateProposals(
     // Without this, rules "keep A+B" and "keep B+C" would create separate units {A,B}
     // and {C}, leaving C in a different class than B even though it shouldn't be.
     {
-      const togetherAll = mustTogetherRules.flatMap(r => (r.students ?? []).map(rs => rs.student_id))
+      const togetherAll = hardTogetherRules.flatMap(r => (r.students ?? []).map(rs => rs.student_id))
       const ufParent = new Map<string, string>(togetherAll.map(id => [id, id]))
       function ufFind(x: string): string {
         const p = ufParent.get(x)
         if (!p || p === x) return x
         const root = ufFind(p); ufParent.set(x, root); return root
       }
-      mustTogetherRules.forEach(r => {
+      hardTogetherRules.forEach(r => {
         const ids = (r.students ?? []).map(rs => rs.student_id)
         for (let i = 1; i < ids.length; i++) {
           const ra = ufFind(ids[0]), rb = ufFind(ids[i])
@@ -866,9 +872,9 @@ export function generateProposals(
       })
     }
 
-    // should_keep_together (applied on even seeds for variety)
+    // should_keep_together non-obligatory (applied on even seeds for variety; obligatoria ones are already in hardTogetherRules above)
     if (seed % 2 === 0) {
-      shouldTogetherRules.forEach(r => {
+      shouldTogetherRules.filter(r => r.priority !== "obligatoria").forEach(r => {
         const ids = (r.students ?? []).map(rs => rs.student_id)
         const free = ids.filter(
           sid => !alreadyAssigned.has(sid) && freeStudents.some(s => s.id === sid) && !unitCovered.has(sid)
