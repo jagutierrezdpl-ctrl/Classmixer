@@ -830,17 +830,41 @@ export function generateProposals(
     const units: Unit[] = []
     const unitCovered = new Set<string>()
 
-    // must_keep_together free groups (no locked member)
-    mustTogetherRules.forEach(r => {
-      const ids = (r.students ?? []).map(rs => rs.student_id)
-      const free = ids.filter(
-        sid => !alreadyAssigned.has(sid) && freeStudents.some(s => s.id === sid) && !unitCovered.has(sid)
-      )
-      if (free.length > 0) {
-        units.push({ ids: free })
-        free.forEach(sid => unitCovered.add(sid))
+    // must_keep_together: use union-find to merge overlapping rules into single groups.
+    // Without this, rules "keep A+B" and "keep B+C" would create separate units {A,B}
+    // and {C}, leaving C in a different class than B even though it shouldn't be.
+    {
+      const togetherAll = mustTogetherRules.flatMap(r => (r.students ?? []).map(rs => rs.student_id))
+      const ufParent = new Map<string, string>(togetherAll.map(id => [id, id]))
+      function ufFind(x: string): string {
+        const p = ufParent.get(x)
+        if (!p || p === x) return x
+        const root = ufFind(p); ufParent.set(x, root); return root
       }
-    })
+      mustTogetherRules.forEach(r => {
+        const ids = (r.students ?? []).map(rs => rs.student_id)
+        for (let i = 1; i < ids.length; i++) {
+          const ra = ufFind(ids[0]), rb = ufFind(ids[i])
+          if (ra !== rb) ufParent.set(ra, rb)
+        }
+      })
+      // Group by root
+      const groups = new Map<string, string[]>()
+      togetherAll.forEach(id => {
+        const root = ufFind(id)
+        if (!groups.has(root)) groups.set(root, [])
+        if (!groups.get(root)!.includes(id)) groups.get(root)!.push(id)
+      })
+      groups.forEach(ids => {
+        const free = ids.filter(
+          sid => !alreadyAssigned.has(sid) && freeStudents.some(s => s.id === sid) && !unitCovered.has(sid)
+        )
+        if (free.length > 0) {
+          units.push({ ids: free })
+          free.forEach(sid => unitCovered.add(sid))
+        }
+      })
+    }
 
     // should_keep_together (applied on even seeds for variety)
     if (seed % 2 === 0) {
