@@ -25,6 +25,8 @@ import {
   CheckCircle2,
   Kanban,
   Users2,
+  MessageSquare,
+  ShieldAlert,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -69,12 +71,15 @@ const adminNavItems = [
 const processNavItems = [
   { href: "students", label: "Alumnos", icon: Users },
   { href: "questionnaire", label: "Cuestionario", icon: BookOpen },
+  { href: "responses", label: "Respuestas", icon: MessageSquare },
   { href: "sociogram", label: "Sociograma", icon: Network },
   { href: "alerts", label: "Alertas CDC", icon: AlertTriangle },
   { href: "interventions", label: "Intervenciones", icon: Kanban },
+  { href: "convivencia", label: "Convivencia", icon: ShieldAlert },
   { href: "rules", label: "Reglas", icon: GraduationCap },
   { href: "algorithm", label: "Algoritmo", icon: Zap },
   { href: "proposals", label: "Propuestas", icon: LayoutDashboard },
+  { href: "groups", label: "Cooperativo", icon: Users2 },
 ]
 
 const NOTIF_ICON: Record<string, React.ElementType> = {

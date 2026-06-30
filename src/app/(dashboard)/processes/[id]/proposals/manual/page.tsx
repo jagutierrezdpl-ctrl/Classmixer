@@ -383,7 +383,7 @@ export default function ManualProposalPage({ params }: { params: Promise<{ id: s
         }),
       })
       if (!res.ok) throw new Error()
-      const data = await res.json()
+      await res.json()
       toast.success("Propuesta guardada")
       router.push(`/processes/${id}/proposals`)
     } catch {
