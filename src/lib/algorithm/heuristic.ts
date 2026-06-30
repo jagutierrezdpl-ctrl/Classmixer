@@ -560,14 +560,9 @@ export function generateProposals(
   const excludeRules = rules.filter(r => r.rule_type === "exclude_student" && r.active)
   const mustTogetherRules = rules.filter(r => r.rule_type === "must_keep_together" && r.active)
   const shouldTogetherRules = rules.filter(r => r.rule_type === "should_keep_together" && r.active)
-  // "Hard" together rules: must_keep_together (always) + should_keep_together with alta/obligatoria priority.
-  // alta/obligatoria → always placed as a unit and partners protected during rebalancing.
-  // Only obligatoria → seed rejected when violated (mandatoryTogetherRules below).
-  const HARD_PRIORITIES = new Set(["obligatoria", "alta"])
-  const hardTogetherRules = [
-    ...mustTogetherRules,
-    ...shouldTogetherRules.filter(r => HARD_PRIORITIES.has(r.priority ?? "")),
-  ]
+  // All keep-together rules are placed as a unit and partners are protected during rebalancing.
+  // Priority only controls whether a seed is REJECTED when violated (obligatoria) or not.
+  const hardTogetherRules = [...mustTogetherRules, ...shouldTogetherRules]
   const atLeastOneRules = rules.filter(r => r.rule_type === "keep_at_least_one" && r.active)
   const maxFromGroupRules = rules.filter(r => r.rule_type === "max_from_group" && r.active)
   const protectVulnerableRules = rules.filter(r => r.rule_type === "protect_vulnerable" && r.active)
@@ -864,20 +859,6 @@ export function generateProposals(
         if (!groups.get(root)!.includes(id)) groups.get(root)!.push(id)
       })
       groups.forEach(ids => {
-        const free = ids.filter(
-          sid => !alreadyAssigned.has(sid) && freeStudents.some(s => s.id === sid) && !unitCovered.has(sid)
-        )
-        if (free.length > 0) {
-          units.push({ ids: free })
-          free.forEach(sid => unitCovered.add(sid))
-        }
-      })
-    }
-
-    // should_keep_together media/baja — soft, applied on even seeds for variety (alta/obligatoria already in hardTogetherRules)
-    if (seed % 2 === 0) {
-      shouldTogetherRules.filter(r => !HARD_PRIORITIES.has(r.priority ?? "")).forEach(r => {
-        const ids = (r.students ?? []).map(rs => rs.student_id)
         const free = ids.filter(
           sid => !alreadyAssigned.has(sid) && freeStudents.some(s => s.id === sid) && !unitCovered.has(sid)
         )
