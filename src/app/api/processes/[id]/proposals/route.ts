@@ -30,5 +30,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .order("score_total", { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  // Remap Supabase join names to the shape the frontend Proposal type expects
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapped = (data ?? []).map((p: any) => ({
+    ...p,
+    assignments: p.proposal_assignments ?? [],
+    metrics: p.proposal_metrics ?? [],
+    proposal_assignments: undefined,
+    proposal_metrics: undefined,
+  }))
+
+  return NextResponse.json(mapped)
 }
