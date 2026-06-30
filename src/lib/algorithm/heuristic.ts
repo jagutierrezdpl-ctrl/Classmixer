@@ -1669,17 +1669,18 @@ export function generateProposals(
           genderSwap:
           for (const fA of femalesOver) {
             const fId = fA.student_id
-            // F must have chosen at least one person in underCls so she won't be isolated there
-            const fConns = dirFriendMap.get(fId) ?? new Set<string>()
-            if (![...fConns].some(c => clsOf(c) === underCls)) continue
             if (forbiddenClassMap.get(fId)?.has(underCls)) continue
+            // Don't break a must-together group spanning other classes
+            if ([...(mustTogetherPartnersMap.get(fId) ?? [])].some(pid => {
+              const pc = clsOf(pid); return pc !== overCls && pc !== underCls
+            })) continue
 
             for (const mA of malesUnder) {
               const mId = mA.student_id
-              // M must have chosen at least one person in overCls so he won't be isolated there
-              const mConns = dirFriendMap.get(mId) ?? new Set<string>()
-              if (![...mConns].some(c => clsOf(c) === overCls)) continue
               if (forbiddenClassMap.get(mId)?.has(overCls)) continue
+              if ([...(mustTogetherPartnersMap.get(mId) ?? [])].some(pid => {
+                const pc = clsOf(pid); return pc !== underCls && pc !== overCls
+              })) continue
 
               // Tentative swap (size-neutral — no classCounts update needed)
               const fIdx = assignments.findIndex(a => a.student_id === fId)
@@ -1687,11 +1688,17 @@ export function generateProposals(
               assignments[fIdx].target_class = underCls
               assignments[mIdx].target_class = overCls
 
-              // Verify: no isolation introduced, separation rules respected after the swap
-              const noIso = !assignments.some(a => !hasChosen(a.student_id, a.target_class))
+              // Verify: separation rules OK + no new isolation for students who made choices.
+              // When sociogram is off (dirFriendMap empty) isolation cannot be assessed — skip it.
               const sepOk = repairSepOk(fId, underCls) && repairSepOk(mId, overCls)
+              const noIso = dirFriendMap.size === 0
+                ? true
+                : !assignments.some(a =>
+                    !hasChosen(a.student_id, a.target_class) &&
+                    (dirFriendMap.get(a.student_id)?.size ?? 0) > 0
+                  )
 
-              if (noIso && sepOk) {
+              if (sepOk && noIso) {
                 gSwapDone = true
                 break genderSwap
               }
