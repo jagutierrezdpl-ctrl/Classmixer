@@ -15,6 +15,7 @@ import {
 import Link from "next/link"
 import type { Proposal, ProposalMetric, Rule, ProposalAssignment } from "@/types"
 import ProposalCharts from "@/components/proposals/ProposalCharts"
+import ProposalEditor from "@/components/proposals/ProposalEditor"
 import { useConfirm } from "@/components/ui/ConfirmDialog"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -226,6 +227,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({})
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({})
   const [selectedGenIdx, setSelectedGenIdx] = useState(0)
+  const [editorProposal, setEditorProposal] = useState<Proposal | null>(null)
 
   // Group proposals by generation (same generated_at → same batch)
   const generations = useMemo(() => {
@@ -669,6 +671,12 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Editar manualmente */}
+                        <Button variant="outline" size="sm" onClick={() => setEditorProposal(proposal)}>
+                          <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                          Editar
+                        </Button>
+
                         {/* Ver dropdown */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1033,6 +1041,20 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
             })}
           </div>
         </>
+      )}
+
+      {/* Manual editor dialog */}
+      {editorProposal && (
+        <ProposalEditor
+          proposal={editorProposal}
+          rules={rules}
+          open={!!editorProposal}
+          onClose={() => setEditorProposal(null)}
+          onSaved={updated => {
+            setProposals(prev => prev.map(p => p.id === updated.id ? updated : p))
+            setEditorProposal(updated)
+          }}
+        />
       )}
     </div>
   )
