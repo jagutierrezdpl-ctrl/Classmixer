@@ -1615,10 +1615,12 @@ export function generateProposals(
         }
       }
 
-      // After all repair options, reject this seed if any student is still isolated.
-      // A different seed will produce a different initial distribution that may not need
-      // the cascading swaps that cause this problem.
-      if (assignments.some(a => !hasChosen(a.student_id, a.target_class))) {
+      // After all repair options, reject this seed if any student is still isolated
+      // AND could have been helped (i.e. they made at least one friendship choice).
+      // Students who made zero choices cannot be fixed regardless of distribution —
+      // excluding them from the rejection check prevents all seeds from being discarded
+      // when useSociogram=false or responses are empty.
+      if (assignments.some(a => !hasChosen(a.student_id, a.target_class) && (dirFriendMap.get(a.student_id)?.size ?? 0) > 0)) {
         continue
       }
     }
