@@ -560,11 +560,13 @@ export function generateProposals(
   const excludeRules = rules.filter(r => r.rule_type === "exclude_student" && r.active)
   const mustTogetherRules = rules.filter(r => r.rule_type === "must_keep_together" && r.active)
   const shouldTogetherRules = rules.filter(r => r.rule_type === "should_keep_together" && r.active)
-  // "Hard" together rules: must_keep_together always + should_keep_together when priority=obligatoria.
-  // Priority overrides type — if the user marks a "recommendation" as mandatory, we enforce it.
+  // "Hard" together rules: must_keep_together (always) + should_keep_together with alta/obligatoria priority.
+  // alta/obligatoria → always placed as a unit and partners protected during rebalancing.
+  // Only obligatoria → seed rejected when violated (mandatoryTogetherRules below).
+  const HARD_PRIORITIES = new Set(["obligatoria", "alta"])
   const hardTogetherRules = [
     ...mustTogetherRules,
-    ...shouldTogetherRules.filter(r => r.priority === "obligatoria"),
+    ...shouldTogetherRules.filter(r => HARD_PRIORITIES.has(r.priority ?? "")),
   ]
   const atLeastOneRules = rules.filter(r => r.rule_type === "keep_at_least_one" && r.active)
   const maxFromGroupRules = rules.filter(r => r.rule_type === "max_from_group" && r.active)
@@ -872,9 +874,9 @@ export function generateProposals(
       })
     }
 
-    // should_keep_together non-obligatory (applied on even seeds for variety; obligatoria ones are already in hardTogetherRules above)
+    // should_keep_together media/baja — soft, applied on even seeds for variety (alta/obligatoria already in hardTogetherRules)
     if (seed % 2 === 0) {
-      shouldTogetherRules.filter(r => r.priority !== "obligatoria").forEach(r => {
+      shouldTogetherRules.filter(r => !HARD_PRIORITIES.has(r.priority ?? "")).forEach(r => {
         const ids = (r.students ?? []).map(rs => rs.student_id)
         const free = ids.filter(
           sid => !alreadyAssigned.has(sid) && freeStudents.some(s => s.id === sid) && !unitCovered.has(sid)
