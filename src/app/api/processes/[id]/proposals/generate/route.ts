@@ -242,6 +242,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const usedSolver = proposals !== null ? "ortools" : "heuristic"
 
+  const heuristicOut: { mandatoryViolations: string[] } = { mandatoryViolations: [] }
+
   if (!proposals) {
     proposals = generateProposals(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -258,11 +260,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         friendshipLike: catalogIndex.scoringRoles.friendshipLike,
         workLike: catalogIndex.scoringRoles.workLike,
         negativeLike: catalogIndex.scoringRoles.negativeLike,
-      }
+      },
+      heuristicOut
     ) as ClassProposal[]
   }
 
   if (proposals.length === 0) {
+    if (heuristicOut.mandatoryViolations.length > 0) {
+      return NextResponse.json({
+        error: "Las reglas obligatorias impiden generar propuestas válidas",
+        infeasibility: {
+          blocking_rules: heuristicOut.mandatoryViolations,
+          explanation: [
+            "Las siguientes reglas obligatorias no pudieron satisfacerse en ninguna distribución posible:",
+            ...heuristicOut.mandatoryViolations,
+            "Revisa las reglas del proceso o cambia su prioridad a 'alta' si quieres que el algoritmo las ignore cuando sea necesario.",
+          ],
+        },
+      }, { status: 422 })
+    }
     return NextResponse.json({ error: "No se pudieron generar propuestas" }, { status: 422 })
   }
 

@@ -550,7 +550,8 @@ export function generateProposals(
   numProposals = 3,
   weights: AlgorithmWeights = DEFAULT_WEIGHTS,
   constraints: AlgorithmConstraints = DEFAULT_CONSTRAINTS,
-  relationTypes: RelationTypeGroups = DEFAULT_RELATION_TYPES
+  relationTypes: RelationTypeGroups = DEFAULT_RELATION_TYPES,
+  out?: { mandatoryViolations: string[] }
 ): ProposalResult[] {
   const separationRules = rules.filter(r => r.rule_type === "must_separate" && r.active)
   const lockRules = rules.filter(r =>
@@ -684,6 +685,63 @@ export function generateProposals(
   const activeStudents = students.filter(s => !excludedIds.has(s.id))
   const freeStudents = activeStudents.filter(s => !lockedStudents.has(s.id) && !mustTogetherLockedClass.has(s.id))
 
+  // Mandatory rule subsets — these MUST be satisfied; seeds that violate them are rejected.
+  const mandatorySepaRules = separationRules.filter(r => r.priority === "obligatoria")
+  const mandatoryTogetherRules = mustTogetherRules.filter(r => r.priority === "obligatoria")
+  const mandatoryMaxRules = maxFromGroupRules.filter(r => r.priority === "obligatoria")
+
+  // Pre-built map for name resolution in violation messages
+  const activeStudentMap = new Map(activeStudents.map(s => [s.id, s]))
+
+  function getMandatoryViolations(asn: AssignmentResult[]): string[] {
+    const msgs: string[] = []
+    const asnMap = new Map(asn.map(a => [a.student_id, a.target_class]))
+    const name = (id: string) => {
+      const s = activeStudentMap.get(id)
+      return s ? `${s.first_name} ${s.last_name}` : id
+    }
+
+    mandatorySepaRules.forEach(r => {
+      const ids = (r.students ?? []).map(rs => rs.student_id)
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const clsA = asnMap.get(ids[i])
+          const clsB = asnMap.get(ids[j])
+          if (clsA && clsB && clsA === clsB) {
+            const label = r.description ?? "Separación obligatoria"
+            msgs.push(`${label}: ${name(ids[i])} y ${name(ids[j])} han quedado en la misma clase (${clsA}).`)
+          }
+        }
+      }
+    })
+
+    mandatoryTogetherRules.forEach(r => {
+      const ids = (r.students ?? []).map(rs => rs.student_id)
+      const classes = [...new Set(ids.map(sid => asnMap.get(sid)).filter(Boolean))]
+      if (classes.length > 1) {
+        const label = r.description ?? "Mantener juntos obligatorio"
+        msgs.push(`${label}: ${ids.map(name).join(", ")} han quedado en clases distintas (${classes.join(", ")}).`)
+      }
+    })
+
+    mandatoryMaxRules.forEach(r => {
+      const groupIds = new Set((r.students ?? []).map(rs => rs.student_id))
+      const max = r.max_count ?? 2
+      const perClass = new Map<string, number>()
+      asn.forEach(a => {
+        if (groupIds.has(a.student_id)) perClass.set(a.target_class, (perClass.get(a.target_class) ?? 0) + 1)
+      })
+      perClass.forEach((count, cls) => {
+        if (count > max) {
+          const label = r.description ?? "Límite de grupo"
+          msgs.push(`${label}: ${count} alumnos del grupo en ${cls} (máximo ${max}).`)
+        }
+      })
+    })
+
+    return msgs
+  }
+
   // Equal size cap: max students per class when enforce_equal_size is on
   const maxClassSize = constraints.enforce_equal_size
     ? Math.ceil(activeStudents.length / targetClasses.length)
@@ -742,6 +800,7 @@ export function generateProposals(
 
   const proposals: ProposalResult[] = []
   const seen = new Set<string>()
+  let lastMandatoryViolations: string[] = []
 
   const maxSeeds = constraints.enforce_no_isolation ? numProposals * 30 : numProposals * 8
   for (let seed = 0; seed < maxSeeds && proposals.length < numProposals; seed++) {
@@ -1625,6 +1684,16 @@ export function generateProposals(
       }
     }
 
+    // Mandatory rules enforcement: reject seed if any obligatoria rule is violated.
+    // Non-mandatory rules are soft — they affect the score but don't discard the proposal.
+    if (mandatorySepaRules.length > 0 || mandatoryTogetherRules.length > 0 || mandatoryMaxRules.length > 0) {
+      const violations = getMandatoryViolations(assignments)
+      if (violations.length > 0) {
+        lastMandatoryViolations = violations
+        continue
+      }
+    }
+
     // Dedup by fingerprint
     const key = assignments.map(a => `${a.student_id}:${a.target_class}`).sort().join("|")
     if (seen.has(key)) continue
@@ -1641,6 +1710,11 @@ export function generateProposals(
       relationTypes
     )
     proposals.push({ assignments: [...assignments], ...result })
+  }
+
+  // If no proposals were generated due to mandatory rule violations, expose them for reporting.
+  if (out && proposals.length === 0 && lastMandatoryViolations.length > 0) {
+    out.mandatoryViolations = lastMandatoryViolations
   }
 
   return proposals.sort((a, b) => b.score_total - a.score_total).slice(0, numProposals)
