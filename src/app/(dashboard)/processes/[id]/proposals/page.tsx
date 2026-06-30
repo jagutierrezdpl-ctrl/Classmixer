@@ -377,6 +377,12 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
               Modificar algoritmo
             </Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href={`/processes/${id}/proposals/manual`}>
+              <Pencil className="w-4 h-4" />
+              Crear manualmente
+            </Link>
+          </Button>
           <Button asChild>
             <Link href={`/processes/${id}/algorithm`}>
               <Zap className="w-4 h-4" />
