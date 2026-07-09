@@ -12,7 +12,7 @@ import {
   ArrowLeft, Building2, Users, FolderOpen, GraduationCap,
   Clock, Loader2, Trash2, Plus, AlertTriangle,
   CheckCircle2, Info, Megaphone, Shield, Pencil, Check, X,
-  Mail, KeyRound,
+  Mail, KeyRound, Link2, RefreshCw,
 } from "lucide-react"
 import Link from "next/link"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
@@ -26,6 +26,8 @@ interface Center {
   address?: string
   country?: string
   created_at: string
+  eduplataforma_center_id?: string | null
+  last_synced_at?: string | null
 }
 
 interface CenterUser {
@@ -173,6 +175,12 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
   const [newPlan, setNewPlan] = useState("free")
   const [savingLicense, setSavingLicense] = useState(false)
 
+  // Vinculación EduPlataforma
+  const [editingEduLink, setEditingEduLink] = useState(false)
+  const [eduLinkValue, setEduLinkValue] = useState("")
+  const [savingEduLink, setSavingEduLink] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+
   async function loadDetail() {
     setLoading(true)
     try {
@@ -277,6 +285,35 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
     setSavingLicense(false)
     setEditingLicense(false)
     await loadDetail()
+  }
+
+  async function handleSaveEduLink() {
+    setSavingEduLink(true)
+    const res = await fetch(`/api/admin/centers/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eduplataforma_center_id: eduLinkValue.trim() || null }),
+    })
+    setSavingEduLink(false)
+    if (res.ok) {
+      setEditingEduLink(false)
+      await loadDetail()
+    } else {
+      toast.error("Error al guardar la vinculación")
+    }
+  }
+
+  async function handleSyncNow() {
+    setSyncing(true)
+    const res = await fetch(`/api/admin/centers/${id}/sync`, { method: "POST" })
+    const d = await res.json()
+    setSyncing(false)
+    if (res.ok) {
+      toast.success(`Sincronizado: ${d.staff} personal, ${d.students} alumnos, ${d.groups} grupos`)
+      await loadDetail()
+    } else {
+      toast.error(d.error ?? "Error al sincronizar")
+    }
   }
 
   if (loading) {
@@ -410,6 +447,62 @@ export default function CenterDetailPage({ params }: { params: Promise<{ id: str
           </CardContent>
         </Card>
       </div>
+
+      {/* Integración EduPlataforma */}
+      <Card className="mb-6">
+        <CardContent className="py-3 px-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link2 className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Integración EduPlataforma</p>
+              {editingEduLink ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <Input
+                    value={eduLinkValue}
+                    onChange={e => setEduLinkValue(e.target.value)}
+                    placeholder="ID del centro en EduPlataforma"
+                    className="h-7 text-xs w-72"
+                    onKeyDown={e => { if (e.key === "Enter") handleSaveEduLink(); if (e.key === "Escape") setEditingEduLink(false) }}
+                    autoFocus
+                  />
+                  <button onClick={handleSaveEduLink} disabled={savingEduLink} className="text-green-600 hover:text-green-700">
+                    {savingEduLink ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  </button>
+                  <button onClick={() => setEditingEduLink(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setEduLinkValue(center.eduplataforma_center_id ?? ""); setEditingEduLink(true) }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mt-0.5"
+                >
+                  {center.eduplataforma_center_id
+                    ? <>Vinculado · {center.eduplataforma_center_id}</>
+                    : <>Sin vincular</>}
+                  <Pencil className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            {center.last_synced_at && (
+              <span className="text-xs text-muted-foreground">
+                Última sincronización: {timeAgo(center.last_synced_at)}
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSyncNow}
+              disabled={syncing || !center.eduplataforma_center_id}
+            >
+              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Sincronizar ahora
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
       <Tabs defaultValue="processes">
