@@ -5,9 +5,20 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { CSS } from "@dnd-kit/utilities"
+import {
   ArrowLeft, Users2, Loader2, RefreshCw, Printer,
   GraduationCap, UserCheck, BookOpen, Mic, Eye, Pencil, X, Check, CheckCircle2,
-  ShieldAlert, Plus, Trash2, FileText, TrendingUp, AlertTriangle,
+  ShieldAlert, Plus, Trash2, FileText, TrendingUp, AlertTriangle, GripVertical,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -90,6 +101,149 @@ function buildGroups(assignments: GroupAssignmentWithStudent[]): Map<number, Gro
     map.get(a.group_number)!.push(a)
   }
   return map
+}
+
+// ─── Draggable student row ──────────────────────────────────────────────────
+
+function DraggableStudentRow({
+  assignment,
+  editMode,
+  isDragging,
+  onChangeRole,
+}: {
+  assignment: GroupAssignmentWithStudent
+  editMode: boolean
+  isDragging: boolean
+  onChangeRole: (studentId: string, role: string | null) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: assignment.student_id,
+    disabled: !editMode,
+  })
+  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined
+  const student = assignment.students
+  const roleConf = assignment.role ? ROLE_CONFIG[assignment.role] : null
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`py-1 border-b border-black/5 last:border-0 select-none ${isDragging ? "opacity-30" : ""}`}
+    >
+      <div className="flex items-start gap-1.5">
+        {editMode && (
+          <span
+            {...attributes}
+            {...listeners}
+            className="mt-0.5 text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </span>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium leading-tight truncate">
+            {student ? `${student.first_name} ${student.last_name}` : "—"}
+          </p>
+          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+            {student && genderBadge(student.gender)}
+            {student?.academic_level && (
+              <span className="text-xs text-muted-foreground">{student.academic_level}</span>
+            )}
+          </div>
+        </div>
+        {!editMode && roleConf && (
+          <Badge variant="outline" className={`text-xs border shrink-0 ${roleConf.color}`}>
+            {roleConf.label}
+          </Badge>
+        )}
+      </div>
+      {editMode && (
+        <div className="mt-1.5 pl-5">
+          <Select
+            value={assignment.role ?? "__none__"}
+            onValueChange={(v) => onChangeRole(assignment.student_id, v === "__none__" ? null : v)}
+          >
+            <SelectTrigger className="h-7 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__" className="text-xs">Sin rol</SelectItem>
+              <SelectItem value="coordinador" className="text-xs">Coordinador</SelectItem>
+              <SelectItem value="secretario" className="text-xs">Secretario</SelectItem>
+              <SelectItem value="portavoz" className="text-xs">Portavoz</SelectItem>
+              <SelectItem value="revisor" className="text-xs">Revisor</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DragOverlayCard({ assignment }: { assignment: GroupAssignmentWithStudent }) {
+  const student = assignment.students
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border bg-white shadow-xl text-xs w-48 rotate-1 border-primary/30">
+      <GripVertical className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="font-medium truncate">{student ? `${student.first_name} ${student.last_name}` : "—"}</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Droppable group card ────────────────────────────────────────────────────
+
+function DroppableGroupCard({
+  groupNumber,
+  members,
+  editMode,
+  activeId,
+  colorIdx,
+  onChangeRole,
+}: {
+  groupNumber: number
+  members: GroupAssignmentWithStudent[]
+  editMode: boolean
+  activeId: string | null
+  colorIdx: number
+  onChangeRole: (studentId: string, role: string | null) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: groupNumber, disabled: !editMode })
+  const isTarget = editMode && isOver && activeId !== null
+
+  return (
+    <Card className={`border ${GROUP_COLORS[colorIdx]} print:break-inside-avoid transition-shadow ${isTarget ? "ring-2 ring-primary/50" : ""}`}>
+      <CardHeader className="pb-2 pt-3 px-4">
+        <div className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold w-fit ${GROUP_HEADER_COLORS[colorIdx]}`}>
+          <GraduationCap className="w-3.5 h-3.5" />
+          Grupo {groupNumber}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">{members.length} alumnos</p>
+      </CardHeader>
+      <CardContent
+        ref={setNodeRef}
+        className={`px-4 pb-4 space-y-2 rounded-b-xl transition-colors ${editMode ? "min-h-[80px]" : ""} ${isTarget ? "bg-primary/5" : ""}`}
+      >
+        {members
+          .sort((a, b) => (a.role && !b.role ? -1 : !a.role && b.role ? 1 : 0))
+          .map((assignment) => (
+            <DraggableStudentRow
+              key={assignment.id ?? assignment.student_id}
+              assignment={assignment}
+              editMode={editMode}
+              isDragging={assignment.student_id === activeId}
+              onChangeRole={onChangeRole}
+            />
+          ))}
+        {editMode && members.length === 0 && (
+          <div className="flex items-center justify-center h-12 text-xs text-muted-foreground/40 border-2 border-dashed border-muted rounded">
+            Suelta aquí
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 // ─── Rationale panel ──────────────────────────────────────────────────────────
@@ -206,6 +360,8 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
   const [editMode, setEditMode] = useState(false)
   const [editAssignments, setEditAssignments] = useState<GroupAssignmentWithStudent[]>([])
   const [saving, setSaving] = useState(false)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   // Rationale report
   const [showRationale, setShowRationale] = useState(false)
@@ -286,7 +442,12 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
     setEditAssignments([])
   }
 
-  function moveStudent(studentId: string, newGroup: number) {
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    setActiveId(null)
+    if (!over) return
+    const studentId = String(active.id)
+    const newGroup = Number(over.id)
     setEditAssignments(prev => prev.map(a =>
       a.student_id === studentId ? { ...a, group_number: newGroup } : a
     ))
@@ -549,8 +710,8 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
       {/* Edit mode banner */}
       {editMode && (
         <div className="mb-5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
-          <Pencil className="w-4 h-4 shrink-0" />
-          Modo edición — usa los selectores para mover alumnos entre grupos. Los cambios no se guardan hasta pulsar «Guardar cambios».
+          <GripVertical className="w-4 h-4 shrink-0" />
+          Modo edición — arrastra a un alumno para moverlo de grupo. Los cambios no se guardan hasta pulsar «Guardar cambios».
         </div>
       )}
 
@@ -646,90 +807,35 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
 
       {/* Groups grid */}
       {sortedGroupNumbers.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 print:grid-cols-3 print:gap-3">
-          {sortedGroupNumbers.map(groupNumber => {
-            const members = groups.get(groupNumber) ?? []
-            const colorIdx = (groupNumber - 1) % GROUP_COLORS.length
-            return (
-              <Card key={groupNumber} className={`border ${GROUP_COLORS[colorIdx]} print:break-inside-avoid`}>
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <div className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold w-fit ${GROUP_HEADER_COLORS[colorIdx]}`}>
-                    <GraduationCap className="w-3.5 h-3.5" />
-                    Grupo {groupNumber}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{members.length} alumnos</p>
-                </CardHeader>
-                <CardContent className="px-4 pb-4 space-y-2">
-                  {members
-                    .sort((a, b) => (a.role && !b.role ? -1 : !a.role && b.role ? 1 : 0))
-                    .map((assignment) => {
-                      const student = assignment.students
-                      const roleConf = assignment.role ? ROLE_CONFIG[assignment.role] : null
-                      return (
-                        <div key={assignment.id ?? assignment.student_id} className="py-1 border-b border-black/5 last:border-0">
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium leading-tight truncate">
-                                {student ? `${student.first_name} ${student.last_name}` : "—"}
-                              </p>
-                              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                                {student && genderBadge(student.gender)}
-                                {student?.academic_level && (
-                                  <span className="text-xs text-muted-foreground">{student.academic_level}</span>
-                                )}
-                              </div>
-                            </div>
-                            {!editMode && roleConf && (
-                              <Badge
-                                variant="outline"
-                                className={`text-xs border shrink-0 ${roleConf.color}`}
-                              >
-                                {roleConf.label}
-                              </Badge>
-                            )}
-                          </div>
-                          {editMode && (
-                            <div className="mt-1.5 grid grid-cols-2 gap-1">
-                              <Select
-                                value={String(assignment.group_number)}
-                                onValueChange={(v) => moveStudent(assignment.student_id, Number(v))}
-                              >
-                                <SelectTrigger className="h-7 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Array.from({ length: numGroups }, (_, i) => i + 1).map(n => (
-                                    <SelectItem key={n} value={String(n)} className="text-xs">
-                                      Grupo {n}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Select
-                                value={assignment.role ?? "__none__"}
-                                onValueChange={(v) => changeRole(assignment.student_id, v === "__none__" ? null : v)}
-                              >
-                                <SelectTrigger className="h-7 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__" className="text-xs">Sin rol</SelectItem>
-                                  <SelectItem value="coordinador" className="text-xs">Coordinador</SelectItem>
-                                  <SelectItem value="secretario" className="text-xs">Secretario</SelectItem>
-                                  <SelectItem value="portavoz" className="text-xs">Portavoz</SelectItem>
-                                  <SelectItem value="revisor" className="text-xs">Revisor</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
+        <DndContext
+          sensors={dndSensors}
+          onDragStart={(e) => setActiveId(String(e.active.id))}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 print:grid-cols-3 print:gap-3">
+            {sortedGroupNumbers.map(groupNumber => {
+              const members = groups.get(groupNumber) ?? []
+              const colorIdx = (groupNumber - 1) % GROUP_COLORS.length
+              return (
+                <DroppableGroupCard
+                  key={groupNumber}
+                  groupNumber={groupNumber}
+                  members={members}
+                  editMode={editMode}
+                  activeId={activeId}
+                  colorIdx={colorIdx}
+                  onChangeRole={changeRole}
+                />
+              )
+            })}
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {activeId && (() => {
+              const a = displayAssignments.find(a => a.student_id === activeId)
+              return a ? <DragOverlayCard assignment={a} /> : null
+            })()}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* Add rule dialog */}
