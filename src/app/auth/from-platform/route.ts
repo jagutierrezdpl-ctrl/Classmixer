@@ -27,7 +27,9 @@ export async function GET(request: Request) {
   let payload
   try {
     payload = verifyPlatformToken(token)
-  } catch {
+  } catch (err) {
+    // El motivo (secreto ausente, firma inválida, token caducado) son literales sin datos sensibles.
+    console.error("[from-platform] token rechazado:", err instanceof Error ? err.message : err)
     return NextResponse.redirect(`${origin}/login?error=invalid_token`)
   }
 

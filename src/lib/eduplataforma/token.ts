@@ -24,9 +24,19 @@ function base64url(str: string): string {
 
 const HEADER = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))
 
+// Secretos con los que se acepta un token. Durante la transición se admiten
+// tanto EDUPLATFORMA_SSO_SECRET (secreto dedicado al SSO) como el antiguo
+// EDUPLATFORMA_SECRET compartido; el antiguo se retirará de aquí cuando el hub
+// y todos los satélites ya usen el dedicado.
+function ssoSecrets(): string[] {
+  return [process.env.EDUPLATFORMA_SSO_SECRET, process.env.EDUPLATFORMA_SECRET].filter(
+    (s): s is string => Boolean(s),
+  )
+}
+
 export function verifyPlatformToken(token: string): PlatformToken {
-  const secret = process.env.EDUPLATFORMA_SECRET
-  if (!secret) throw new Error("EDUPLATFORMA_SECRET not set")
+  const secrets = ssoSecrets()
+  if (secrets.length === 0) throw new Error("EDUPLATFORMA_SSO_SECRET not set")
 
   const parts = token.split(".")
   if (parts.length !== 3) throw new Error("invalid_token")
@@ -34,13 +44,13 @@ export function verifyPlatformToken(token: string): PlatformToken {
   const [header, body, sig] = parts
   if (header !== HEADER) throw new Error("invalid_token")
 
-  const expected = createHmac("sha256", secret)
-    .update(`${HEADER}.${body}`)
-    .digest("base64url")
-
   const a = Buffer.from(sig)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length || !timingSafeEqual(a, b)) throw new Error("invalid_signature")
+  const valid = secrets.some((secret) => {
+    const expected = createHmac("sha256", secret).update(`${HEADER}.${body}`).digest("base64url")
+    const b = Buffer.from(expected)
+    return a.length === b.length && timingSafeEqual(a, b)
+  })
+  if (!valid) throw new Error("invalid_signature")
 
   const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf-8")) as PlatformToken
   if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error("token_expired")
