@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, tutorCanAccessProcess, getTutorGroups } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, getAccessibleProcessIds, getTutorClassAccess, reachesClass, canAccessGroupSession } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 // GET — list all group_sessions the user can access, across all processes in the center.
@@ -14,7 +14,7 @@ export async function GET(_req: Request) {
   // Fetch all processes in this center the user has access to
   const { data: processes } = await supabase
     .from("processes")
-    .select("id, name")
+    .select("id, name, school_year")
     .eq("center_id", profile.center_id)
 
   if (!processes || processes.length === 0) return NextResponse.json([])
@@ -24,17 +24,15 @@ export async function GET(_req: Request) {
   if (hasFullAccess(profile.role)) {
     accessibleProcessIds = processes.map(p => p.id)
   } else {
-    const checks = await Promise.all(
-      processes.map(p => tutorCanAccessProcess(profile.center_id, profile.id, p.id).then(ok => ok ? p.id : null))
-    )
-    accessibleProcessIds = checks.filter(Boolean) as string[]
+    const accessible = await getAccessibleProcessIds(profile)
+    accessibleProcessIds = processes.filter(p => accessible.has(p.id)).map(p => p.id)
   }
 
   if (accessibleProcessIds.length === 0) return NextResponse.json([])
 
-  // Tutors only see sessions for their own assigned classes
-  const tutorClasses = profile.role === "tutor"
-    ? await getTutorGroups(profile.center_id, profile.id)
+  // Tutors only see sessions for the classes they tutor, or teach in the process's school year
+  const classAccess = profile.role === "tutor"
+    ? await getTutorClassAccess(profile.center_id, profile.id)
     : null
 
   let query = (supabase as any)
@@ -43,9 +41,10 @@ export async function GET(_req: Request) {
     .in("process_id", accessibleProcessIds)
     .order("created_at", { ascending: false })
 
-  if (tutorClasses !== null) {
-    if (tutorClasses.length === 0) return NextResponse.json([])
-    query = query.in("class_name", tutorClasses)
+  if (classAccess !== null) {
+    const classes = [...new Set([...classAccess.tutored, ...classAccess.teaching.map(a => a.group_name)])]
+    if (classes.length === 0) return NextResponse.json([])
+    query = query.in("class_name", classes)
   }
 
   const { data, error } = await query
@@ -54,7 +53,11 @@ export async function GET(_req: Request) {
 
   // Attach process name for display
   const processMap = new Map(processes.map(p => [p.id, p.name]))
-  const enriched = (data ?? []).map((s: any) => ({
+  const schoolYearMap = new Map(processes.map(p => [p.id, p.school_year]))
+  const visible = classAccess === null
+    ? (data ?? [])
+    : (data ?? []).filter((s: any) => reachesClass(classAccess, s.class_name, schoolYearMap.get(s.process_id)))
+  const enriched = visible.map((s: any) => ({
     ...s,
     process_name: processMap.get(s.process_id) ?? null,
   }))
@@ -97,14 +100,11 @@ export async function POST(req: Request) {
 
   // Authorization check for non-admins
   if (!hasFullAccess(profile.role)) {
-    if (profile.role === "tutor") {
-      const tutorClasses = await getTutorGroups(profile.center_id, profile.id)
-      if (!tutorClasses.includes(class_name)) {
-        return NextResponse.json({ error: "Solo puedes crear grupos para tu propia clase" }, { status: 403 })
-      }
-    } else {
-      const ok = await tutorCanAccessProcess(profile.center_id, profile.id, processId)
-      if (!ok) return NextResponse.json({ error: "Sin acceso a esa clase" }, { status: 403 })
+    if (!(await canAccessGroupSession(profile, { process_id: processId, class_name }))) {
+      return NextResponse.json(
+        { error: profile.role === "tutor" ? "Solo puedes crear grupos para tu propia clase" : "Sin acceso a esa clase" },
+        { status: 403 }
+      )
     }
   }
 

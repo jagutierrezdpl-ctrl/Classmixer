@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, logAudit } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 
@@ -21,6 +21,8 @@ function pick(row: Record<string, unknown>, ...keys: string[]): string {
 export async function POST(request: Request) {
   const profile = await getUserProfile()
   if (!profile) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  // La importación masiva escribe en cualquier grupo del centro: solo quien gestiona todo el centro.
+  if (!hasFullAccess(profile.role)) return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
 
   const formData = await request.formData()
   const file = formData.get("file") as File | null

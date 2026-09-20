@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, getAccessibleProcessIds } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function GET() {
@@ -18,7 +18,11 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const processIds = (processes ?? []).map(p => p.id)
+  // Quien no lo ve todo solo recibe los procesos a los que tiene acceso (los agregados de los
+  // demás incluyen recuentos de respuestas y de alumnado en riesgo de otras clases).
+  const allowed = await getAccessibleProcessIds(profile)
+  const visibleProcesses = (processes ?? []).filter(p => allowed.has(p.id))
+  const processIds = visibleProcesses.map(p => p.id)
 
   if (processIds.length === 0) return NextResponse.json([])
 
@@ -77,7 +81,7 @@ export async function GET() {
     if (row.reciprocal_count === 1 && row.received_count > 0) metricsMap[row.process_id].vulnerable++
   })
 
-  const result = (processes ?? []).map(p => {
+  const result = visibleProcesses.map(p => {
     const tokens = tokenMap[p.id] ?? { total: 0, completed: 0 }
     const sm = metricsMap[p.id] ?? { isolated: 0, vulnerable: 0, total: 0 }
     return {

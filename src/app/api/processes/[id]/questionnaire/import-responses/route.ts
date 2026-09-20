@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, logAudit, canAccessProcess, getAccessibleProcessIds } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import {
   buildStudentLookup,
@@ -19,14 +19,11 @@ export async function GET(
   const { id } = await params
   const supabase = createServiceClient()
 
-  // Verify target process belongs to center
-  const { data: target } = await supabase
-    .from("processes")
-    .select("id, name, center_id")
-    .eq("id", id)
-    .eq("center_id", profile.center_id)
-    .single()
-  if (!target) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  // Verify target process belongs to center (and, for teachers, to their groups)
+  if (!(await canAccessProcess(profile, id))) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
+  const allowed = await getAccessibleProcessIds(profile)
 
   // All other processes of the center that have at least one response
   const { data: allProcesses } = await supabase
@@ -46,7 +43,7 @@ export async function GET(
     .in("process_id", pIds)
 
   const withResponses = new Set((responseCounts ?? []).map(r => r.process_id))
-  const sources = allProcesses.filter(p => withResponses.has(p.id))
+  const sources = allProcesses.filter(p => withResponses.has(p.id) && allowed.has(p.id))
 
   return NextResponse.json(sources)
 }

@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, canAccessGroupSession } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +21,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   if (error || !data) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((data as any).group_sessions?.processes?.center_id !== profile.center_id) {
+  const session = (data as any).group_sessions
+  if (session?.processes?.center_id !== profile.center_id || !(await canAccessGroupSession(profile, session))) {
     return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
   }
   return NextResponse.json(data)
@@ -36,13 +37,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("group_sets")
-    .select("id, status, group_sessions!inner(process_id, processes!inner(center_id))")
+    .select("id, status, group_sessions!inner(process_id, class_name, processes!inner(center_id))")
     .eq("id", id)
     .single()
 
   if (!existing) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((existing as any).group_sessions?.processes?.center_id !== profile.center_id) {
+  const session = (existing as any).group_sessions
+  if (session?.processes?.center_id !== profile.center_id || !(await canAccessGroupSession(profile, session))) {
     return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
   }
 
@@ -86,12 +88,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (supabase as any)
     .from("group_sets")
-    .select("id, group_sessions!inner(process_id, processes!inner(center_id))")
+    .select("id, group_sessions!inner(process_id, class_name, processes!inner(center_id))")
     .eq("id", id)
     .single()
   if (!data) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((data as any).group_sessions?.processes?.center_id !== profile.center_id) {
+  const session = (data as any).group_sessions
+  if (session?.processes?.center_id !== profile.center_id || !(await canAccessGroupSession(profile, session))) {
     return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getAccessibleProcessIds, getUserProfile, hasFullAccess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function GET() {
@@ -8,12 +8,16 @@ export async function GET() {
 
   const supabase = createServiceClient()
 
-  // Get all active process IDs for this center
-  const { data: processes } = await supabase
+  // Get all active process IDs for this center (un profesor solo recibe avisos de los suyos)
+  let processesQuery = supabase
     .from("processes")
     .select("id, status")
     .eq("center_id", profile.center_id)
     .not("status", "in", '("archivado","cerrado")')
+  if (!hasFullAccess(profile.role)) {
+    processesQuery = processesQuery.in("id", [...(await getAccessibleProcessIds(profile))])
+  }
+  const { data: processes } = await processesQuery
 
   if (!processes || processes.length === 0) {
     return NextResponse.json({ pending_tokens: 0, pending_proposals: 0, total: 0 })

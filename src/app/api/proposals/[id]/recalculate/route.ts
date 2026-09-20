@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, logAudit, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { generateProposals, DEFAULT_CONSTRAINTS } from "@/lib/algorithm/heuristic"
 import { DEFAULT_WEIGHTS } from "@/lib/algorithm/weights"
@@ -31,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proc = process as any
-  if (!proc || proc.center_id !== profile.center_id) {
+  if (!proc || proc.center_id !== profile.center_id || !(await canAccessProcess(profile, proposal.process_id))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   }
 

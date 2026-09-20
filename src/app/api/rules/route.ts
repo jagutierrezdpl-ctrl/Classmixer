@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, logAudit, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { createRuleSchema } from "@/schemas"
 
@@ -21,13 +21,8 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
-  // Verify process belongs to user's center
-  const { data: proc } = await supabase
-    .from("processes")
-    .select("center_id")
-    .eq("id", process_id)
-    .single()
-  if (!proc || proc.center_id !== profile.center_id) {
+  // El proceso tiene que ser del centro y, para el profesorado, de sus grupos
+  if (!(await canAccessProcess(profile, process_id))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   }
 

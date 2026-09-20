@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getAccessibleProcessIds, getUserProfile, hasFullAccess } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -53,16 +53,31 @@ export default async function DashboardPage() {
   if (!profile || !profile.center_id) redirect("/pending")
   const supabase = createServiceClient()
 
+  // Un profesor solo ve los procesos de sus clases (mismo criterio que la lista de procesos);
+  // administración y orientación ven los de todo el centro.
+  const accessibleIds = hasFullAccess(profile.role) ? null : [...(await getAccessibleProcessIds(profile))]
+
+  let processesQuery = supabase
+    .from("processes")
+    .select("*")
+    .eq("center_id", profile.center_id)
+    .order("created_at", { ascending: false })
+    .limit(8)
+  let openProcessesQuery = supabase
+    .from("processes")
+    .select("id", { count: "exact", head: true })
+    .eq("center_id", profile.center_id)
+    .eq("status", "cuestionario_abierto")
+  if (accessibleIds) {
+    processesQuery = processesQuery.in("id", accessibleIds)
+    openProcessesQuery = openProcessesQuery.in("id", accessibleIds)
+  }
+
   const [
     { data: processes },
     { data: recentLogs },
   ] = await Promise.all([
-    supabase
-      .from("processes")
-      .select("*")
-      .eq("center_id", profile.center_id)
-      .order("created_at", { ascending: false })
-      .limit(8),
+    processesQuery,
     supabase
       .from("audit_logs")
       .select("*, users(name)")
@@ -90,11 +105,7 @@ export default async function DashboardPage() {
       .from("students")
       .select("id", { count: "exact", head: true })
       .in("process_id", pIds),
-    supabase
-      .from("processes")
-      .select("id", { count: "exact", head: true })
-      .eq("center_id", profile.center_id)
-      .eq("status", "cuestionario_abierto"),
+    openProcessesQuery,
     supabase
       .from("questionnaire_tokens")
       .select("id", { count: "exact", head: true })
@@ -225,7 +236,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Alerts */}
-      <AlertsPanel centerId={profile.center_id} />
+      <AlertsPanel centerId={profile.center_id} processIds={accessibleIds} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

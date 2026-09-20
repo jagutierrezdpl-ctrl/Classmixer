@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, getTutorGroups } from "@/lib/auth"
+import { getUserProfile, getStudentAccessScope } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function GET() {
@@ -8,12 +8,11 @@ export async function GET() {
 
   const supabase = createServiceClient()
 
-  // Tutors only see their assigned groups
-  let allowedGroups: string[] | null = null
-  if (!hasFullAccess(profile.role)) {
-    allowedGroups = await getTutorGroups(profile.center_id, profile.id)
-    if (allowedGroups.length === 0) return NextResponse.json([])
-  }
+  // Quien no ve todo el centro solo ve sus grupos: los que tutoriza en ClassMixer y los que
+  // imparte según EduPlataforma.
+  const scope = await getStudentAccessScope(profile.center_id, profile.id, profile.role)
+  if (!scope.all && scope.classes.length === 0) return NextResponse.json([])
+  const allowedGroups: string[] | null = scope.all ? null : scope.classes
 
   // Get all student profiles for this center grouped by current_class
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,17 +26,18 @@ export async function GET() {
     query = query.in("current_class", allowedGroups)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: students, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Also include groups registered in center_groups (even if empty)
-  // Only full-access roles see pre-created empty groups
+  // Also include groups registered in center_groups (even if empty), restricted to the
+  // person's own groups when they don't see the whole center
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: centerGroups } = await (supabase as any)
+  let centerGroupsQuery = (supabase as any)
     .from("center_groups")
     .select("name, school_year")
     .eq("center_id", profile.center_id)
+  if (allowedGroups !== null) centerGroupsQuery = centerGroupsQuery.in("name", allowedGroups)
+  const { data: centerGroups } = await centerGroupsQuery
 
   // Get group-tutor assignments for this center
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,8 +90,13 @@ export async function GET() {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const groups = Object.values(groupMap).sort((a: any, b: any) => a.name.localeCompare(b.name))
+  // `mine`: grupos de la persona (todos los que ve, si no ve el centro entero; si lo ve
+  // entero, solo aquellos de los que es tutor). Es lo que muestra "Mis Grupos".
+  const groups = Object.values(groupMap)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((g: any) => ({ ...g, mine: allowedGroups !== null || g.tutor?.id === profile.id }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .sort((a: any, b: any) => a.name.localeCompare(b.name))
 
   return NextResponse.json(groups)
 }

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import React from "react"
 import { Document, Page, Text, View, StyleSheet, renderToBuffer, Font } from "@react-pdf/renderer"
@@ -202,6 +202,9 @@ export async function GET(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((proposalRaw as any).processes?.center_id !== profile.center_id) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 })
+  }
+  if (!(await canAccessProcess(profile, (proposalRaw as any).process_id))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   }
 

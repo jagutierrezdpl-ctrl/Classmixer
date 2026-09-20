@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function GET(
@@ -12,14 +12,8 @@ export async function GET(
   const { id } = await params
   const supabase = createServiceClient()
 
-  // Verify center access
-  const { data: process } = await supabase
-    .from("processes")
-    .select("center_id")
-    .eq("id", id)
-    .single()
-
-  if (!process || process.center_id !== profile.center_id) {
+  // Centro y, para el profesorado, que el proceso sea de sus grupos
+  if (!(await canAccessProcess(profile, id))) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   }
 

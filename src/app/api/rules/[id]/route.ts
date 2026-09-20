@@ -1,16 +1,23 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
-async function verifyRuleOwnership(supabase: ReturnType<typeof createServiceClient>, ruleId: string, centerId: string) {
+async function verifyRuleOwnership(
+  supabase: ReturnType<typeof createServiceClient>,
+  ruleId: string,
+  profile: NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
+) {
   const { data } = await supabase
     .from("rules")
-    .select("id, processes!inner(center_id)")
+    .select("id, process_id, processes!inner(center_id)")
     .eq("id", ruleId)
     .single()
   if (!data) return false
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data as any).processes?.center_id === centerId
+  if ((data as any).processes?.center_id !== profile.center_id) return false
+  // Centro y, para el profesorado, que el proceso de la regla sea de sus grupos
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return canAccessProcess(profile, (data as any).process_id)
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -24,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await request.json()
   const supabase = createServiceClient()
 
-  if (!await verifyRuleOwnership(supabase, id, profile.center_id)) {
+  if (!await verifyRuleOwnership(supabase, id, profile)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   }
 
@@ -59,7 +66,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
   const supabase = createServiceClient()
 
-  if (!await verifyRuleOwnership(supabase, id, profile.center_id)) {
+  if (!await verifyRuleOwnership(supabase, id, profile)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   }
 

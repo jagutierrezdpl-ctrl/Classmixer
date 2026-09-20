@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, getStudentAccessScope, canSeeClass } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
@@ -11,6 +11,12 @@ export async function POST(request: Request) {
 
   if (!first_name?.trim() || !last_name?.trim()) {
     return NextResponse.json({ error: "Nombre y apellidos son obligatorios" }, { status: 400 })
+  }
+
+  // Quien no ve todo el centro solo puede dar de alta alumnos en los grupos que tiene asignados.
+  const scope = await getStudentAccessScope(profile.center_id, profile.id, profile.role)
+  if (!canSeeClass(scope, current_class?.trim() || null)) {
+    return NextResponse.json({ error: "No tienes acceso a ese grupo" }, { status: 403 })
   }
 
   const supabase = createServiceClient()
@@ -32,6 +38,10 @@ export async function POST(request: Request) {
     .select()
     .single()
 
+  // Índice único (centro, nombre, apellidos): mensaje genérico, sin volcar el error de la base de datos
+  if (error?.code === "23505") {
+    return NextResponse.json({ error: "Ya existe un alumno con ese nombre y apellidos en el centro" }, { status: 409 })
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data, { status: 201 })
 }
@@ -50,6 +60,10 @@ export async function GET(request: Request) {
   const includeInactive = searchParams.get("include_inactive") === "true"
   const pageSize = 50
 
+  // Un profesor/tutor solo ve el alumnado de sus grupos (los que imparte en EduPlataforma o tutoriza).
+  const scope = await getStudentAccessScope(profile.center_id, profile.id, profile.role)
+  if (!scope.all && scope.classes.length === 0) return NextResponse.json({ profiles: [], total: 0 })
+
   const supabase = createServiceClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,6 +74,7 @@ export async function GET(request: Request) {
     .order("last_name")
     .range((page - 1) * pageSize, page * pageSize - 1)
 
+  if (!scope.all) query = query.in("current_class", scope.classes)
   if (!includeInactive) query = query.eq("active", true)
   if (q) query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,external_id.ilike.%${q}%`)
   if (filterClass) query = query.eq("current_class", filterClass)

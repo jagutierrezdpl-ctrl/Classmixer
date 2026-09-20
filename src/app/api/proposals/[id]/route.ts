@@ -1,8 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit } from "@/lib/auth"
+import { getUserProfile, logAudit, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
-async function getProposalWithOwnerCheck(supabase: ReturnType<typeof createServiceClient>, proposalId: string, centerId: string) {
+async function getProposalWithOwnerCheck(
+  supabase: ReturnType<typeof createServiceClient>,
+  proposalId: string,
+  profile: NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
+) {
   const { data, error } = await supabase
     .from("proposals")
     .select("*, processes!inner(center_id)")
@@ -10,7 +14,10 @@ async function getProposalWithOwnerCheck(supabase: ReturnType<typeof createServi
     .single()
   if (error || !data) return null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((data as any).processes?.center_id !== centerId) return null
+  const row = data as any
+  if (row.processes?.center_id !== profile.center_id) return null
+  // Centro y, para el profesorado, que el proceso de la propuesta sea de sus grupos
+  if (!(await canAccessProcess(profile, row.process_id))) return null
   return data
 }
 
@@ -21,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = createServiceClient()
 
-  const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
+  const owned = await getProposalWithOwnerCheck(supabase, id, profile)
   if (!owned) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   const { data, error } = await supabase
@@ -42,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await request.json()
   const supabase = createServiceClient()
 
-  const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
+  const owned = await getProposalWithOwnerCheck(supabase, id, profile)
   if (!owned) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   // Role check BEFORE any write — approving is admin-only
@@ -91,7 +98,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { id } = await params
   const supabase = createServiceClient()
 
-  const owned = await getProposalWithOwnerCheck(supabase, id, profile.center_id)
+  const owned = await getProposalWithOwnerCheck(supabase, id, profile)
   if (!owned) return NextResponse.json({ error: "No encontrada" }, { status: 404 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((owned as any).status === "aprobada") {

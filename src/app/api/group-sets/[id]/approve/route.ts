@@ -1,18 +1,21 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, canAccessGroupSession } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
-async function getSetWithAccess(id: string, centerId: string) {
+async function getSetWithAccess(id: string, profile: NonNullable<Awaited<ReturnType<typeof getUserProfile>>>) {
   const supabase = createServiceClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (supabase as any)
     .from("group_sets")
-    .select("id, status, session_id, group_sessions!inner(process_id, processes!inner(center_id))")
+    .select("id, status, session_id, group_sessions!inner(process_id, class_name, processes!inner(center_id))")
     .eq("id", id)
     .single()
   if (!data) return null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((data as any).group_sessions?.processes?.center_id !== centerId) return null
+  const session = (data as any).group_sessions
+  if (session?.processes?.center_id !== profile.center_id) return null
+  // Centro y, para el profesorado, que la sesión sea de una clase suya
+  if (!(await canAccessGroupSession(profile, session))) return null
   return data
 }
 
@@ -23,7 +26,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const supabase = createServiceClient()
 
-  const set = await getSetWithAccess(id, profile.center_id)
+  const set = await getSetWithAccess(id, profile)
   if (!set) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,7 +57,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = createServiceClient()
 
-  const set = await getSetWithAccess(id, profile.center_id)
+  const set = await getSetWithAccess(id, profile)
   if (!set) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

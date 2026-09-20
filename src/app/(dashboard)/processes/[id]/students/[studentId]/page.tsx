@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { canAccessProcess, getUserProfile } from "@/lib/auth"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -34,7 +34,7 @@ export default async function StudentDetailPage({
 }) {
   const { id: processId, studentId } = await params
   const profile = await getUserProfile()
-  if (!profile) notFound()
+  if (!profile || !(await canAccessProcess(profile, processId))) notFound()
 
   const canSeeSensitive = ["admin", "superadmin", "orientador"].includes(profile.role)
   const supabase = createServiceClient()

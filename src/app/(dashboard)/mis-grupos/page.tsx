@@ -14,6 +14,7 @@ interface GroupSummary {
   male: number
   with_needs: number
   tutor: { id: string; name: string; email: string } | null
+  mine: boolean
 }
 
 export default function MisGruposPage() {
@@ -23,17 +24,9 @@ export default function MisGruposPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [groupsRes, profileRes] = await Promise.all([
-          fetch("/api/student-profiles/groups"),
-          fetch("/api/auth/me").catch(() => null),
-        ])
+        const groupsRes = await fetch("/api/student-profiles/groups")
         const allGroups = await groupsRes.json()
-        const meData = profileRes ? await profileRes.json() : null
-        const userId = meData?.id ?? null
-        const mine = (Array.isArray(allGroups) ? allGroups : []).filter(
-          (g: GroupSummary) => userId && g.tutor?.id === userId
-        )
-        setGroups(mine)
+        setGroups((Array.isArray(allGroups) ? allGroups : []).filter((g: GroupSummary) => g.mine))
       } finally {
         setLoading(false)
       }
@@ -54,7 +47,7 @@ export default function MisGruposPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Mis Grupos</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Clases asignadas a tu tutoría
+          Clases que tutorizas o en las que das clase
         </p>
       </div>
 
@@ -62,7 +55,7 @@ export default function MisGruposPage() {
         <div className="text-center py-20 text-muted-foreground">
           <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>No tienes grupos asignados todavía</p>
-          <p className="text-sm mt-1">El administrador del centro debe asignarte como tutor/a de una clase</p>
+          <p className="text-sm mt-1">Tus grupos salen de tus asignaciones docentes en EduPlataforma; si falta alguno, pide al administrador del centro que te lo asigne allí</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

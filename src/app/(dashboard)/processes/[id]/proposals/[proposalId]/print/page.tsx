@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { canAccessProcess, getUserProfile } from "@/lib/auth"
 import { notFound } from "next/navigation"
 import PrintButton from "../report/PrintButton"
 
@@ -24,7 +24,7 @@ export default async function PrintPage({
 }) {
   const { id: processId, proposalId } = await params
   const profile = await getUserProfile()
-  if (!profile) notFound()
+  if (!profile || !(await canAccessProcess(profile, processId))) notFound()
 
   const supabase = createServiceClient()
 

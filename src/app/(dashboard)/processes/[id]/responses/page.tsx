@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { canAccessProcess, getUserProfile } from "@/lib/auth"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,7 @@ const RELATION_META: Record<RelationType, { label: string; color: string; icon: 
 export default async function ResponsesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const profile = await getUserProfile()
-  if (!profile) notFound()
+  if (!profile || !(await canAccessProcess(profile, id))) notFound()
 
   const supabase = createServiceClient()
 

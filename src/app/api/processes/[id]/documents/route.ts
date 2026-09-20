@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { convertPdfToMarkdown, isMarkitdownAvailable } from "@/lib/markitdown"
 
@@ -12,6 +12,10 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { id } = await params
   const supabase = createServiceClient()
+
+  if (!(await canAccessProcess(profile, id))) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)

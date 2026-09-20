@@ -118,6 +118,47 @@ export async function getGroupMemberships(
   return data.memberships
 }
 
+export interface EduplataformaCenterInfo {
+  id: string
+  name: string
+  active_school_year: string | null
+}
+
+export async function getCenterInfo(centerId: string): Promise<EduplataformaCenterInfo> {
+  const data = await eduplataformaFetch<{ center: EduplataformaCenterInfo }>(
+    centerId,
+    `/api/center/${centerId}`
+  )
+  return data.center
+}
+
+// Asignación profesor → materia → grupo de un curso (teacher_subjects del hub).
+export interface EduplataformaTeacherAssignment {
+  teacher_id: string | null
+  group_name: string | null
+  school_year: string
+}
+
+// Máximo que admite el hub por petición: un centro real cabe en una sola página.
+const TEACHER_SUBJECTS_PAGE = 5000
+
+export async function getTeacherSubjects(
+  centerId: string,
+  schoolYear: string
+): Promise<EduplataformaTeacherAssignment[]> {
+  const out: EduplataformaTeacherAssignment[] = []
+  for (let offset = 0; ; offset += TEACHER_SUBJECTS_PAGE) {
+    const qs = `school_year=${encodeURIComponent(schoolYear)}&limit=${TEACHER_SUBJECTS_PAGE}&offset=${offset}`
+    const data = await eduplataformaFetch<{
+      assignments: EduplataformaTeacherAssignment[]
+      has_more?: boolean
+    }>(centerId, `/api/center/${centerId}/teacher-subjects?${qs}`)
+    out.push(...data.assignments)
+    if (!data.has_more || data.assignments.length === 0) break
+  }
+  return out
+}
+
 export async function postMemberLink(
   centerId: string,
   args: { member_id: string; external_id: string }

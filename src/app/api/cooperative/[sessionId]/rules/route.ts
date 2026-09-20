@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, tutorCanAccessProcess, getTutorGroups } from "@/lib/auth"
+import { getUserProfile, canAccessGroupSession } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 async function checkSessionAccess(sessionId: string, profile: NonNullable<Awaited<ReturnType<typeof getUserProfile>>>) {
@@ -13,15 +13,7 @@ async function checkSessionAccess(sessionId: string, profile: NonNullable<Awaite
 
   if (!session || session.processes?.center_id !== profile.center_id) return null
 
-  if (!hasFullAccess(profile.role)) {
-    if (profile.role === "tutor") {
-      const tutorClasses = await getTutorGroups(profile.center_id, profile.id)
-      if (!tutorClasses.includes(session.class_name)) return null
-    } else {
-      const ok = await tutorCanAccessProcess(profile.center_id, profile.id, session.process_id)
-      if (!ok) return null
-    }
-  }
+  if (!(await canAccessGroupSession(profile, session))) return null
   return { supabase, session }
 }
 

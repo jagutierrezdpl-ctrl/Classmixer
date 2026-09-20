@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, logAudit, hasFullAccess, getTutorGroups } from "@/lib/auth"
+import { getUserProfile, logAudit, hasFullAccess, getTutorGroups, getAccessibleProcessIds } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { createProcessSchema } from "@/schemas"
 
@@ -25,15 +25,9 @@ export async function GET(request: Request) {
     return NextResponse.json(parentId ? { processes: data } : data)
   }
 
-  // Tutor: processes explicitly assigned OR whose source_groups overlap their groups
-  const tutorGroups = await getTutorGroups(profile.center_id, profile.id)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: assigned } = await (supabase as any)
-    .from("process_tutors")
-    .select("process_id")
-    .eq("user_id", profile.id)
-  const assignedIds: string[] = (assigned ?? []).map((a: { process_id: string }) => a.process_id)
+  // Tutor: processes explicitly assigned OR whose source_groups overlap the groups they tutor or
+  // teach (the same rule that opens a process)
+  const accessible = await getAccessibleProcessIds(profile)
 
   const { data: allProcesses } = await supabase
     .from("processes")
@@ -41,11 +35,7 @@ export async function GET(request: Request) {
     .eq("center_id", profile.center_id)
     .order("created_at", { ascending: false })
 
-  const visible = (allProcesses ?? []).filter(p => {
-    if (assignedIds.includes(p.id)) return true
-    const sourceGroups = (p.source_groups ?? []) as string[]
-    return tutorGroups.some(g => sourceGroups.includes(g))
-  })
+  const visible = (allProcesses ?? []).filter(p => accessible.has(p.id))
 
   return NextResponse.json(visible)
 }

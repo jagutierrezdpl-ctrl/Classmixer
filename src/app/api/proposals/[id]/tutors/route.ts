@@ -1,8 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { getUserProfile, canAccessProcess } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
-async function verifyProposalOwner(supabase: ReturnType<typeof createServiceClient>, proposalId: string, centerId: string) {
+async function verifyProposalOwner(
+  supabase: ReturnType<typeof createServiceClient>,
+  proposalId: string,
+  profile: NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
+) {
   const { data } = await supabase
     .from("proposals")
     .select("id, process_id, processes!inner(center_id)")
@@ -10,7 +14,10 @@ async function verifyProposalOwner(supabase: ReturnType<typeof createServiceClie
     .single()
   if (!data) return null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((data as any).processes?.center_id !== centerId) return null
+  const row = data as any
+  if (row.processes?.center_id !== profile.center_id) return null
+  // Centro y, para el profesorado, que el proceso de la propuesta sea de sus grupos
+  if (!(await canAccessProcess(profile, row.process_id))) return null
   return data
 }
 
@@ -22,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = createServiceClient()
 
-  if (!await verifyProposalOwner(supabase, id, profile.center_id)) {
+  if (!await verifyProposalOwner(supabase, id, profile)) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   }
 
@@ -45,7 +52,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = createServiceClient()
 
-  const proposal = await verifyProposalOwner(supabase, id, profile.center_id)
+  const proposal = await verifyProposalOwner(supabase, id, profile)
   if (!proposal) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
   const { target_class, user_id } = await request.json()

@@ -11,18 +11,22 @@ interface Alert {
 
 interface Props {
   centerId: string
+  /** Solo estos procesos (profesorado). null/undefined: todos los del centro. */
+  processIds?: string[] | null
 }
 
-export default async function AlertsPanel({ centerId }: Props) {
+export default async function AlertsPanel({ centerId, processIds }: Props) {
   const supabase = createServiceClient()
 
   // Load open/active processes with basic stats
-  const { data: processes } = await supabase
+  let processesQuery = supabase
     .from("processes")
     .select("id, name, status, created_at")
     .eq("center_id", centerId)
     .not("status", "in", '("cerrado","archivado")')
     .order("created_at", { ascending: false })
+  if (processIds) processesQuery = processesQuery.in("id", processIds)
+  const { data: processes } = await processesQuery
 
   if (!processes?.length) return null
 

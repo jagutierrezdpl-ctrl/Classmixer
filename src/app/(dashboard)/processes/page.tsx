@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, getTutorGroups } from "@/lib/auth"
+import { getUserProfile, hasFullAccess, getAccessibleProcessIds } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -34,13 +34,8 @@ export default async function ProcessesPage() {
       .order("created_at", { ascending: false })
     processes = data ?? []
   } else {
-    const tutorGroups = await getTutorGroups(profile.center_id, profile.id)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: assignments } = await (supabase as any)
-      .from("process_tutors")
-      .select("process_id")
-      .eq("user_id", profile.id)
-    const assignedIds: string[] = (assignments ?? []).map((a: { process_id: string }) => a.process_id)
+    // Assigned, or a source group they tutor or teach (the same rule that opens a process)
+    const accessible = await getAccessibleProcessIds(profile)
 
     const { data: allProcesses } = await supabase
       .from("processes")
@@ -48,10 +43,7 @@ export default async function ProcessesPage() {
       .eq("center_id", profile.center_id)
       .order("created_at", { ascending: false })
 
-    processes = (allProcesses ?? []).filter((p: { id: string; source_groups: string[] }) => {
-      if (assignedIds.includes(p.id)) return true
-      return tutorGroups.some(g => (p.source_groups ?? []).includes(g))
-    })
+    processes = (allProcesses ?? []).filter((p: { id: string }) => accessible.has(p.id))
   }
 
   // Fetch stats for all processes in parallel

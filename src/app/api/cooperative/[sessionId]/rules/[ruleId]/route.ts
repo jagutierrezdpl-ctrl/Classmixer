@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile, hasFullAccess, tutorCanAccessProcess, getTutorGroups } from "@/lib/auth"
+import { getUserProfile, canAccessGroupSession } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
 export async function DELETE(
@@ -24,17 +24,8 @@ export async function DELETE(
     return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   }
 
-  if (!hasFullAccess(profile.role)) {
-    const session = rule.group_sessions
-    if (profile.role === "tutor") {
-      const tutorClasses = await getTutorGroups(profile.center_id, profile.id)
-      if (!tutorClasses.includes(session.class_name)) {
-        return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
-      }
-    } else {
-      const ok = await tutorCanAccessProcess(profile.center_id, profile.id, session.process_id)
-      if (!ok) return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
-    }
+  if (!(await canAccessGroupSession(profile, rule.group_sessions))) {
+    return NextResponse.json({ error: "Sin acceso" }, { status: 403 })
   }
 
   const { error } = await (supabase as any)

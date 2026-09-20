@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server"
-import { getUserProfile } from "@/lib/auth"
+import { canAccessProcess, getUserProfile } from "@/lib/auth"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
@@ -49,13 +49,14 @@ function formatDate(dateStr: string) {
 export default async function ProcessDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const profile = await getUserProfile()
+  if (!profile || !(await canAccessProcess(profile, id))) notFound()
   const supabase = createServiceClient()
 
   const { data: process } = await supabase
     .from("processes")
     .select("*")
     .eq("id", id)
-    .eq("center_id", profile!.center_id)
+    .eq("center_id", profile.center_id)
     .single()
 
   if (!process) notFound()

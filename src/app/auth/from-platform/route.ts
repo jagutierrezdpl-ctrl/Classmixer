@@ -1,17 +1,10 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { verifyPlatformToken } from "@/lib/eduplataforma/token"
-import { getOrCreateAuthUserId, syncCenter } from "@/lib/eduplataforma/sync"
+import { getOrCreateAuthUserId, mapStaffRole, syncCenter } from "@/lib/eduplataforma/sync"
+import { syncTeacherAccess } from "@/lib/eduplataforma/teacher-access"
 import { NextResponse } from "next/server"
 
 const SYNC_COOLDOWN_MS = 15 * 60 * 1000
-
-function mapStaffRole(role: string, secondaryRoles: string[]): "admin" | "orientador" | "tutor" | null {
-  const roles = [role, ...secondaryRoles]
-  if (roles.includes("admin") || roles.includes("director_general")) return "admin"
-  if (roles.includes("orientador")) return "orientador"
-  if (roles.includes("tutor")) return "tutor"
-  return null
-}
 
 // GET /auth/from-platform?token=<PlatformToken JWT firmado por EduPlataforma>
 // Receptor del SSO handoff iniciado en apps/hub/src/app/api/auth/link?module=classmixer.
@@ -96,11 +89,28 @@ export async function GET(request: Request) {
 
   // 3. Sincronizar personal/alumnado/grupos si no se ha hecho recientemente.
   const needsSync = !lastSyncedAt || Date.now() - new Date(lastSyncedAt).getTime() > SYNC_COOLDOWN_MS
+  let teacherAccessSynced = false
   if (needsSync) {
     try {
-      await syncCenter(centerId)
+      const result = await syncCenter(centerId)
+      teacherAccessSynced = result.teacherAccess !== null
     } catch (err) {
       console.error("[from-platform] sync error:", err instanceof Error ? err.message : err)
+    }
+  }
+
+  // La sincronización completa solo corre cada 15 min. Si no ha corrido (o no llegó a fijar el
+  // acceso del profesorado), se refresca al menos el de quien entra: un profesor que se
+  // registra a los pocos minutos de otra sincronización no puede ver el centro vacío hasta la siguiente.
+  if (role === "tutor" && !teacherAccessSynced) {
+    try {
+      await syncTeacherAccess({
+        classmixerCenterId: centerId,
+        hubCenterId: payload.eduplataforma_center_id,
+        onlyEmail: payload.email,
+      })
+    } catch (err) {
+      console.error("[from-platform] acceso profesorado:", err instanceof Error ? err.message : err)
     }
   }
 
