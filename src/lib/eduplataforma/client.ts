@@ -1,5 +1,10 @@
+import { createHmac } from "crypto"
+
 // Cliente para llamar a la API de EduPlataforma (hub) desde ClassMixer.
-// Autenticación: Authorization: Bearer EDUPLATFORMA_SECRET.
+// Autenticación: Authorization: Bearer <token de vida corta firmado con el secreto
+// exclusivo de esta integración>, no el secreto plano directamente — así el hub
+// puede verificar que la firma corresponde a ClassMixer y que este centro tiene el
+// módulo activo (ver admin-integration-auth.ts en el hub).
 
 export interface EduplataformaUser {
   id: string
@@ -47,9 +52,28 @@ function secret(): string {
   return s
 }
 
-async function eduplataformaFetch<T>(path: string): Promise<T> {
+function base64url(str: string): string {
+  return Buffer.from(str).toString("base64url")
+}
+
+const HEADER = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))
+
+function signAdminToken(centerId: string, expiresInSeconds = 120): string {
+  const body = base64url(
+    JSON.stringify({
+      module_code: "classmixer",
+      center_id: centerId,
+      foundation_id: null,
+      exp: Math.floor(Date.now() / 1000) + expiresInSeconds,
+    })
+  )
+  const sig = createHmac("sha256", secret()).update(`${HEADER}.${body}`).digest("base64url")
+  return `${HEADER}.${body}.${sig}`
+}
+
+async function eduplataformaFetch<T>(centerId: string, path: string): Promise<T> {
   const res = await fetch(`${baseUrl()}${path}`, {
-    headers: { Authorization: `Bearer ${secret()}` },
+    headers: { Authorization: `Bearer ${signAdminToken(centerId)}` },
     cache: "no-store",
   })
   if (!res.ok) {
@@ -61,6 +85,7 @@ async function eduplataformaFetch<T>(path: string): Promise<T> {
 
 export async function getUsers(centerId: string): Promise<EduplataformaUser[]> {
   const data = await eduplataformaFetch<{ users: EduplataformaUser[] }>(
+    centerId,
     `/api/center/${centerId}/users`
   )
   return data.users
@@ -75,6 +100,7 @@ export async function getMembers(
   if (opts.school_year) params.set("school_year", opts.school_year)
   const qs = params.toString()
   const data = await eduplataformaFetch<{ members: EduplataformaMember[] }>(
+    centerId,
     `/api/center/${centerId}/members${qs ? `?${qs}` : ""}`
   )
   return data.members
@@ -86,6 +112,7 @@ export async function getGroupMemberships(
 ): Promise<EduplataformaGroupMembership[]> {
   const qs = schoolYear ? `?school_year=${encodeURIComponent(schoolYear)}` : ""
   const data = await eduplataformaFetch<{ memberships: EduplataformaGroupMembership[] }>(
+    centerId,
     `/api/center/${centerId}/group-memberships${qs}`
   )
   return data.memberships
@@ -98,7 +125,7 @@ export async function postMemberLink(
   const res = await fetch(`${baseUrl()}/api/center/${centerId}/member-links`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${secret()}`,
+      Authorization: `Bearer ${signAdminToken(centerId)}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
