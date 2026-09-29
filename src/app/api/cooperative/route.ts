@@ -79,15 +79,24 @@ export async function POST(req: Request) {
   const supabase = createServiceClient()
 
   // Find the most recent process in this center that has active students in the given class
-  const { data: match } = await (supabase as any)
-    .from("students")
-    .select("process_id, processes!inner(center_id, id, created_at)")
-    .eq("current_class", class_name)
-    .eq("active", true)
-    .eq("processes.center_id", profile.center_id)
-    .order("processes(created_at)", { ascending: false })
-    .limit(1)
-    .single()
+  const { data: centerProcesses } = await supabase
+    .from("processes")
+    .select("id, created_at")
+    .eq("center_id", profile.center_id)
+    .order("created_at", { ascending: false })
+
+  let match: { process_id: string } | null = null
+  if (centerProcesses && centerProcesses.length > 0) {
+    const { data: rows } = await (supabase as any)
+      .from("students")
+      .select("process_id")
+      .eq("current_class", class_name)
+      .eq("active", true)
+      .in("process_id", centerProcesses.map(p => p.id))
+    const withStudents = new Set((rows ?? []).map((r: { process_id: string }) => r.process_id))
+    const latest = centerProcesses.find(p => withStudents.has(p.id))
+    if (latest) match = { process_id: latest.id }
+  }
 
   if (!match) {
     return NextResponse.json(
