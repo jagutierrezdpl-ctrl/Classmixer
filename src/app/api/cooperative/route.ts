@@ -2,6 +2,7 @@
 import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, hasFullAccess, getAccessibleProcessIds, getTutorClassAccess, reachesClass, canAccessGroupSession } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { classKey } from "@/lib/class-names"
 
 // GET — list all group_sessions the user can access, across all processes in the center.
 // Returns each session enriched with its process info so the client can build deep links.
@@ -86,16 +87,21 @@ export async function POST(req: Request) {
     .order("created_at", { ascending: false })
 
   let match: { process_id: string } | null = null
+  let studentClass: string = class_name
   if (centerProcesses && centerProcesses.length > 0) {
     const { data: rows } = await (supabase as any)
       .from("students")
-      .select("process_id")
-      .eq("current_class", class_name)
+      .select("process_id, current_class")
       .eq("active", true)
       .in("process_id", centerProcesses.map(p => p.id))
-    const withStudents = new Set((rows ?? []).map((r: { process_id: string }) => r.process_id))
+    const wanted = classKey(class_name)
+    const found = (rows ?? []).filter((r: { current_class: string }) => classKey(r.current_class) === wanted)
+    const withStudents = new Set(found.map((r: { process_id: string }) => r.process_id))
     const latest = centerProcesses.find(p => withStudents.has(p.id))
-    if (latest) match = { process_id: latest.id }
+    if (latest) {
+      match = { process_id: latest.id }
+      studentClass = found.find((r: { process_id: string }) => r.process_id === latest.id).current_class
+    }
   }
 
   if (!match) {
@@ -109,7 +115,7 @@ export async function POST(req: Request) {
 
   // Authorization check for non-admins
   if (!hasFullAccess(profile.role)) {
-    if (!(await canAccessGroupSession(profile, { process_id: processId, class_name }))) {
+    if (!(await canAccessGroupSession(profile, { process_id: processId, class_name: studentClass }))) {
       return NextResponse.json(
         { error: profile.role === "tutor" ? "Solo puedes crear grupos para tu propia clase" : "Sin acceso a esa clase" },
         { status: 403 }
@@ -124,7 +130,7 @@ export async function POST(req: Request) {
     .from("group_sessions")
     .insert({
       process_id: processId,
-      class_name,
+      class_name: studentClass,
       name: rest.name ?? "Nueva sesión",
       num_groups: sizes ? sizes.length : (rest.num_groups ?? 4),
       group_sizes: sizes ?? null,
