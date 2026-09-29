@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server"
 import { getUserProfile, hasFullAccess, getAccessibleProcessIds, getTutorClassAccess, reachesClass, canAccessGroupSession } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { classKey } from "@/lib/class-names"
+import { ensureClassStudents } from "@/lib/cooperative-students"
 
 // GET — list all group_sessions the user can access, across all processes in the center.
 // Returns each session enriched with its process info so the client can build deep links.
@@ -88,7 +89,26 @@ export async function POST(req: Request) {
 
   let match: { process_id: string } | null = null
   let studentClass: string = class_name
-  if (centerProcesses && centerProcesses.length > 0) {
+
+  // Alumnado sincronizado del curso actual (student_profiles) antes que procesos de cursos pasados
+  const classAccess = profile.role === "tutor" ? await getTutorClassAccess(profile.center_id, profile.id) : null
+  const synced = await ensureClassStudents(supabase, profile, class_name, async cls =>
+    classAccess === null
+      ? hasFullAccess(profile.role)
+      : classAccess.tutored.includes(cls) || classAccess.teaching.some(a => a.group_name === cls)
+  )
+  if (synced === "forbidden") {
+    return NextResponse.json(
+      { error: profile.role === "tutor" ? "Solo puedes crear grupos para tu propia clase" : "Sin acceso a esa clase" },
+      { status: 403 }
+    )
+  }
+  if (synced) {
+    match = { process_id: synced.process_id }
+    studentClass = synced.class_name
+  }
+
+  if (!match && centerProcesses && centerProcesses.length > 0) {
     const { data: rows } = await (supabase as any)
       .from("students")
       .select("process_id, current_class")
