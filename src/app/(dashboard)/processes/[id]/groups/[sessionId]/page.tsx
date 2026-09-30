@@ -12,6 +12,9 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
@@ -103,6 +106,16 @@ function buildGroups(assignments: GroupAssignmentWithStudent[]): Map<number, Gro
   return map
 }
 
+// Soltar sobre un alumno los intercambia; soltar en el hueco del grupo lo mueve
+const STUDENT_DROP_PREFIX = "student:"
+const collisionDetection: CollisionDetection = (args) => {
+  const within = pointerWithin(args)
+  const hits = within.length > 0 ? within : rectIntersection(args)
+  return hits.filter(h => String(h.id).startsWith(STUDENT_DROP_PREFIX)).length > 0
+    ? hits.filter(h => String(h.id).startsWith(STUDENT_DROP_PREFIX))
+    : hits
+}
+
 // ─── Draggable student row ──────────────────────────────────────────────────
 
 function DraggableStudentRow({
@@ -120,15 +133,19 @@ function DraggableStudentRow({
     id: assignment.student_id,
     disabled: !editMode,
   })
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `${STUDENT_DROP_PREFIX}${assignment.student_id}`,
+    disabled: !editMode || isDragging,
+  })
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined
   const student = assignment.students
   const roleConf = assignment.role ? ROLE_CONFIG[assignment.role] : null
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => { setNodeRef(node); setDropRef(node) }}
       style={style}
-      className={`py-1 border-b border-black/5 last:border-0 select-none ${isDragging ? "opacity-30" : ""}`}
+      className={`py-1 border-b border-black/5 last:border-0 select-none ${isDragging ? "opacity-30" : ""} ${isOver && editMode ? "bg-primary/10 rounded ring-1 ring-primary/40" : ""}`}
     >
       <div className="flex items-start gap-1.5">
         {editMode && (
@@ -447,7 +464,23 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
     setActiveId(null)
     if (!over) return
     const studentId = String(active.id)
-    const newGroup = Number(over.id)
+    const overId = String(over.id)
+    if (overId.startsWith(STUDENT_DROP_PREFIX)) {
+      const otherId = overId.slice(STUDENT_DROP_PREFIX.length)
+      if (otherId === studentId) return
+      setEditAssignments(prev => {
+        const mine = prev.find(a => a.student_id === studentId)
+        const other = prev.find(a => a.student_id === otherId)
+        if (!mine || !other) return prev
+        return prev.map(a =>
+          a.student_id === studentId ? { ...a, group_number: other.group_number }
+          : a.student_id === otherId ? { ...a, group_number: mine.group_number }
+          : a
+        )
+      })
+      return
+    }
+    const newGroup = Number(overId)
     setEditAssignments(prev => prev.map(a =>
       a.student_id === studentId ? { ...a, group_number: newGroup } : a
     ))
@@ -809,6 +842,7 @@ export default function GroupSessionPage({ params }: { params: Promise<{ id: str
       {sortedGroupNumbers.length > 0 && (
         <DndContext
           sensors={dndSensors}
+          collisionDetection={collisionDetection}
           onDragStart={(e) => setActiveId(String(e.active.id))}
           onDragEnd={handleDragEnd}
         >
