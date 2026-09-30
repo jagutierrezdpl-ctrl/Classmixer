@@ -61,7 +61,7 @@ export async function ensureClassStudents(
       })
       .select("id")
       .single()
-    if (error || !created) return null
+    if (error || !created) throw new Error(`No se pudo crear el proceso de grupos cooperativos: ${error?.message ?? "sin datos"}`)
     processId = created.id
   }
 
@@ -82,7 +82,7 @@ export async function ensureClassStudents(
       last_name: p.last_name,
       email: p.email ?? null,
       current_class: studentClass,
-      gender: p.gender ?? null,
+      gender: p.gender ?? "No especificado",
       average_grade: p.average_grade != null ? p.average_grade : 5.0,
       academic_level: p.academic_level ?? null,
       behavior_level: p.behavior_level ?? null,
@@ -93,7 +93,7 @@ export async function ensureClassStudents(
 
   for (let i = 0; i < toInsert.length; i += 100) {
     const { error } = await supabase.from("students").insert(toInsert.slice(i, i + 100))
-    if (error) return null
+    if (error) throw new Error(`No se pudieron cargar los alumnos de ${studentClass}: ${error.message}`)
   }
 
   return { process_id: processId, class_name: studentClass }

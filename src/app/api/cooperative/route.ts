@@ -92,11 +92,16 @@ export async function POST(req: Request) {
 
   // Alumnado sincronizado del curso actual (student_profiles) antes que procesos de cursos pasados
   const classAccess = profile.role === "tutor" ? await getTutorClassAccess(profile.center_id, profile.id) : null
-  const synced = await ensureClassStudents(supabase, profile, class_name, async cls =>
-    classAccess === null
-      ? hasFullAccess(profile.role)
-      : classAccess.tutored.includes(cls) || classAccess.teaching.some(a => a.group_name === cls)
-  )
+  let synced: Awaited<ReturnType<typeof ensureClassStudents>>
+  try {
+    synced = await ensureClassStudents(supabase, profile, class_name, async cls =>
+      classAccess === null
+        ? hasFullAccess(profile.role)
+        : classAccess.tutored.includes(cls) || classAccess.teaching.some(a => a.group_name === cls)
+    )
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Error al cargar alumnos" }, { status: 500 })
+  }
   if (synced === "forbidden") {
     return NextResponse.json(
       { error: profile.role === "tutor" ? "Solo puedes crear grupos para tu propia clase" : "Sin acceso a esa clase" },
