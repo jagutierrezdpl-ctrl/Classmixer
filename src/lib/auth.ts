@@ -55,10 +55,21 @@ export async function getTutorGroups(centerId: string, userId: string): Promise<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (supabase as any)
     .from("group_tutors")
-    .select("group_name")
+    .select("group_name, school_year")
     .eq("center_id", centerId)
     .eq("user_id", userId)
-  return (data ?? []).map((g: { group_name: string }) => g.group_name)
+  // Rows from previous school years (or with no year recorded, e.g. manual ones) are stale once
+  // the sync has written the current year's tutors: keep only the current year and yearless rows.
+  const year = currentSchoolYear()
+  return (data ?? [])
+    .filter((g: { school_year: string | null }) => !g.school_year || sameSchoolYear(g.school_year, year))
+    .map((g: { group_name: string }) => g.group_name)
+}
+
+/** School year in progress ("2026/2027"): from September on it is the one that starts that year. */
+export function currentSchoolYear(now = new Date()): string {
+  const start = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1
+  return `${start}/${start + 1}`
 }
 
 /**
@@ -113,9 +124,11 @@ function teachesInProcess(
 export async function getTutoredAndTaughtGroups(centerId: string, userId: string): Promise<string[]> {
   const [tutored, taught] = await Promise.all([
     getTutorGroups(centerId, userId),
-    getTeachingGroups(centerId, userId),
+    getTeachingAssignments(centerId, userId),
   ])
-  return [...new Set([...tutored, ...taught])]
+  // Teaching rows of past school years no longer count as "my classes"
+  const year = currentSchoolYear()
+  return [...new Set([...tutored, ...taught.filter(a => sameSchoolYear(a.school_year, year)).map(a => a.group_name)])]
 }
 
 /** What a tutor has in each class: the ones they tutor and the ones they teach (with school year). */
